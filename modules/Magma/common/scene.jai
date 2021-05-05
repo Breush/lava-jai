@@ -1,5 +1,3 @@
-File :: #import "File";
-
 #scope_module
 
 Scene :: struct {
@@ -13,9 +11,8 @@ Scene :: struct {
 create_scene :: (engine : *Engine) -> *Scene {
     scene := cast(*Scene) Basic.New(Scene);
     Basic.remember_allocators(scene);
-    window_target_init_pre_register(scene, engine, windowHandle);
+    scene_init(scene, engine);
     engine_register(engine, scene);
-    window_target_init_post_register(scene);
     return scene;
 }
 

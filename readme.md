@@ -70,13 +70,12 @@ explicit :: () {
     engine_init(engine);
 
     target := New(WindowTarget);
-    window_target_init_pre_register(target, engine, handle);
+    window_target_init(target, engine, handle);
     engine_register(engine, target);
-    window_target_init_post_register(target);
 
     // ...
 
-    window_target_cleanup(target);
+    target_cleanup(target);
     free(target);
     engine_cleanup(engine); // Won't cleanup registered resources.
     free(engine);

@@ -19,10 +19,11 @@ Engine :: struct {
 
     options : Options;
 
+    renderers : [..]*Renderer;
     scenes : [..]*Scene;
     targets : [..]*Target;
 
-    using impl : EngineImpl;
+    using engineImpl : EngineImpl;
 
     allocator : Allocator;
     allocator_data : *void;
@@ -36,12 +37,16 @@ create_engine :: (options : Engine.Options = .{}) -> *Engine {
 }
 
 destroy_engine :: (engine : *Engine, destroyResources := true) {
-    engine_cleanup(engine);
-
-    // Destroy resources
-    for target : engine.targets {
-        target_cleanup(target);
+    if destroyResources {
+        for target : engine.targets {
+            target_cleanup(target);
+        }
+        for renderer : engine.renderers {
+            renderer_cleanup(renderer);
+        }
     }
+
+    engine_cleanup(engine);
 
     // Cleanup ourselves
     if engine.allocator != null {
@@ -55,13 +60,14 @@ engine_init :: (engine : *Engine, options : Engine.Options = .{}) {
 }
 
 engine_cleanup :: (engine : *Engine) {
-    // Cleanup resources
-    for target : engine.targets {
-        target_cleanup(target);
-    }
-
-    // Cleanup ourselves
     impl_engine_cleanup(engine);
+
+    Basic.array_free(engine.renderers);
+    Basic.array_free(engine.scenes);
+    Basic.array_free(engine.targets);
+
+    // Reset memory
+    <<engine = Engine.{};
 }
 
 engine_update :: (engine : *Engine) {
@@ -80,4 +86,9 @@ engine_register :: (engine : *Engine, target : *Target) {
 engine_register :: (engine : *Engine, scene : *Scene) {
     Basic.array_add(*engine.scenes, scene);
     impl_engine_register(engine, scene);
+}
+
+engine_register :: (engine : *Engine, renderer : *Renderer) {
+    Basic.array_add(*engine.renderers, renderer);
+    impl_engine_register(engine, renderer);
 }

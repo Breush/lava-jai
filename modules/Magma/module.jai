@@ -1,13 +1,14 @@
 Basic :: #import "Basic";
+File :: #import "File";
 Chamber :: #import "Chamber";
 
 /*
     @fixme Magma roadmap:
-    - Scene (empty) and Camera
+    - Scene with Meshes
     - ComposePostProcess
-    - Meshes and ForwardRenderer
 */
 
+#load "common/renderer.jai";
 #load "common/engine.jai";
 #load "common/scene.jai";
 #load "common/target.jai";

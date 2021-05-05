@@ -1,5 +1,5 @@
 Hash :: #import "Hash_Table";
-using Hash; // @fixme For for_expansion to work... Compiler issue?
+for_expansion :: Hash.for_expansion;
 
 #scope_module
 
@@ -8,17 +8,20 @@ EngineImpl :: struct {
     physicalDevice : Vk.PhysicalDevice;
     device : Vk.Device;
 
+    physicalDeviceMemoryProperties : Vk.PhysicalDeviceMemoryProperties;
+
     queueIndices : QueueIndices;
     graphicsQueue : Vk.Queue;
     transferQueue : Vk.Queue;
     presentQueue : Vk.Queue;
 
     debugReportCallback : Vk.DebugReportCallbackEXT;
+    debugUtilsEnabled : bool; // For settings names to Vulkan object
 
     shaderModuleMap : ShaderModuleMap;
 
     // Per frame state
-    FRAME_INDEX_COUNT : u8 : 3;
+    FRAME_INDEX_COUNT : u8 : 2;
     frameIndex : u8;
 }
 
@@ -47,14 +50,27 @@ impl_engine_cleanup :: (engine : *Engine) {
     }
 
     Vk.destroy_instance(engine.instance, null);
-
-    // Reset memory
-    <<engine = Engine.{};
 }
 
 impl_engine_register :: (engine : *Engine, target : *Target) {
+    registeredResourcesNeedPostInit := (engine.device == null);
+
     if target.kind == Target.Kind.Window {
         _init_device(engine, (cast(*WindowTarget) target).surface);
+    }
+
+    // @note Objects that are registered should be called for "post_init"
+    // but that only makes sense if we have a valid device.
+    // For that reason, post init might be delayed until here.
+    if registeredResourcesNeedPostInit && engine.device != null {
+        for renderer : engine.renderers {
+            _renderer_post_init(renderer);
+        }
+        for target : engine.targets {
+            _target_post_init(target);
+        }
+    } else if engine.device != null {
+        _target_post_init(target);
     }
 }
 
@@ -62,38 +78,45 @@ impl_engine_register :: (engine : *Engine, scene : *Scene) {
     // Nothing to do yet.
 }
 
+impl_engine_register :: (engine : *Engine, renderer : *Renderer) {
+    if engine.device != null {
+        _renderer_post_init(renderer);
+    }
+}
+
 impl_engine_update :: (engine : *Engine) {
     // Nothing to do yet.
 }
 
 impl_engine_draw :: (engine : *Engine) -> bool {
+    if engine.device == null then return true;
     if engine.targets.count == 0 then return true;
 
     engine.frameIndex = (engine.frameIndex + 1) % Engine.FRAME_INDEX_COUNT;
 
     for target : engine.targets {
-        if target.kind == Target.Kind.Window {
-            _impl_window_target_draw(cast(*WindowTarget) target, engine.frameIndex);
+        if !_target_draw(target, engine.frameIndex) {
+            return false;
         }
     }
 
     return true;
 }
 
-_impl_engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.ShaderModule {
+_engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.ShaderModule {
     shaderModule, ok := Hash.table_find(engine.shaderModuleMap, shaderPath);
     if ok then return shaderModule;
 
     shaderCode, readOk := File.read_entire_file(shaderPath);
-    CHECK(readOk, null, "Unable to read shader file.");
+    _CHECK(readOk, null, "Unable to read shader file.");
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
     shaderModuleCI.sType = Vk.StructureType.ShaderModuleCreateInfo;
     shaderModuleCI.codeSize = cast(u64) shaderCode.count;
     shaderModuleCI.pCode = cast(*u32) shaderCode.data;
 
-    RESULT_CHECK(Vk.create_shader_module(engine.device, *shaderModuleCI, null, *shaderModule), null,
-                 "Unable to create shader module.");
+    _CHECK(Vk.create_shader_module(engine.device, *shaderModuleCI, null, *shaderModule), null,
+           "Unable to create shader module.");
 
     Hash.table_add(*engine.shaderModuleMap, key=shaderPath, value=shaderModule);
     return shaderModule;
@@ -133,6 +156,12 @@ _init_instance :: (engine : *Engine) -> bool {
         validationLayersEnabled = true;
     }
 
+    // Debug utils
+    engine.debugUtilsEnabled = _is_extension_available(Vk.EXT_DEBUG_UTILS_EXTENSION_NAME, availableExtensions);
+    if engine.debugUtilsEnabled {
+        Basic.array_add(*enabledExtensions, Vk.EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+
     // Surface extensions
     if engine.options.targetFlags & Engine.Options.TargetFlags.Window {
         Basic.array_add(*enabledExtensions, Vk.KHR_SURFACE_EXTENSION_NAME);
@@ -150,8 +179,8 @@ _init_instance :: (engine : *Engine) -> bool {
     instanceCI.enabledExtensionCount = cast(u32) enabledExtensions.count;
     instanceCI.ppEnabledExtensionNames = enabledExtensions.data;
 
-    RESULT_CHECK(Vk.create_instance(*instanceCI, null, *engine.instance),
-                 "Unable to create instance.");
+    _CHECK(Vk.create_instance(*instanceCI, null, *engine.instance),
+           "Unable to create instance.");
 
     // Debug report callback
     if validationLayersEnabled {
@@ -163,8 +192,8 @@ _init_instance :: (engine : *Engine) -> bool {
         debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning;
         debugReportCI.pfnCallback = cast(*void) _debug_message_callback;
 
-        RESULT_CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
-                     "Unable to create debug report callback.");
+        _CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
+               "Unable to create debug report callback.");
     }
 
     return true;
@@ -183,6 +212,8 @@ _init_physical_device :: (engine : *Engine) {
     // }
 
     engine.physicalDevice = physicalDevices[0];
+
+    Vk.get_physical_device_memory_properties(engine.physicalDevice, *engine.physicalDeviceMemoryProperties);
 }
 
 _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
@@ -191,7 +222,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 
     queueIndices := _find_queue_indices(engine.physicalDevice, surface);
     if queueIndices.graphics == -1 || queueIndices.transfer == -1 || queueIndices.present == -1 {
-        CHECK(false, false, "Unable to find valid logical device queues for surface.");
+        _CHECK(false, false, "Unable to find valid logical device queues for surface.");
     }
 
     // If we already had a initialized device, check that it is compatible.
@@ -200,7 +231,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
         if queueIndices.graphics != engine.queueIndices.graphics ||
            queueIndices.transfer != engine.queueIndices.transfer ||
            queueIndices.present != engine.queueIndices.present {
-            CHECK(false, false, "Unable to reuse existing logical device for surface. Be sure to register complex targets like WindowTarget before others. And if it is already the case, you may need to create another Engine as the Vulkan devices do not seem compatible between them..");
+            _CHECK(false, false, "Unable to reuse existing logical device for surface. Be sure to register complex targets like WindowTarget before others. And if it is already the case, you may need to create another Engine as the Vulkan devices do not seem compatible between them..");
         }
         // Reusing pre-existing device.
         return true;
@@ -230,12 +261,16 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     deviceCI.enabledExtensionCount = cast(u32) enabledExtensions.count;
     deviceCI.ppEnabledExtensionNames = enabledExtensions.data;
 
-    RESULT_CHECK(Vk.create_device(engine.physicalDevice, *deviceCI, null, *engine.device),
-                 "Unable to create logical device.");
+    _CHECK(Vk.create_device(engine.physicalDevice, *deviceCI, null, *engine.device),
+           "Unable to create logical device.");
 
     Vk.get_device_queue(engine.device, cast(u32) engine.queueIndices.graphics, 0, *engine.graphicsQueue);
     Vk.get_device_queue(engine.device, cast(u32) engine.queueIndices.transfer, 0, *engine.transferQueue);
     Vk.get_device_queue(engine.device, cast(u32) engine.queueIndices.present, 0, *engine.presentQueue);
+
+    if engine.debugUtilsEnabled {
+        Vk.load_device_proc(engine.device, *Vk.set_debug_utils_object_name_ext, "vkSetDebugUtilsObjectNameEXT");
+    }
 
     return true;
 }

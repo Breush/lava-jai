@@ -12,6 +12,11 @@ main :: () {
     bigTarget := Magma.create_window_target(engine, Crater.window_get_handle(bigWindow));
 
     // @todo Complete the example with scenes.
+    camera1 := Magma.create_camera(engine, .{width=800, height=800});
+    camera2 := Magma.create_camera(engine, .{width=11, height=11});
+
+    Magma.target_bind(smallTarget, camera1);
+    Magma.target_bind(bigTarget, camera2);
 
     // Main loop, updating rendering and catching closing events.
     while smallWindow.opened && bigWindow.opened {
@@ -26,11 +31,13 @@ main :: () {
             case Crater.Event.Kind.WindowClosed;
                 Crater.window_close(smallWindow);
                 Crater.window_close(bigWindow);
+                break;
 
             case Crater.Event.Kind.KeyPressed;
                 if event.key.which == Crater.Key.Escape {
                     Crater.window_close(smallWindow);
                     Crater.window_close(bigWindow);
+                    break;
                 }
             }
         }
