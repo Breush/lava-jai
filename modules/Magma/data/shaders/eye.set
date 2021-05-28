@@ -1,0 +1,35 @@
+
+layout(std430, push_constant) uniform PushConstant {
+    vec4 eyeViewMatrixRow0;
+    vec4 eyeViewMatrixRow1;
+    vec4 eyeViewMatrixRow2;
+    vec4 eyeProjectionMatrixFactors;
+    uvec2 eyeExtent;
+} pushConstant;
+
+struct EyeShaderObject {
+    mat4 viewMatrix;
+    mat4 projectionMatrix;
+    vec3 position;
+} eye;
+
+void setupEye() {
+    eye.viewMatrix = mat4(pushConstant.eyeViewMatrixRow0,
+                          pushConstant.eyeViewMatrixRow1,
+                          pushConstant.eyeViewMatrixRow2,
+                          vec4(0, 0, 0, 1));
+
+    eye.projectionMatrix = mat4(0);
+    eye.projectionMatrix[0][0] = pushConstant.eyeProjectionMatrixFactors[0];
+    eye.projectionMatrix[1][1] = pushConstant.eyeProjectionMatrixFactors[1];
+    eye.projectionMatrix[2][2] = pushConstant.eyeProjectionMatrixFactors[2];
+    eye.projectionMatrix[2][3] = pushConstant.eyeProjectionMatrixFactors[3];
+    eye.projectionMatrix[3][2] = 1;
+
+    // @note GLSL matrices are expressed in columns, thus we need to transpose
+    // to be clean.
+    eye.viewMatrix = transpose(eye.viewMatrix);
+    eye.projectionMatrix = transpose(eye.projectionMatrix);
+
+    eye.position = inverse(eye.viewMatrix)[3].xyz;
+}

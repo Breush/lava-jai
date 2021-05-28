@@ -89,11 +89,10 @@ Have a look at the *examples* folder if you want to see all that in practice.
 ## Note about bindings
 
 Bindings have been generated from C header files of the corresponding libs.
-Some of linux shared libraries referenced are symlinked.
 This might be out-of-sync with what you have on your system and can cause issues.
 But this what I want to go for as long as the project is not more advanced.
-Later, effective pre-compiled binaries will be shipped alongside bindings' modules.
+Later, effective pre-compiled binaries may be shipped alongside bindings' modules.
 For now, you just have to cross your fingers that there are compatible.
 
-__NOTE__: Well, this is not true for vulkan's validation layers...
-And that's sad because they are big!
+__NOTE__: Vulkan's binaries (and validation layers) are currently shipped.
+They are big, so I am sad.

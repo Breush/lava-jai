@@ -23,7 +23,7 @@ WindowTargetImpl :: struct {
 impl_window_target_init :: (windowTarget : *WindowTarget, windowHandle : Chamber.WindowHandle) -> bool {
     #if OS == .LINUX {
         surfaceCI : Vk.XcbSurfaceCreateInfoKHR;
-        surfaceCI.sType = Vk.StructureType.XcbSurfaceCreateInfoKhr;
+        surfaceCI.sType = .XcbSurfaceCreateInfoKhr;
         surfaceCI.connection = windowHandle.xcb.connection;
         surfaceCI.window = windowHandle.xcb.window;
 
@@ -53,7 +53,7 @@ impl_window_target_cleanup :: (windowTarget : *WindowTarget) {
 }
 
 _window_target_post_init :: (windowTarget : *WindowTarget) -> bool {
-    if !_create_graphics_command_pool(windowTarget.engine, *windowTarget.commandPool) then return false;
+    if !_create_graphics_command_pool(windowTarget.engine, *windowTarget.commandPool, true) then return false;
 
     if !_init_frame_objects(windowTarget) then return false;
     if !_init_swapchain(windowTarget) then return false;
@@ -85,30 +85,28 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
 #scope_file
 
 _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObject, frameIndex : u8) -> bool {
-    // Wait for availability of command buffer with fence.
-    // @todo Should just skip the draw instead of waiting? Maybe use the last parameter to decide when to stop.
-    // Same timeout question with acquire_next_image_khr below!
     Vk.wait_for_fences(windowTarget.engine.device, 1, *frameObject.inFlightFence, Vk.TRUE, ~0);
     Vk.reset_fences(windowTarget.engine.device, 1, *frameObject.inFlightFence);
 
     commandBuffer := frameObject.commandBuffer;
     commandBufferBeginInfo : Vk.CommandBufferBeginInfo;
-    commandBufferBeginInfo.sType = Vk.StructureType.CommandBufferBeginInfo;
+    commandBufferBeginInfo.sType = .CommandBufferBeginInfo;
 
     _CHECK(Vk.begin_command_buffer(commandBuffer, *commandBufferBeginInfo),
            "Unable to begin command buffer.");
 
     // ----- Blitting the image handle to the swapchain one
 
-    rendererImage := _renderer_get_image(windowTarget.renderer, frameIndex);
+    rendererOutputExtent := _renderer_get_output_extent(windowTarget.renderer, windowTarget.rendererOutputIndex);
+    rendererImage := _renderer_get_output_image(windowTarget.renderer, windowTarget.rendererOutputIndex, frameIndex);
     swapchainImage := windowTarget.swapchainImages[windowTarget.swapchainImageIndex];
     _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.Undefined, Vk.ImageLayout.TransferDstOptimal);
 
     imageBlit : Vk.ImageBlit;
     imageBlit.srcSubresource.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
     imageBlit.srcSubresource.layerCount = 1;
-    imageBlit.srcOffsets[1].x = cast(s32) windowTarget.renderer.extent.width;
-    imageBlit.srcOffsets[1].y = cast(s32) windowTarget.renderer.extent.height;
+    imageBlit.srcOffsets[1].x = cast(s32) rendererOutputExtent.width;
+    imageBlit.srcOffsets[1].y = cast(s32) rendererOutputExtent.height;
     imageBlit.srcOffsets[1].z = 1;
     imageBlit.dstSubresource.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
     imageBlit.dstSubresource.layerCount = 1;
@@ -116,8 +114,11 @@ _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObjec
     imageBlit.dstOffsets[1].y = cast(s32) windowTarget.extent.height;
     imageBlit.dstOffsets[1].z = 1;
 
+    filter := Vk.Filter.Linear;
+    if windowTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
+
     Vk.cmd_blit_image(commandBuffer, rendererImage, Vk.ImageLayout.TransferSrcOptimal,
-                      swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, Vk.Filter.Linear);
+                      swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
 
     _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.TransferDstOptimal, Vk.ImageLayout.PresentSrcKhr);
 
@@ -136,13 +137,13 @@ _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObjec
     waitDstStageMasks[1] = cast(u32) Vk.PipelineStageFlagBits.ColorAttachmentOutput;
 
     timelineSemaphoreSI : Vk.TimelineSemaphoreSubmitInfo;
-    timelineSemaphoreSI.sType = Vk.StructureType.TimelineSemaphoreSubmitInfo;
+    timelineSemaphoreSI.sType = .TimelineSemaphoreSubmitInfo;
     // By spec, should be 2, but only the index 0 will be read, as it will be the only timeline semaphore of the two.
     timelineSemaphoreSI.waitSemaphoreValueCount = waitSemaphores.count;
     timelineSemaphoreSI.pWaitSemaphoreValues = *renderSemaphoreFinishedValue;
 
     submitInfo : Vk.SubmitInfo;
-    submitInfo.sType = Vk.StructureType.SubmitInfo;
+    submitInfo.sType = .SubmitInfo;
     submitInfo.waitSemaphoreCount = cast(u32) waitSemaphores.count;
     submitInfo.pWaitSemaphores = waitSemaphores.data;
     submitInfo.pWaitDstStageMask = waitDstStageMasks.data;
@@ -160,15 +161,20 @@ _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObjec
 
 _present :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObject) -> bool {
     presentInfo : Vk.PresentInfoKHR;
-    presentInfo.sType = Vk.StructureType.PresentInfoKhr;
+    presentInfo.sType = .PresentInfoKhr;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = *frameObject.renderSemaphore;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = *windowTarget.swapchain;
     presentInfo.pImageIndices = *windowTarget.swapchainImageIndex;
 
-    _CHECK(Vk.queue_present_khr(windowTarget.engine.presentQueue, *presentInfo),
-           "Unable to present.");
+    result := Vk.queue_present_khr(windowTarget.engine.presentQueue, *presentInfo);
+
+    if result == Vk.Result.ErrorOutOfDateKhr {
+        return true;
+    } else {
+        _CHECK(result, "Unable to present.");
+    }
 
     return true;
 }
@@ -176,20 +182,20 @@ _present :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObje
 _init_frame_objects :: (windowTarget : *WindowTarget) -> bool {
     for *frameObject : windowTarget.frameObjects {
         semaphoreCI : Vk.SemaphoreCreateInfo;
-        semaphoreCI.sType = Vk.StructureType.SemaphoreCreateInfo;
+        semaphoreCI.sType = .SemaphoreCreateInfo;
         _CHECK(Vk.create_semaphore(windowTarget.engine.device, *semaphoreCI, null, *frameObject.imageAvailableSemaphore),
                "Unable to create semaphore.");
         _CHECK(Vk.create_semaphore(windowTarget.engine.device, *semaphoreCI, null, *frameObject.renderSemaphore),
                "Unable to create semaphore.");
 
         fenceCI : Vk.FenceCreateInfo;
-        fenceCI.sType = Vk.StructureType.FenceCreateInfo;
+        fenceCI.sType = .FenceCreateInfo;
         fenceCI.flags = cast(u32) Vk.FenceCreateFlagBits.Signaled;
         _CHECK(Vk.create_fence(windowTarget.engine.device, *fenceCI, null, *frameObject.inFlightFence),
                "Unable to create fence.");
 
         commandBufferAI : Vk.CommandBufferAllocateInfo;
-        commandBufferAI.sType = Vk.StructureType.CommandBufferAllocateInfo;
+        commandBufferAI.sType = .CommandBufferAllocateInfo;
         commandBufferAI.commandPool = windowTarget.commandPool;
         commandBufferAI.level = Vk.CommandBufferLevel.Primary;
         commandBufferAI.commandBufferCount = 1;
@@ -224,7 +230,7 @@ _init_swapchain :: (windowTarget : *WindowTarget) -> bool {
     }
 
     swapchainCI : Vk.SwapchainCreateInfoKHR;
-    swapchainCI.sType = Vk.StructureType.SwapchainCreateInfoKhr;
+    swapchainCI.sType = .SwapchainCreateInfoKhr;
     swapchainCI.surface = windowTarget.surface;
     swapchainCI.minImageCount = imageCount;
     swapchainCI.imageFormat = windowTarget.swapchainSurfaceFormat.format;

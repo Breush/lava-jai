@@ -1,20 +1,19 @@
 #scope_module
 
 /*
-    A renderer is capable of rendering an image.
-    Usually, they are Cameras or PostProcesses and
+    A renderer is capable of rendering an image or more.
+
+    Usually, they are things like ForwardRenderer or PostProcesses and
     inputs of PostProcesses and Targets.
 */
 Renderer :: struct {
     Kind :: enum {
         Unknown :: 0;
-        Camera;
+        ForwardRenderer;
     }
 
-    engine : *Engine;
-
+    scene : *Scene;
     kind : Kind;
-    extent : Chamber.uvec2;
 
     using rendererImpl : RendererImpl;
 }
@@ -22,56 +21,75 @@ Renderer :: struct {
 renderer_cleanup :: (renderer : *Renderer) {
     impl_renderer_cleanup(renderer);
 
-    if renderer.kind == Renderer.Kind.Camera {
-        _camera_cleanup(cast(*Camera) renderer);
+    if renderer.kind == Renderer.Kind.ForwardRenderer {
+        _forward_renderer_cleanup(cast(*ForwardRenderer) renderer);
     }
 }
 
+renderer_make_orbit_camera :: (renderer : *Renderer, eyeIndex : u32 = 0) -> OrbitCamera {
+    orbitCamera : OrbitCamera;
+    orbit_camera_init(*orbitCamera, renderer_get_eye(renderer, eyeIndex));
+    return orbitCamera;
+}
+
+renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
+    if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
+    return null;
+}
+
 /*
-    A camera is a eye within a scene.
+    A forward renderer draw meshes the simple way.
 
-    It is defined with different properties,
-    but everything can be summed up into two matrices:
-        - The view matrix, which is the position/orientation of the camera
-          in world-space.
-        - The projection matrix, which is usually a perspective matrix transforming
-          local coordinates into Normalized Device Coordinates.
+    It is usually fast enough except if you have multiple
+    dynamic lights or complex lighting shaders.
 
-    It is a renderer, which can be bound to a Target or a PostProcess.
+    The main difference with DeferredRenderer is that we might
+    uselessly compute lighting of a fragment that might be hidden behind
+    another one.
+    But the cost of a DeferredRenderer is memory, and that is something
+    that we cannot afford in VR environment for instance.
 */
-Camera :: struct {
+ForwardRenderer :: struct {
     using renderer : Renderer;
-    using cameraImpl : CameraImpl;
+    using forwardRendererImpl : ForwardRendererImpl;
+
+    eye : Eye;
 
     allocator : Allocator;
     allocator_data : *void;
 }
 
-// Allocate, init and register a new camera.
-create_camera :: (engine : *Engine, extent : Chamber.uvec2) -> *Camera {
-    camera := cast(*Camera) Basic.New(Camera);
-    camera.kind = Renderer.Kind.Camera;
-    Basic.remember_allocators(camera);
-    camera_init(camera, engine, extent);
-    engine_register(engine, camera);
-    return camera;
+// Allocate, init and register a new forward renderer.
+create_forward_renderer :: (scene : *Scene, extent : Chamber.uvec2) -> *ForwardRenderer {
+    forwardRenderer := cast(*ForwardRenderer) Basic.New(ForwardRenderer);
+    forwardRenderer.kind = Renderer.Kind.ForwardRenderer;
+    Basic.remember_allocators(forwardRenderer);
+    forward_renderer_init(forwardRenderer, scene, extent);
+    scene_register(scene, forwardRenderer);
+    return forwardRenderer;
 }
 
-camera_init :: (camera : *Camera, engine : *Engine, extent : Chamber.uvec2) {
-    _renderer_init(camera, engine, extent);
-    impl_camera_init(camera);
+forward_renderer_init :: (forwardRenderer : *ForwardRenderer, scene : *Scene, extent : Chamber.uvec2) {
+    _renderer_init(forwardRenderer, scene);
+    eye_init(*forwardRenderer.eye, extent);
+
+    impl_forward_renderer_init(forwardRenderer);
+}
+
+forward_renderer_get_eye :: (forwardRenderer : *ForwardRenderer, eyeIndex : u32) -> *Eye {
+    if eyeIndex == 0 then return *forwardRenderer.eye;
+    return null;
 }
 
 #scope_file
 
-_renderer_init :: (renderer : *Renderer, engine : *Engine, extent : Chamber.uvec2) {
-    renderer.engine = engine;
-    renderer.extent = extent;
+_renderer_init :: (renderer : *Renderer, scene : *Scene) {
+    renderer.scene = scene;
 }
 
-_camera_cleanup :: (camera : *Camera) {
-    impl_camera_cleanup(camera);
+_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
+    impl_forward_renderer_cleanup(forwardRenderer);
 
     // Reset memory
-    <<camera = .{};
+    <<forwardRenderer = .{};
 }

@@ -1,19 +1,6 @@
 Basic :: #import "Basic";
 
-_vec2 :: struct(T : Type) {
-    union {
-        x : T;
-        width : T;
-    }
-    union {
-        y : T;
-        height : T;
-    }
-}
-
-vec2 :: _vec2(float);
-svec2 :: _vec2(s32);
-uvec2 :: _vec2(u32);
+#load "linear-algebra.jai";
 
 WindowHandle :: struct {
     union {

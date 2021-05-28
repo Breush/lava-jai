@@ -1,5 +1,7 @@
 #scope_module
 
+#load "window-target.jai";
+
 _target_post_init :: (target : *Target) -> bool {
     if target.kind == Target.Kind.Window {
         return _window_target_post_init(cast(*WindowTarget) target);
@@ -22,5 +24,3 @@ _target_draw :: (target : *Target, frameIndex : u8) -> bool {
     // Issue: unknown target.
     return false;
 }
-
-#load "window-target.jai";

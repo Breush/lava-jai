@@ -15,6 +15,9 @@ EngineImpl :: struct {
     transferQueue : Vk.Queue;
     presentQueue : Vk.Queue;
 
+    // General purpose commandPool, for one-time submits.
+    graphicsCommandPool : Vk.CommandPool;
+
     debugReportCallback : Vk.DebugReportCallbackEXT;
     debugUtilsEnabled : bool; // For settings names to Vulkan object
 
@@ -43,6 +46,7 @@ impl_engine_cleanup :: (engine : *Engine) {
         Vk.destroy_shader_module(engine.device, shaderModule, null);
     }
 
+    Vk.destroy_command_pool(engine.device, engine.graphicsCommandPool, null);
     Vk.destroy_device(engine.device, null);
 
     if engine.debugReportCallback {
@@ -63,8 +67,8 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
     // but that only makes sense if we have a valid device.
     // For that reason, post init might be delayed until here.
     if registeredResourcesNeedPostInit && engine.device != null {
-        for renderer : engine.renderers {
-            _renderer_post_init(renderer);
+        for scene : engine.scenes {
+            _scene_post_init(scene);
         }
         for target : engine.targets {
             _target_post_init(target);
@@ -75,16 +79,6 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
 }
 
 impl_engine_register :: (engine : *Engine, scene : *Scene) {
-    // Nothing to do yet.
-}
-
-impl_engine_register :: (engine : *Engine, renderer : *Renderer) {
-    if engine.device != null {
-        _renderer_post_init(renderer);
-    }
-}
-
-impl_engine_update :: (engine : *Engine) {
     // Nothing to do yet.
 }
 
@@ -111,7 +105,7 @@ _engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.Shade
     _CHECK(readOk, null, "Unable to read shader file.");
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
-    shaderModuleCI.sType = Vk.StructureType.ShaderModuleCreateInfo;
+    shaderModuleCI.sType = .ShaderModuleCreateInfo;
     shaderModuleCI.codeSize = cast(u64) shaderCode.count;
     shaderModuleCI.pCode = cast(*u32) shaderCode.data;
 
@@ -127,7 +121,7 @@ _engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.Shade
 _init_instance :: (engine : *Engine) -> bool {
     // Application info
     applicationInfo : Vk.ApplicationInfo;
-    applicationInfo.sType = Vk.StructureType.ApplicationInfo;
+    applicationInfo.sType = .ApplicationInfo;
     applicationInfo.pApplicationName = "lava-magma";
     applicationInfo.pEngineName = "lava-magma";
     applicationInfo.apiVersion = Vk.API_VERSION_1_2;
@@ -172,7 +166,7 @@ _init_instance :: (engine : *Engine) -> bool {
 
     // Instance
     instanceCI : Vk.InstanceCreateInfo;
-    instanceCI.sType = Vk.StructureType.InstanceCreateInfo;
+    instanceCI.sType = .InstanceCreateInfo;
     instanceCI.pApplicationInfo = *applicationInfo;
     instanceCI.enabledLayerCount = cast(u32) enabledLayers.count;
     instanceCI.ppEnabledLayerNames = enabledLayers.data;
@@ -188,8 +182,8 @@ _init_instance :: (engine : *Engine) -> bool {
         Vk.load_instance_proc(engine.instance, *Vk.destroy_debug_report_callback_ext, "vkDestroyDebugReportCallbackEXT");
 
         debugReportCI : Vk.DebugReportCallbackCreateInfoEXT;
-        debugReportCI.sType = Vk.StructureType.DebugReportCallbackCreateInfoExt;
-        debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning;
+        debugReportCI.sType = .DebugReportCallbackCreateInfoExt;
+        debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning | Vk.DebugReportFlagBitsEXT.PerformanceWarning;
         debugReportCI.pfnCallback = cast(*void) _debug_message_callback;
 
         _CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
@@ -199,21 +193,30 @@ _init_instance :: (engine : *Engine) -> bool {
     return true;
 }
 
-_init_physical_device :: (engine : *Engine) {
+_init_physical_device :: (engine : *Engine) -> bool {
     physicalDevices : [..]Vk.PhysicalDevice;
     Vk.array_fill(*physicalDevices, Vk.enumerate_physical_devices, engine.instance);
     defer Basic.array_free(physicalDevices);
 
     // Chamber.debug("Found ", physicalDevices.count, " physical devices.\n");
-    // for physicalDevice : physicalDevices {
-    //     physicalDeviceProperties : Vk.PhysicalDeviceProperties;
-    //     Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
-    //     Chamber.debug("-> ", Basic.to_string(physicalDeviceProperties.deviceName), "\n");
-    // }
+    engine.physicalDevice = null;
+    for physicalDevice : physicalDevices {
+        // physicalDeviceProperties : Vk.PhysicalDeviceProperties;
+        // Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
+        // Chamber.debug("-> ", Basic.to_string(physicalDeviceProperties.deviceName), "\n");
 
-    engine.physicalDevice = physicalDevices[0];
+        if _is_valid_physical_device(engine, physicalDevice) {
+            engine.physicalDevice = physicalDevice;
+            Vk.get_physical_device_memory_properties(physicalDevice, *engine.physicalDeviceMemoryProperties);
+            break;
+        }
+    }
 
-    Vk.get_physical_device_memory_properties(engine.physicalDevice, *engine.physicalDeviceMemoryProperties);
+    if engine.physicalDevice == null {
+        _CHECK(false, false, "Unable to find valid physical device.");
+    }
+
+    return true;
 }
 
 _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
@@ -247,7 +250,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     queueCreateInfos : [..]Vk.DeviceQueueCreateInfo;
     for queueFamily : uniqueQueueIndices {
         queueCI : Vk.DeviceQueueCreateInfo;
-        queueCI.sType = Vk.StructureType.DeviceQueueCreateInfo;
+        queueCI.sType = .DeviceQueueCreateInfo;
         queueCI.queueFamilyIndex = cast(u32) queueFamily;
         queueCI.queueCount = 1;
         queueCI.pQueuePriorities = *queuePriority;
@@ -255,7 +258,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     }
 
     deviceCI : Vk.DeviceCreateInfo;
-    deviceCI.sType = Vk.StructureType.DeviceCreateInfo;
+    deviceCI.sType = .DeviceCreateInfo;
     deviceCI.pQueueCreateInfos = queueCreateInfos.data;
     deviceCI.queueCreateInfoCount = cast(u32) queueCreateInfos.count;
     deviceCI.enabledExtensionCount = cast(u32) enabledExtensions.count;
@@ -270,6 +273,10 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 
     if engine.debugUtilsEnabled {
         Vk.load_device_proc(engine.device, *Vk.set_debug_utils_object_name_ext, "vkSetDebugUtilsObjectNameEXT");
+    }
+
+    if !_create_graphics_command_pool(engine, *engine.graphicsCommandPool, false) {
+        return false;
     }
 
     return true;
@@ -335,6 +342,24 @@ _debug_message_callback :: (
         Basic.exit(1);
     }
     return Vk.FALSE;
+}
+
+_is_valid_physical_device :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice) -> bool {
+    features : Vk.PhysicalDeviceFeatures2;
+    features.sType = .PhysicalDeviceFeatures2;
+
+    timelineSemaphoreFeatures : Vk.PhysicalDeviceTimelineSemaphoreFeatures;
+    timelineSemaphoreFeatures.sType = .PhysicalDeviceTimelineSemaphoreFeatures;
+    features.pNext = *timelineSemaphoreFeatures;
+
+    Vk.get_physical_device_features2(physicalDevice, *features);
+
+    // Checking that timeline semaphores are supported.
+    if !timelineSemaphoreFeatures.timelineSemaphore {
+        return false;
+    }
+
+    return true;
 }
 
 _is_layer_available :: (layerName : string, availableLayers : []Vk.LayerProperties) -> bool {

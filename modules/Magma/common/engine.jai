@@ -19,7 +19,6 @@ Engine :: struct {
 
     options : Options;
 
-    renderers : [..]*Renderer;
     scenes : [..]*Scene;
     targets : [..]*Target;
 
@@ -38,11 +37,11 @@ create_engine :: (options : Engine.Options = .{}) -> *Engine {
 
 destroy_engine :: (engine : *Engine, destroyResources := true) {
     if destroyResources {
-        for target : engine.targets {
-            target_cleanup(target);
+        for scene : engine.scenes {
+            destroy_scene(scene, true);
         }
-        for renderer : engine.renderers {
-            renderer_cleanup(renderer);
+        for target : engine.targets {
+            destroy_target(target);
         }
     }
 
@@ -54,15 +53,14 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
     }
 }
 
-engine_init :: (engine : *Engine, options : Engine.Options = .{}) {
-    engine.options = options;
+engine_init :: (engine : *Engine, _options : Engine.Options = .{}) {
+    engine.options = _options;
     impl_engine_init(engine);
 }
 
 engine_cleanup :: (engine : *Engine) {
     impl_engine_cleanup(engine);
 
-    Basic.array_free(engine.renderers);
     Basic.array_free(engine.scenes);
     Basic.array_free(engine.targets);
 
@@ -71,7 +69,9 @@ engine_cleanup :: (engine : *Engine) {
 }
 
 engine_update :: (engine : *Engine) {
-    impl_engine_update(engine);
+    for scene : engine.scenes {
+        scene_update(scene);
+    }
 }
 
 engine_draw :: (engine : *Engine) {
@@ -86,9 +86,4 @@ engine_register :: (engine : *Engine, target : *Target) {
 engine_register :: (engine : *Engine, scene : *Scene) {
     Basic.array_add(*engine.scenes, scene);
     impl_engine_register(engine, scene);
-}
-
-engine_register :: (engine : *Engine, renderer : *Renderer) {
-    Basic.array_add(*engine.renderers, renderer);
-    impl_engine_register(engine, renderer);
 }

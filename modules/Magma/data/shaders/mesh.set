@@ -1,0 +1,21 @@
+
+// Per vertex
+layout(location = 0) in vec3 inVertexPosition;
+layout(location = 1) in vec3 inVertexNormal;
+
+// Per instance
+layout(location = 2) in vec4 inInstanceMatrixRow0;
+layout(location = 3) in vec4 inInstanceMatrixRow1;
+layout(location = 4) in vec4 inInstanceMatrixRow2;
+
+struct MeshShaderObject {
+    mat4 matrix;
+} mesh;
+
+void setupMesh() {
+    mesh.matrix = mat4(inInstanceMatrixRow0,
+                       inInstanceMatrixRow1,
+                       inInstanceMatrixRow2,
+                       vec4(0, 0, 0, 1));
+    mesh.matrix = transpose(mesh.matrix);
+}

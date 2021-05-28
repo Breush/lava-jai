@@ -1,5 +1,7 @@
 #scope_module
 
+#load "forward-renderer.jai";
+
 /*
     About draw/render/present.
     We have this internal naming convention.
@@ -13,8 +15,6 @@ RendererImpl :: struct {
     lastFrameIndex := cast,trunc(u8) ~0;
     commandPool : Vk.CommandPool;
     FrameObject :: struct {
-        imageHolder : ImageHolder;
-        imageView : Vk.ImageView;
         commandBuffer : Vk.CommandBuffer;
         renderSemaphore : Vk.Semaphore;
         // @note This is a strictly increasing counter.
@@ -29,59 +29,52 @@ RendererImpl :: struct {
 }
 
 impl_renderer_cleanup :: (renderer : *Renderer) {
+    engine := renderer.scene.engine;
+
     for frameObject : renderer.frameObjects {
-        _image_holder_cleanup(*frameObject.imageHolder, renderer.engine);
-        Vk.destroy_image_view(renderer.engine.device, frameObject.imageView, null);
-        Vk.free_command_buffers(renderer.engine.device, renderer.commandPool, 1, *frameObject.commandBuffer);
-        Vk.destroy_semaphore(renderer.engine.device, frameObject.renderSemaphore, null);
+        Vk.free_command_buffers(engine.device, renderer.commandPool, 1, *frameObject.commandBuffer);
+        Vk.destroy_semaphore(engine.device, frameObject.renderSemaphore, null);
     }
 
-    Vk.destroy_command_pool(renderer.engine.device, renderer.commandPool, null);
+    Vk.destroy_command_pool(engine.device, renderer.commandPool, null);
 }
 
 _renderer_post_init :: (renderer : *Renderer) -> bool {
-    if !_create_graphics_command_pool(renderer.engine, *renderer.commandPool) {
+    engine := renderer.scene.engine;
+
+    if !_create_graphics_command_pool(engine, *renderer.commandPool, true) {
         return false;
     }
-    _set_debug_utils_name(renderer.engine.device, renderer.commandPool, "renderer.commandPool");
+    _set_debug_utils_name(engine.device, renderer.commandPool, "renderer.commandPool");
 
     for *frameObject : renderer.frameObjects {
-        if !_image_holder_init(*frameObject.imageHolder, renderer.engine, renderer.extent, Vk.Format.R8G8B8A8Srgb) {
-            return false;
-        }
-        _set_debug_utils_name(renderer.engine.device, frameObject.imageHolder.image, "renderer.frameObjects[].imageHolder");
-
-        frameObject.imageView = _image_holder_create_view(*frameObject.imageHolder, renderer.engine);
-        if frameObject.imageView == null then return false;
-        _set_debug_utils_name(renderer.engine.device, frameObject.imageView, "renderer.frameObjects[].imageView");
-
         // @note We use timeline semaphores so that multiple targets/post-processes
         // can wait for it to be done. It also allows us to use it as a fence to
         // ensure that it is not reused before the previous one is done.
         semaphoreTypeCI : Vk.SemaphoreTypeCreateInfo;
-        semaphoreTypeCI.sType = Vk.StructureType.SemaphoreTypeCreateInfo;
+        semaphoreTypeCI.sType = .SemaphoreTypeCreateInfo;
         semaphoreTypeCI.semaphoreType = Vk.SemaphoreType.Timeline;
         semaphoreTypeCI.initialValue = 0;
 
         semaphoreCI : Vk.SemaphoreCreateInfo;
-        semaphoreCI.sType = Vk.StructureType.SemaphoreCreateInfo;
+        semaphoreCI.sType = .SemaphoreCreateInfo;
         semaphoreCI.pNext = *semaphoreTypeCI;
-        _CHECK(Vk.create_semaphore(renderer.engine.device, *semaphoreCI, null, *frameObject.renderSemaphore),
+        _CHECK(Vk.create_semaphore(engine.device, *semaphoreCI, null, *frameObject.renderSemaphore),
                "Unable to create semaphore.");
-        _set_debug_utils_name(renderer.engine.device, frameObject.renderSemaphore, "renderer.frameObjects[].renderSemaphore");
+        _set_debug_utils_name(engine.device, frameObject.renderSemaphore, "renderer.frameObjects[].renderSemaphore");
 
         commandBufferAI : Vk.CommandBufferAllocateInfo;
-        commandBufferAI.sType = Vk.StructureType.CommandBufferAllocateInfo;
+        commandBufferAI.sType = .CommandBufferAllocateInfo;
         commandBufferAI.commandPool = renderer.commandPool;
         commandBufferAI.level = Vk.CommandBufferLevel.Primary;
         commandBufferAI.commandBufferCount = 1;
-        _CHECK(Vk.allocate_command_buffers(renderer.engine.device, *commandBufferAI, *frameObject.commandBuffer),
+        _CHECK(Vk.allocate_command_buffers(engine.device, *commandBufferAI, *frameObject.commandBuffer),
                "Unable to allocate command buffers.");
-        _set_debug_utils_name(renderer.engine.device, frameObject.commandBuffer, "renderer.frameObjects[].commandBuffer");
+        _set_debug_utils_name(engine.device, frameObject.commandBuffer, "renderer.frameObjects[].commandBuffer");
     }
 
-    if renderer.kind == Renderer.Kind.Camera {
-        return _camera_post_init(cast(*Camera) renderer);
+    if renderer.kind == .ForwardRenderer {
+        return _forward_renderer_post_init(cast(*ForwardRenderer) renderer);
     }
 
     // Issue, unknown renderer.
@@ -95,8 +88,8 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
     }
     renderer.lastFrameIndex = frameIndex;
 
-    if renderer.kind == Renderer.Kind.Camera {
-        return _camera_render(cast(*Camera) renderer, frameIndex);
+    if renderer.kind == .ForwardRenderer {
+        return _forward_renderer_render(cast(*ForwardRenderer) renderer, frameIndex);
     }
 
     // Issue, unknown renderer.
@@ -108,7 +101,48 @@ _renderer_get_render_semaphore :: (renderer : *Renderer, frameIndex : u8) -> Vk.
     return frameObject.renderSemaphore, frameObject.renderSemaphoreFinishedValue;
 }
 
-_renderer_get_image :: (renderer : *Renderer, frameIndex : u8) -> Vk.Image {
-    frameObject := *renderer.frameObjects[frameIndex];
-    return frameObject.imageHolder.image;
+_renderer_get_output_image :: (renderer : *Renderer, outputIndex : u8, frameIndex : u8) -> Vk.Image {
+    if renderer.kind == .ForwardRenderer {
+        return _forward_renderer_get_output_image(cast(*ForwardRenderer) renderer, outputIndex, frameIndex);
+    }
+
+    // Issue, unknown renderer.
+    return null;
+}
+
+_renderer_get_output_extent :: (renderer : *Renderer, outputIndex : u8) -> Chamber.uvec2 {
+    if renderer.kind == .ForwardRenderer {
+        return _forward_renderer_get_output_extent(cast(*ForwardRenderer) renderer, outputIndex);
+    }
+
+    // Issue, unknown renderer.
+    return .{};
+}
+
+_fill_vertex_input_descs :: ($T : Type, binding : u32, locationStart : u32, inputRate : Vk.VertexInputRate) -> u32 #expand {
+    typeInfo := type_info(T);
+
+    `vertexInputBindingDescs[binding].binding = binding;
+    `vertexInputBindingDescs[binding].stride = cast(u32) typeInfo.runtime_size;
+    `vertexInputBindingDescs[binding].inputRate = inputRate;
+
+    location := locationStart;
+    for *member : typeInfo.members {
+        `vertexInputAttributeDescs[location].binding = binding;
+        `vertexInputAttributeDescs[location].location = location;
+        `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
+
+        if member.type.runtime_size == 12 { // vec3
+            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32Sfloat;
+        } else if member.type.runtime_size == 16 { // vec4
+            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32A32Sfloat;
+        } else {
+            memberTypeInfo := cast(*Type_Info_Struct) member.type;
+            Chamber.debug("Unknown format for ", typeInfo.name, ".", member.name, " (", memberTypeInfo.name, ").\n");
+            Basic.assert(false);
+        }
+        location += 1;
+    }
+
+    return location;
 }
