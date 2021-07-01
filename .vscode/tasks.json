@@ -6,7 +6,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "jai ${workspaceFolder}/examples/magma-scenes/first.jai",
+            "command": "jai ${workspaceFolder}/examples/magma-vr/first.jai",
             "presentation": {
                 "echo": true,
                 "reveal": "never",
@@ -63,7 +63,14 @@
         {
             "label": "run",
             "type": "shell",
-            "command": "VK_LAYER_PATH=${workspaceFolder}/bindings/Vulkan/validation-layers ${workspaceFolder}/examples/bin/magma-scenes",
+            "command": " ${workspaceFolder}/examples/bin/magma-vr",
+            "options": {
+                "env": {
+                    "VK_LAYER_PATH": "${workspaceFolder}/bindings/Vulkan/layers",
+                    "XR_API_LAYER_PATH": "${workspaceFolder}/bindings/OpenXr/api-layers",
+                    "LD_LIBRARY_PATH": "${workspaceFolder}/bindings/OpenXr:${env:LD_LIBRARY_PATH}",
+                }
+            },
             "presentation": {
                 "echo": true,
                 "reveal": "always",

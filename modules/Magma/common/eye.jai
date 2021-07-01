@@ -21,28 +21,36 @@ Eye :: struct {
     shaderObject : EyeShaderObject;
 }
 
-EyeShaderObject :: struct {                 // 72 bytes
-    viewMatrixRow0 : Chamber.vec4;          // 16 viewMatrixRow[0]
-    viewMatrixRow1 : Chamber.vec4;          // 16 viewMatrixRow[1]
-    viewMatrixRow2 : Chamber.vec4;          // 16 viewMatrixRow[2]
-    projectionMatrixFactors : Chamber.vec4; // 16 [0][0] [1][1] [2][2] [2][3]
+EyeShaderObject :: struct {                  // 72 bytes
+    viewMatrixRow0 : Chamber.vec4;           // 16 viewMatrixRow[0]
+    viewMatrixRow1 : Chamber.vec4;           // 16 viewMatrixRow[1]
+    viewMatrixRow2 : Chamber.vec4;           // 16 viewMatrixRow[2]
+    projectionMatrixFactors1 : Chamber.vec4; // 16 [0][0] [1][1] [2][2] [2][3]
+    projectionMatrixFactors2 : Chamber.vec2; // 8 [0][2] [1][2]
 }
 
 eye_init :: (eye : *Eye, extent : Chamber.uvec2) {
     eye.extent = extent;
-
-    eye.viewMatrix = matrix4_identity();
-    eye.projectionMatrix = Chamber.infinite_perspective_projection_matrix(100., cast(float32) extent.width / cast(float32) extent.height, 0.1);
+    eye.viewMatrix = Chamber.look_at_matrix(.{0, 0, 0}, .{1, 0, 0});
+    Chamber.infinite_perspective_projection(*eye.projectionMatrix, #run Chamber.to_radians(100.),
+                                            cast(float32) extent.width / cast(float32) extent.height, 0.1);
+    eye_commit(eye);
 }
 
 eye_commit :: (eye : *Eye) {
     eye.shaderObject.viewMatrixRow0.std = eye.viewMatrix.v[0];
     eye.shaderObject.viewMatrixRow1.std = eye.viewMatrix.v[1];
     eye.shaderObject.viewMatrixRow2.std = eye.viewMatrix.v[2];
-    eye.shaderObject.projectionMatrixFactors.x = eye.projectionMatrix.coef[0][0];
-    eye.shaderObject.projectionMatrixFactors.y = eye.projectionMatrix.coef[1][1];
-    eye.shaderObject.projectionMatrixFactors.z = eye.projectionMatrix.coef[2][2];
-    eye.shaderObject.projectionMatrixFactors.w = eye.projectionMatrix.coef[2][3];
+
+    // For symmetric projections
+    eye.shaderObject.projectionMatrixFactors1.x = eye.projectionMatrix.coef[0][0];
+    eye.shaderObject.projectionMatrixFactors1.y = eye.projectionMatrix.coef[1][1];
+    eye.shaderObject.projectionMatrixFactors1.z = eye.projectionMatrix.coef[2][2];
+    eye.shaderObject.projectionMatrixFactors1.w = eye.projectionMatrix.coef[2][3];
+
+    // Extended for non-symmetric projections
+    eye.shaderObject.projectionMatrixFactors2.x = eye.projectionMatrix.coef[0][2];
+    eye.shaderObject.projectionMatrixFactors2.y = eye.projectionMatrix.coef[1][2];
 }
 
 /*
@@ -72,7 +80,7 @@ orbit_camera_infinite_perspective_projection :: (orbitCamera : *OrbitCamera, fov
     orbitCamera.fovX = fovX;
     orbitCamera.nearClip = nearClip;
     aspectRatio := cast(float32) orbitCamera.eye.extent.width / cast(float32) orbitCamera.eye.extent.height;
-    orbitCamera.eye.projectionMatrix = Chamber.infinite_perspective_projection_matrix(fovX, aspectRatio, nearClip);
+    Chamber.infinite_perspective_projection(*orbitCamera.eye.projectionMatrix, fovX, aspectRatio, nearClip);
 
     #if commit {
         eye_commit(orbitCamera.eye);

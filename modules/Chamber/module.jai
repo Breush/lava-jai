@@ -25,4 +25,5 @@ debug :: (args: ..Any) {
     default_format_struct.use_newlines_if_long_form = true;
     default_format_struct.indentation_width = 2;
     Basic.print(format, ..args);
+    Basic.print("\n");
 }

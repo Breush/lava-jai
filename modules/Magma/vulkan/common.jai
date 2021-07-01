@@ -2,20 +2,22 @@
 
 #load "holders.jai";
 
-_CHECK :: (ok : bool, returnedValue : $T, message : ..Any) #expand {
-    if !ok {
-        // @todo Use official context logger.
-        Chamber.debug(..message);
-        Chamber.debug("\n");
-        `return returnedValue;
+_CHECK :: (result : $R, returnedValue : $T, message : string) #expand {
+    #if type_of(result) == bool {
+        if !result {
+            // @todo Use official context logger.
+            Chamber.debug(message, "\n");
+            `return returnedValue;
+        }
+    } else {
+        if result != .Success {
+            Chamber.debug(message, " (", result, ")\n");
+            `return returnedValue;
+        }
     }
 }
 
-_CHECK :: (result : Vk.Result, returnedValue : $T, message : string) #expand {
-    _CHECK(result == Vk.Result.Success, returnedValue, message, "(", result, ")");
-}
-
-_CHECK :: (result : Vk.Result, message : string) #expand {
+_CHECK :: (result : $R, message : string) #expand {
     _CHECK(result, false, message);
 }
 
@@ -140,6 +142,10 @@ _set_debug_utils_name :: (device : Vk.Device, object : Vk.Image, name : *u8) {
 
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.ImageView, name : *u8) {
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.ImageView, name);
+}
+
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.Fence, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.Fence, name);
 }
 
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.Semaphore, name : *u8) {

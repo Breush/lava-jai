@@ -1,6 +1,8 @@
 Hash :: #import "Hash_Table";
 for_expansion :: Hash.for_expansion;
 
+#load "engine-vr.jai";
+
 #scope_module
 
 EngineImpl :: struct {
@@ -53,7 +55,11 @@ impl_engine_cleanup :: (engine : *Engine) {
         Vk.destroy_debug_report_callback_ext(engine.instance, engine.debugReportCallback, null);
     }
 
-    Vk.destroy_instance(engine.instance, null);
+    // :SteamVrHanging Can't destroy the instance with OpenXR and SteamVR, for some reason...
+    // https://github.com/ValveSoftware/SteamVR-for-Linux/issues/422
+    if !engine.vr.enabled {
+        Vk.destroy_instance(engine.instance, null);
+    }
 }
 
 impl_engine_register :: (engine : *Engine, target : *Target) {
@@ -61,6 +67,8 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
 
     if target.kind == Target.Kind.Window {
         _init_device(engine, (cast(*WindowTarget) target).surface);
+    } else {
+        _init_device(engine, null);
     }
 
     // @note Objects that are registered should be called for "post_init"
@@ -157,12 +165,31 @@ _init_instance :: (engine : *Engine) -> bool {
     }
 
     // Surface extensions
-    if engine.options.targetFlags & Engine.Options.TargetFlags.Window {
+    if engine.options.targetFlags & .Window {
         Basic.array_add(*enabledExtensions, Vk.KHR_SURFACE_EXTENSION_NAME);
         #if OS == .LINUX {
             Basic.array_add(*enabledExtensions, Vk.KHR_XCB_SURFACE_EXTENSION_NAME);
         }
     }
+
+    // VR extensions
+    if engine.vr.enabled {
+        extensions := vr_vulkan_required_instance_extensions(*engine.vr);
+        defer Basic.array_free(extensions);
+        for extension : extensions {
+            Basic.array_add(*enabledExtensions, extension.data);
+        }
+    }
+
+    // For debugging
+    // Chamber.debug("Available instance extensions:");
+    // for extension : availableExtensions {
+    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
+    // }
+    // Chamber.debug("Activated instance extensions:");
+    // for extension : enabledExtensions {
+    //     Chamber.debug("    - ", Basic.to_string(extension));
+    // }
 
     // Instance
     instanceCI : Vk.InstanceCreateInfo;
@@ -183,8 +210,9 @@ _init_instance :: (engine : *Engine) -> bool {
 
         debugReportCI : Vk.DebugReportCallbackCreateInfoEXT;
         debugReportCI.sType = .DebugReportCallbackCreateInfoExt;
-        debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning | Vk.DebugReportFlagBitsEXT.PerformanceWarning;
+        debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning /* | Vk.DebugReportFlagBitsEXT.PerformanceWarning */;
         debugReportCI.pfnCallback = cast(*void) _debug_message_callback;
+        debugReportCI.pUserData = engine;
 
         _CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
                "Unable to create debug report callback.");
@@ -198,14 +226,27 @@ _init_physical_device :: (engine : *Engine) -> bool {
     Vk.array_fill(*physicalDevices, Vk.enumerate_physical_devices, engine.instance);
     defer Basic.array_free(physicalDevices);
 
+    requiredPhysicalDevice : Vk.PhysicalDevice;
+    if engine.vr.enabled {
+        requiredPhysicalDevice = _vr_vulkan_required_physical_device(engine);
+    }
+
     // Chamber.debug("Found ", physicalDevices.count, " physical devices.\n");
     engine.physicalDevice = null;
     for physicalDevice : physicalDevices {
+        // For debug
         // physicalDeviceProperties : Vk.PhysicalDeviceProperties;
         // Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
         // Chamber.debug("-> ", Basic.to_string(physicalDeviceProperties.deviceName), "\n");
 
-        if _is_valid_physical_device(engine, physicalDevice) {
+        validPhysicalDevice : bool;
+        if requiredPhysicalDevice != null {
+            validPhysicalDevice = (physicalDevice == requiredPhysicalDevice);
+        } else {
+            validPhysicalDevice = _is_valid_physical_device(engine, physicalDevice);
+        }
+
+        if validPhysicalDevice {
             engine.physicalDevice = physicalDevice;
             Vk.get_physical_device_memory_properties(physicalDevice, *engine.physicalDeviceMemoryProperties);
             break;
@@ -223,21 +264,18 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     enabledExtensions : [..]*u8;
     Basic.array_add(*enabledExtensions, Vk.KHR_SWAPCHAIN_EXTENSION_NAME);
 
-    queueIndices := _find_queue_indices(engine.physicalDevice, surface);
-    if queueIndices.graphics == -1 || queueIndices.transfer == -1 || queueIndices.present == -1 {
-        _CHECK(false, false, "Unable to find valid logical device queues for surface.");
-    }
-
-    // If we already had a initialized device, check that it is compatible.
-    // @todo A check on "present" could be enough.
-    if engine.device {
-        if queueIndices.graphics != engine.queueIndices.graphics ||
-           queueIndices.transfer != engine.queueIndices.transfer ||
-           queueIndices.present != engine.queueIndices.present {
+    if engine.device != null {
+        // If we already had a initialized device, check that it is compatible.
+        if !_is_valid_queue_index_for_surface(cast(u32) engine.queueIndices.present, engine.physicalDevice, surface) {
             _CHECK(false, false, "Unable to reuse existing logical device for surface. Be sure to register complex targets like WindowTarget before others. And if it is already the case, you may need to create another Engine as the Vulkan devices do not seem compatible between them..");
         }
         // Reusing pre-existing device.
         return true;
+    }
+
+    queueIndices := _find_queue_indices(engine.physicalDevice, surface);
+    if queueIndices.graphics == -1 || queueIndices.transfer == -1 || queueIndices.present == -1 {
+        _CHECK(false, false, "Unable to find valid logical device queues.");
     }
     engine.queueIndices = queueIndices;
 
@@ -256,6 +294,27 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
         queueCI.pQueuePriorities = *queuePriority;
         Basic.array_add(*queueCreateInfos, queueCI);
     }
+
+    // VR extensions
+    if engine.vr.enabled {
+        extensions := vr_vulkan_required_device_extensions(*engine.vr);
+        defer Basic.array_free(extensions);
+        for extension : extensions {
+            Basic.array_add(*enabledExtensions, extension.data);
+        }
+    }
+
+    // For debugging
+    // availableExtensions : [..]Vk.ExtensionProperties;
+    // Vk.array_fill(*availableExtensions, Vk.enumerate_device_extension_properties, engine.physicalDevice, null);
+    // Chamber.debug("Available device extensions:");
+    // for extension : availableExtensions {
+    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
+    // }
+    // Chamber.debug("Activated device extensions:");
+    // for extension : enabledExtensions {
+    //     Chamber.debug("    - ", Basic.to_string(extension));
+    // }
 
     deviceCI : Vk.DeviceCreateInfo;
     deviceCI.sType = .DeviceCreateInfo;
@@ -303,7 +362,7 @@ _find_queue_indices :: (physicalDevice : Vk.PhysicalDevice, surface : Vk.Surface
         }
 
         if surface != null {
-            Vk.get_physical_device_surface_support_khr(physicalDevice, cast(u32) queueFamilyIndex, surface, *presentSupport);
+            presentSupport = _is_valid_queue_index_for_surface(cast(u32) queueFamilyIndex, physicalDevice, surface);
         }
 
         if presentSupport == Vk.TRUE {
@@ -325,6 +384,14 @@ _find_queue_indices :: (physicalDevice : Vk.PhysicalDevice, surface : Vk.Surface
     return queueIndices;
 }
 
+_is_valid_queue_index_for_surface :: (queueIndex : u32, physicalDevice : Vk.PhysicalDevice, surface : Vk.SurfaceKHR) -> Vk.Bool32 {
+    if surface == null then return Vk.TRUE;
+
+    presentSupport : Vk.Bool32;
+    Vk.get_physical_device_surface_support_khr(physicalDevice, queueIndex, surface, *presentSupport);
+    return presentSupport;
+}
+
 _debug_message_callback :: (
     flags : Vk.DebugReportFlagsEXT,
     objectType : Vk.DebugReportObjectTypeEXT,
@@ -338,8 +405,13 @@ _debug_message_callback :: (
     ctx: Context;
     push_context ctx {
         // @todo Better logging system
-        Chamber.debug(Basic.to_string(message), "\n");
-        Basic.exit(1);
+        Chamber.debug(Basic.to_string(message));
+
+        // @note SteamVR has inconsistent SPIRV, so we still need to continue...
+        engine := cast(*Engine) userData;
+        if !(engine.options.targetFlags & .Vr) {
+            Basic.exit(1);
+        }
     }
     return Vk.FALSE;
 }

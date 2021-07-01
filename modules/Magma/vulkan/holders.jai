@@ -34,7 +34,7 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 
     if kind == .RendererOut {
         format = Vk.Format.R8G8B8A8Srgb;
-        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.ColorAttachment;
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
     } else if kind == .Depth {
         format = Vk.Format.D32Sfloat;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.DepthStencilAttachment;

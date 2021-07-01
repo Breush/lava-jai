@@ -1,5 +1,7 @@
 #scope_module
 
+#load "engine-vr.jai";
+
 /*
     An Engine is the heart of the rendering system.
     Multiple can exist at once, but they do not share data.
@@ -12,6 +14,7 @@ Engine :: struct {
         TargetFlags :: enum_flags {
             None :: 0;
             Window :: 1;
+            Vr :: 2;
         }
 
         targetFlags : TargetFlags = .Window;
@@ -22,6 +25,8 @@ Engine :: struct {
     scenes : [..]*Scene;
     targets : [..]*Target;
 
+    vr : Vr;
+
     using engineImpl : EngineImpl;
 
     allocator : Allocator;
@@ -31,7 +36,7 @@ Engine :: struct {
 create_engine :: (options : Engine.Options = .{}) -> *Engine {
     engine := cast(*Engine) Basic.New(Engine);
     Basic.remember_allocators(engine);
-    engine_init(engine);
+    engine_init(engine, options);
     return engine;
 }
 
@@ -53,12 +58,24 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
     }
 }
 
-engine_init :: (engine : *Engine, _options : Engine.Options = .{}) {
-    engine.options = _options;
+engine_init :: (engine : *Engine, options : Engine.Options) -> bool {
+    engine.options = options;
+
+    if engine.options.targetFlags & .Vr {
+        if !engine_vr_init(engine) {
+            Chamber.debug("Unable to init engine with TargetFlags.Vr: VR is not available. Disabling VR capabilities.");
+        }
+    }
+
     impl_engine_init(engine);
+    return true;
 }
 
 engine_cleanup :: (engine : *Engine) {
+    if engine.vr.enabled {
+        engine_vr_cleanup(engine);
+    }
+
     impl_engine_cleanup(engine);
 
     Basic.array_free(engine.scenes);
@@ -71,6 +88,10 @@ engine_cleanup :: (engine : *Engine) {
 engine_update :: (engine : *Engine) {
     for scene : engine.scenes {
         scene_update(scene);
+    }
+
+    for target : engine.targets {
+        target_update(target);
     }
 }
 

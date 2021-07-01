@@ -62,6 +62,11 @@ _window_target_post_init :: (windowTarget : *WindowTarget) -> bool {
 }
 
 _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
+    if windowTarget.rendererOutput.renderer == null {
+        // Nothing is bound to this target, skip it.
+        return true;
+    }
+
     frameObject := *windowTarget.frameObjects[frameIndex];
 
     // Swapchain image
@@ -75,8 +80,8 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
         _CHECK(result, "Unable to acquire next swapchain image.");
     }
 
-    if !_renderer_render(windowTarget.renderer, frameIndex) then return false;
-    if !_render(windowTarget, frameObject, frameIndex) then return false;
+    if !_renderer_render(windowTarget.rendererOutput.renderer, frameIndex) then return false;
+    if !_render(windowTarget, frameIndex) then return false;
     if !_present(windowTarget, frameObject) then return false;
 
     return true;
@@ -84,7 +89,9 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
 
 #scope_file
 
-_render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObject, frameIndex : u8) -> bool {
+_render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
+    frameObject := windowTarget.frameObjects[frameIndex];
+
     Vk.wait_for_fences(windowTarget.engine.device, 1, *frameObject.inFlightFence, Vk.TRUE, ~0);
     Vk.reset_fences(windowTarget.engine.device, 1, *frameObject.inFlightFence);
 
@@ -97,8 +104,8 @@ _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObjec
 
     // ----- Blitting the image handle to the swapchain one
 
-    rendererOutputExtent := _renderer_get_output_extent(windowTarget.renderer, windowTarget.rendererOutputIndex);
-    rendererImage := _renderer_get_output_image(windowTarget.renderer, windowTarget.rendererOutputIndex, frameIndex);
+    rendererOutputExtent := _renderer_output_get_extent(windowTarget.rendererOutput);
+    rendererImage := _renderer_output_get_image(windowTarget.rendererOutput, frameIndex);
     swapchainImage := windowTarget.swapchainImages[windowTarget.swapchainImageIndex];
     _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.Undefined, Vk.ImageLayout.TransferDstOptimal);
 
@@ -126,7 +133,7 @@ _render :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObjec
 
     // ----- Submit
 
-    renderSemaphore, renderSemaphoreFinishedValue := _renderer_get_render_semaphore(windowTarget.renderer, frameIndex);
+    renderSemaphore, renderSemaphoreFinishedValue := _renderer_output_get_render_semaphore(windowTarget.rendererOutput, frameIndex);
 
     waitSemaphores : [2]Vk.Semaphore;
     waitSemaphores[0] = renderSemaphore;

@@ -108,6 +108,13 @@ destroy_window :: (window : *Window) {
     }
 }
 
+window_get_extent :: (window : *Window) -> Chamber.uvec2 {
+    extent : Chamber.uvec2;
+    extent.width = cast(u32) window.videoMode.width;
+    extent.height = cast(u32) window.videoMode.height;
+    return extent;
+}
+
 window_get_handle :: (window : *Window) -> Chamber.WindowHandle {
     return impl_window_get_handle(window);
 }

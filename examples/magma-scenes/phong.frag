@@ -9,6 +9,9 @@ layout(location = 2) in float depth;
 
 layout(location = 0) out vec4 outColor;
 
+// @fixme Hey, these should be shipped with Magma!
+// And they are currently in examples...
+
 void main() {
     setupEye();
 

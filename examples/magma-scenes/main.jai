@@ -75,8 +75,8 @@ main :: () {
     Magma.orbit_camera_origin_target(*camera1A, .{-2, -1, 1}, .{0, 0, 0});
     Magma.orbit_camera_origin_target(*camera2A, .{-2, -1, 1}, .{0, 0, 0});
 
-    Magma.target_bind(smallTarget, renderer1A);
-    Magma.target_bind(bigTarget, renderer2A);
+    Magma.target_bind(smallTarget, Magma.renderer_get_output(renderer1A));
+    Magma.target_bind(bigTarget, Magma.renderer_get_output(renderer2A));
 
     // Main loop, updating rendering and catching closing events.
     while smallWindow.opened && bigWindow.opened {

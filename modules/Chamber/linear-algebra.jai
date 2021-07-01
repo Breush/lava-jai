@@ -95,12 +95,40 @@ infinite_perspective_projection :: (matrix : *mat4, fovX : float32, aspectRatio 
     matrix.coef[3][2] = 1.;
 }
 
+// Following same conventions as described in infinite_perspective_projection_matrix.
+// @note Angles should be signed. So that, for instance, in a symmetric projection, angleLeft = -angleRight.
+infinite_perspective_projection :: (matrix : *mat4, angleLeft : float, angleRight : float,
+                                    angleUp : float, angleDown : float, nearClip : float, $clear := true) {
+    #if clear {
+        <<matrix = mat4.{};
+    }
+
+    tanAngleLeft := tan(angleLeft);
+    tanAngleRight := tan(angleRight);
+    tanAngleUp := tan(angleUp);
+    tanAngleDown := tan(angleDown);
+
+    // @note Mappings (once again, angles are signed, so tanAngles are signed too):
+    // X * (n / Z) = n*tanAngleLeft  -> X' = -1       X' = (2 * X / Z - (tanAngleRight + tanAngleLeft)) / (tanAngleRight - tanAngleLeft)
+    // X * (n / Z) = n*tanAngleRight -> X' =  1
+    // Y * (n / Z) = n*tanAngleUp    -> Y' = -1       Y' = (2 * Y / Z - (tanAngleDown + tanAngleUp)) / (tanAngleDown - tanAngleUp)
+    // Y * (n / Z) = n*tanAngleDown  -> Y' =  1
+    // Z           = n               -> Z' =  1       Z' = n / Z
+    // Z           = +infinity       -> Z' =  0
+    matrix.coef[0][0] = 2. / (tanAngleRight - tanAngleLeft);
+    matrix.coef[0][2] = -(tanAngleRight + tanAngleLeft) / (tanAngleRight - tanAngleLeft);
+    matrix.coef[1][1] = 2. / (tanAngleUp - tanAngleDown); // @todo Why not down - up? I thought down was positive, like right.
+    matrix.coef[1][2] = -(tanAngleUp + tanAngleDown) / (tanAngleUp - tanAngleDown);
+    matrix.coef[2][3] = nearClip;
+    matrix.coef[3][2] = 1.;
+}
+
 /*
     Get the rotation matrix translated to provided origin
     so that X (forward) becomes the looking direction
     from origin to target.
 */
-orientation_matrix :: (origin : vec3, target : vec3, reference_up := vec3.{0, 0, 1}) -> mat4 {
+orientation_matrix :: (origin : vec3, target : vec3, referenceUp := vec3.{0, 0, 1}) -> mat4 {
     matrix : mat4;
     matrix.coef[3][3] = 1;
 
@@ -109,19 +137,32 @@ orientation_matrix :: (origin : vec3, target : vec3, reference_up := vec3.{0, 0,
     normalize(*forward);
 
     left : vec3;
-    left.std = cross_product(reference_up, forward);
+    left.std = cross_product(referenceUp, forward);
     normalize(*left);
 
     up : vec3;
     up.std = cross_product(forward.std, left);
     normalize(*up);
 
-    matrix = make_matrix_from_columns(forward.std, left.std, up);
+    matrix = make_matrix_from_columns(forward, left, up);
+
     matrix.coef[0][3] = origin.x;
     matrix.coef[1][3] = origin.y;
     matrix.coef[2][3] = origin.z;
 
     return matrix;
+}
+
+inverse_and_prepare_for_projection :: (matrix : mat4) -> mat4 {
+    // As described in look_at_matrix, we follow Vulkan's coordinate system.
+    // Thus X -> Z ; Y -> -X ; Z -> -Y
+    TO_VULKAN_COORDS_MATRIX :: Matrix4.{
+        0, -1,  0,  0,
+        0,  0, -1,  0,
+        1,  0,  0,  0,
+        0,  0,  0,  1,
+    };
+    return multiply(TO_VULKAN_COORDS_MATRIX, inverse(matrix));
 }
 
 /*
@@ -138,24 +179,9 @@ orientation_matrix :: (origin : vec3, target : vec3, reference_up := vec3.{0, 0,
         - +X is left (equivalent to our -Y)
     Which makes it a right-handed system, like ours.
 */
-look_at_matrix :: (origin : vec3, target : vec3, reference_up := vec3.{0, 0, 1}) -> mat4 {
-    matrix := orientation_matrix(origin, target, reference_up);
-
-    // Eyes transform what they see to there coordinate system,
-    // thus it's its inverse that we want.
-    matrix = inverse(matrix);
-
-    // As described, we follow Vulkan's coordinate system.
-    // Thus X -> Z ; Y -> -X ; Z -> -Y
-    TO_VULKAN_COORDS_MATRIX :: Matrix4.{
-        0, -1,  0,  0,
-        0,  0, -1,  0,
-        1,  0,  0,  0,
-        0,  0,  0,  1,
-    };
-    matrix = multiply(TO_VULKAN_COORDS_MATRIX, matrix);
-
-    return matrix;
+look_at_matrix :: (origin : vec3, target : vec3, referenceUp := vec3.{0, 0, 1}) -> mat4 {
+    matrix := orientation_matrix(origin, target, referenceUp);
+    return inverse_and_prepare_for_projection(matrix);
 }
 
 // Rotate around the Z (0, 0, 1) axis.

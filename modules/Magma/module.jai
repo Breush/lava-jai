@@ -6,6 +6,7 @@ Chamber :: #import "Chamber";
     @fixme Magma roadmap:
     - @fixme Autorecompile shaders
     - ComposePostProcess
+    - Raytracing
 */
 
 #load "common/engine.jai";

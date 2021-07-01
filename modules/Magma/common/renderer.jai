@@ -18,6 +18,11 @@ Renderer :: struct {
     using rendererImpl : RendererImpl;
 }
 
+RendererOutput :: struct {
+    renderer : *Renderer;
+    index : u8;
+}
+
 renderer_cleanup :: (renderer : *Renderer) {
     impl_renderer_cleanup(renderer);
 
@@ -35,6 +40,13 @@ renderer_make_orbit_camera :: (renderer : *Renderer, eyeIndex : u32 = 0) -> Orbi
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
     return null;
+}
+
+renderer_get_output :: (renderer : *Renderer, outputIndex : u8 = 0) -> RendererOutput {
+    output : RendererOutput;
+    output.renderer = renderer;
+    output.index = outputIndex;
+    return output;
 }
 
 /*

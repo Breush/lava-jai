@@ -96,23 +96,23 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
     return false;
 }
 
-_renderer_get_render_semaphore :: (renderer : *Renderer, frameIndex : u8) -> Vk.Semaphore, u64 {
-    frameObject := *renderer.frameObjects[frameIndex];
+_renderer_output_get_render_semaphore :: (output : RendererOutput, frameIndex : u8) -> Vk.Semaphore, u64 {
+    frameObject := *output.renderer.frameObjects[frameIndex];
     return frameObject.renderSemaphore, frameObject.renderSemaphoreFinishedValue;
 }
 
-_renderer_get_output_image :: (renderer : *Renderer, outputIndex : u8, frameIndex : u8) -> Vk.Image {
-    if renderer.kind == .ForwardRenderer {
-        return _forward_renderer_get_output_image(cast(*ForwardRenderer) renderer, outputIndex, frameIndex);
+_renderer_output_get_image :: (output : RendererOutput, frameIndex : u8) -> Vk.Image {
+    if output.renderer.kind == .ForwardRenderer {
+        return _forward_renderer_get_output_image(cast(*ForwardRenderer) output.renderer, output.index, frameIndex);
     }
 
     // Issue, unknown renderer.
     return null;
 }
 
-_renderer_get_output_extent :: (renderer : *Renderer, outputIndex : u8) -> Chamber.uvec2 {
-    if renderer.kind == .ForwardRenderer {
-        return _forward_renderer_get_output_extent(cast(*ForwardRenderer) renderer, outputIndex);
+_renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
+    if output.renderer.kind == .ForwardRenderer {
+        return _forward_renderer_get_output_extent(cast(*ForwardRenderer) output.renderer, output.index);
     }
 
     // Issue, unknown renderer.
