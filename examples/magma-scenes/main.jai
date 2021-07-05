@@ -1,3 +1,5 @@
+// #import "Basic"()(MEMORY_DEBUGGER=true);
+
 Basic :: #import "Basic";
 Crater :: #import "Crater";
 
@@ -122,4 +124,10 @@ main :: () {
     }
 
     Magma.destroy_engine(engine);
+    Crater.destroy_window(smallWindow);
+    Crater.destroy_window(bigWindow);
+
+    #if Basic.MEMORY_DEBUGGER {
+        Basic.report_memory_leaks();
+    }
 }

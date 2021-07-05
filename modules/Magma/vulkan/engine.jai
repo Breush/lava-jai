@@ -60,6 +60,8 @@ impl_engine_cleanup :: (engine : *Engine) {
     if !engine.vr.enabled {
         Vk.destroy_instance(engine.instance, null);
     }
+
+    Hash.uninit(*engine.shaderModuleMap);
 }
 
 impl_engine_register :: (engine : *Engine, target : *Target) {
@@ -111,6 +113,7 @@ _engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.Shade
 
     shaderCode, readOk := File.read_entire_file(shaderPath);
     _CHECK(readOk, null, "Unable to read shader file.");
+    defer Basic.free(shaderCode);
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
     shaderModuleCI.sType = .ShaderModuleCreateInfo;
@@ -262,6 +265,7 @@ _init_physical_device :: (engine : *Engine) -> bool {
 
 _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     enabledExtensions : [..]*u8;
+    defer Basic.array_free(enabledExtensions);
     Basic.array_add(*enabledExtensions, Vk.KHR_SWAPCHAIN_EXTENSION_NAME);
 
     if engine.device != null {
@@ -280,12 +284,14 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     engine.queueIndices = queueIndices;
 
     uniqueQueueIndices : [..]int;
+    defer Basic.array_free(uniqueQueueIndices);
     Basic.array_add_if_unique(*uniqueQueueIndices, engine.queueIndices.graphics);
     Basic.array_add_if_unique(*uniqueQueueIndices, engine.queueIndices.transfer);
     Basic.array_add_if_unique(*uniqueQueueIndices, engine.queueIndices.present);
 
     queuePriority : float32 = 1.;
     queueCreateInfos : [..]Vk.DeviceQueueCreateInfo;
+    defer Basic.array_free(queueCreateInfos);
     for queueFamily : uniqueQueueIndices {
         queueCI : Vk.DeviceQueueCreateInfo;
         queueCI.sType = .DeviceQueueCreateInfo;
@@ -345,6 +351,7 @@ _find_queue_indices :: (physicalDevice : Vk.PhysicalDevice, surface : Vk.Surface
     queueIndices : QueueIndices;
 
     queueFamilyProperties : [..]Vk.QueueFamilyProperties;
+    defer Basic.array_free(queueFamilyProperties);
     Vk.array_fill(*queueFamilyProperties, Vk.get_physical_device_queue_family_properties, physicalDevice);
 
     for queueFamilyProperty, queueFamilyIndex : queueFamilyProperties {

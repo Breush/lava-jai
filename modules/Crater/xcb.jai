@@ -59,20 +59,6 @@ impl_window_init :: (window : *Window) -> bool {
     return true;
 }
 
-impl_window_cleanup :: (window : *Window) {
-    Xkb.state_unref(window.xkbState);
-    Xkb.keymap_unref(window.xkbKeymap);
-    Xkb.context_unref(window.xkbContext);
-
-    // Using default_allocator because these were allocated
-    // in C code, so we don't want to call any other allocators.
-    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
-    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
-
-    // Reset memory
-    (<<window) = Window.{};
-}
-
 impl_window_get_handle :: (window : *Window) -> Chamber.WindowHandle {
     handle : Chamber.WindowHandle;
     handle.xcb.connection = window.xcbConnection;
@@ -102,6 +88,17 @@ impl_window_process_events :: (window : *Window) {
     //     m_mouseCurrentlyCentered = true;
     //     m_mousePositionToReset = true; // Won't emit delta for the centering
     // }
+}
+
+impl_window_close :: (window : *Window) {
+    Xkb.state_unref(window.xkbState);
+    Xkb.keymap_unref(window.xkbKeymap);
+    Xkb.context_unref(window.xkbContext);
+
+    // Using default_allocator because these were allocated
+    // in C code, so we don't want to call any other allocators.
+    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
+    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
 }
 
 #scope_file

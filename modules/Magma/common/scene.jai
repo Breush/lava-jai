@@ -22,19 +22,18 @@ create_scene :: (engine : *Engine) -> *Scene {
 destroy_scene :: (scene : *Scene, destroyResources : bool) {
     if destroyResources {
         for mesh : scene.meshes {
-            mesh_cleanup(mesh);
+            destroy_mesh(mesh);
         }
         for renderer : scene.renderers {
-            renderer_cleanup(renderer);
+            destroy_renderer(renderer);
         }
     }
 
-    scene_cleanup(scene);
+    scene_cleanup(scene, resetMemory = false);
 
     // @todo :AutoUnregister There should be some scene_unregister() call
     // that is optionally called.
 
-    // Cleanup ourselves
     if scene.allocator != null {
         Basic.free(scene, scene.allocator, scene.allocator_data);
     }
@@ -45,11 +44,13 @@ scene_init :: (scene : *Scene, engine : *Engine) {
     impl_scene_init(scene);
 }
 
-scene_cleanup :: (scene : *Scene) {
+scene_cleanup :: (scene : *Scene, resetMemory := true) {
     Basic.array_free(scene.renderers);
+    Basic.array_free(scene.meshes);
 
-    // Reset memory
-    <<scene = Scene.{};
+    if resetMemory {
+        <<scene = Scene.{};
+    }
 }
 
 scene_register :: (scene : *Scene, mesh : *Mesh) {

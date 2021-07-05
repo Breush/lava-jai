@@ -50,7 +50,7 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
         }
     }
 
-    engine_cleanup(engine);
+    engine_cleanup(engine, resetMemory = false);
 
     // Cleanup ourselves
     if engine.allocator != null {
@@ -71,7 +71,7 @@ engine_init :: (engine : *Engine, options : Engine.Options) -> bool {
     return true;
 }
 
-engine_cleanup :: (engine : *Engine) {
+engine_cleanup :: (engine : *Engine, resetMemory := true) {
     if engine.vr.enabled {
         engine_vr_cleanup(engine);
     }
@@ -81,8 +81,9 @@ engine_cleanup :: (engine : *Engine) {
     Basic.array_free(engine.scenes);
     Basic.array_free(engine.targets);
 
-    // Reset memory
-    <<engine = Engine.{};
+    if resetMemory {
+        <<engine = Engine.{};
+    }
 }
 
 engine_update :: (engine : *Engine) {

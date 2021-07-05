@@ -47,20 +47,29 @@ create_mesh :: (scene : *Scene) -> *Mesh {
     return mesh;
 }
 
+destroy_mesh :: (mesh : *Mesh) {
+    mesh_cleanup(mesh, resetMemory = false);
+
+    if mesh.allocator != null {
+        Basic.free(mesh, mesh.allocator, mesh.allocator_data);
+    }
+}
+
 mesh_init :: (mesh : *Mesh, scene : *Scene) {
     mesh.scene = scene;
     impl_mesh_init(mesh);
     mesh_commit_instance(mesh);
 }
 
-mesh_cleanup :: (mesh : *Mesh) {
+mesh_cleanup :: (mesh : *Mesh, resetMemory := true) {
     impl_mesh_cleanup(mesh);
 
     Basic.array_free(mesh.vertices);
     Basic.array_free(mesh.indices);
 
-    // Reset memory
-    <<mesh = Mesh.{};
+    if resetMemory {
+        <<mesh = Mesh.{};
+    }
 }
 
 // Called by scene_update.

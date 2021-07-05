@@ -38,10 +38,14 @@ Target :: struct {
 
 destroy_target :: (target : *Target) {
     if target.kind == .Window {
-        destroy_window_target(cast(*WindowTarget) target);
+        window_target_cleanup(cast(*WindowTarget) target, resetMemory = false);
     }
     else if target.kind == .Vr {
-        destroy_vr_target(cast(*VrTarget) target);
+        vr_target_cleanup(cast(*VrTarget) target, resetMemory = false);
+    }
+
+    if target.allocator != null {
+        Basic.free(target, target.allocator, target.allocator_data);
     }
 }
 
@@ -93,23 +97,18 @@ create_window_target :: (engine : *Engine, windowHandle : Chamber.WindowHandle, 
     return windowTarget;
 }
 
-destroy_window_target :: (windowTarget : *WindowTarget) {
-    window_target_cleanup(windowTarget);
-
-    // @todo :AutoUnregister
-}
-
 window_target_init :: (windowTarget : *WindowTarget, engine : *Engine, windowHandle : Chamber.WindowHandle, options := Target.Options.{}) {
     Basic.assert(cast(bool) engine.options.targetFlags & Engine.Options.TargetFlags.Window);
     _target_init(windowTarget, engine, options);
     impl_window_target_init(windowTarget, windowHandle);
 }
 
-window_target_cleanup :: (windowTarget : *WindowTarget) {
+window_target_cleanup :: (windowTarget : *WindowTarget, resetMemory := true) {
     impl_window_target_cleanup(windowTarget);
 
-    // Reset memory
-    <<windowTarget = WindowTarget.{};
+    if resetMemory {
+        <<windowTarget = WindowTarget.{};
+    }
 }
 
 window_target_update :: (windowTarget : *WindowTarget) -> bool {
@@ -150,12 +149,6 @@ create_vr_target :: (engine : *Engine, options := Target.Options.{}) -> *VrTarge
     return vrTarget;
 }
 
-destroy_vr_target :: (vrTarget : *VrTarget) {
-    vr_target_cleanup(vrTarget);
-
-    // @todo :AutoUnregister
-}
-
 vr_target_init :: (vrTarget : *VrTarget, engine : *Engine, options := Target.Options.{}) -> bool {
     _target_init(vrTarget, engine, options);
 
@@ -169,15 +162,16 @@ vr_target_init :: (vrTarget : *VrTarget, engine : *Engine, options := Target.Opt
     return impl_vr_target_init(vrTarget);
 }
 
-vr_target_cleanup :: (vrTarget : *VrTarget) {
+vr_target_cleanup :: (vrTarget : *VrTarget, resetMemory := true) {
     if vrTarget.engine.vr.enabled {
         _cleanup_vr(vrTarget);
     }
 
     impl_vr_target_cleanup(vrTarget);
 
-    // Reset memory
-    <<vrTarget = VrTarget.{};
+    if resetMemory {
+        <<vrTarget = VrTarget.{};
+    }
 }
 
 vr_target_update :: (vrTarget : *VrTarget) -> bool {

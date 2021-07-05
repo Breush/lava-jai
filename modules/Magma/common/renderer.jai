@@ -16,6 +16,9 @@ Renderer :: struct {
     kind : Kind;
 
     using rendererImpl : RendererImpl;
+
+    allocator : Allocator;
+    allocator_data : *void;
 }
 
 RendererOutput :: struct {
@@ -23,11 +26,19 @@ RendererOutput :: struct {
     index : u8;
 }
 
-renderer_cleanup :: (renderer : *Renderer) {
+destroy_renderer :: (renderer : *Renderer) {
+    renderer_cleanup(renderer, resetMemory = false);
+
+    if renderer.allocator != null {
+        Basic.free(renderer, renderer.allocator, renderer.allocator_data);
+    }
+}
+
+renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
     impl_renderer_cleanup(renderer);
 
     if renderer.kind == Renderer.Kind.ForwardRenderer {
-        _forward_renderer_cleanup(cast(*ForwardRenderer) renderer);
+        _forward_renderer_cleanup(cast(*ForwardRenderer) renderer, resetMemory);
     }
 }
 
@@ -66,9 +77,6 @@ ForwardRenderer :: struct {
     using forwardRendererImpl : ForwardRendererImpl;
 
     eye : Eye;
-
-    allocator : Allocator;
-    allocator_data : *void;
 }
 
 // Allocate, init and register a new forward renderer.
@@ -99,9 +107,10 @@ _renderer_init :: (renderer : *Renderer, scene : *Scene) {
     renderer.scene = scene;
 }
 
-_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
+_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer, resetMemory : bool) {
     impl_forward_renderer_cleanup(forwardRenderer);
 
-    // Reset memory
-    <<forwardRenderer = .{};
+    if resetMemory {
+        <<forwardRenderer = .{};
+    }
 }

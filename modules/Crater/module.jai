@@ -96,12 +96,20 @@ window_init :: (window : *Window, videoMode : VideoMode, title : string) -> bool
     return window.opened;
 }
 
-window_cleanup :: (window : *Window) {
-    impl_window_cleanup(window);
+window_cleanup :: (window : *Window, resetMemory := true) {
+    if window.opened {
+        window_close(window);
+    }
+
+    Basic.array_free(window.events);
+
+    if resetMemory {
+         (<<window) = Window.{};
+    }
 }
 
 destroy_window :: (window : *Window) {
-    window_cleanup(window);
+    window_cleanup(window, false);
 
     if window.allocator != null {
         Basic.free(window, window.allocator, window.allocator_data);
@@ -136,5 +144,6 @@ window_poll_event :: (window : *Window) -> Event {
 
 window_close :: (window : *Window) {
     if !window.opened then return;
-    window_cleanup(window);
+    window.opened = false;
+    impl_window_close(window);
 }
