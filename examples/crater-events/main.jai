@@ -29,6 +29,8 @@ main :: () {
                 Basic.print("%\n", event.key);
             } else if event.kind == Crater.Event.Kind.MousePointerMoved {
                 Basic.print("%\n", event.mousePointer);
+            } else if event.kind == Crater.Event.Kind.MouseWheelScrolled {
+                Basic.print("%\n", event.mouseWheel);
             } else if event.kind == Crater.Event.Kind.WindowSizeChanged {
                 Basic.print("%\n", event.windowSize);
             } else {

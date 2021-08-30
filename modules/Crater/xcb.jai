@@ -36,6 +36,7 @@ impl_window_init :: (window : *Window) -> bool {
     valueList : [8]u32;
     valueList[0] = window.xcbScreen.blackPixel;
     valueList[1] = cast(u32) (Xcb.EventMask.PointerMotion |
+                              Xcb.EventMask.ButtonPress |
                               Xcb.EventMask.KeyPress | Xcb.EventMask.KeyRelease |
                               Xcb.EventMask.StructureNotify);
 
@@ -232,7 +233,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
 
         event : Event;
         event.kind = Event.Kind.KeyPressed;
-        event. key.which = _keysym_to_key(keysym);
+        event.key.which = _keysym_to_key(keysym);
         Basic.array_add(*window.events, event);
 
         // We have two state machines running: one for dead-key composing
@@ -279,8 +280,24 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
 
         event : Event;
         event.kind = Event.Kind.KeyReleased;
-        event. key.which = _keysym_to_key(keysym);
+        event.key.which = _keysym_to_key(keysym);
         Basic.array_add(*window.events, event);
+
+    case Xcb.BUTTON_PRESS;
+        buttonPressEvent := cast(*Xcb.ButtonPressEvent) xcbEvent;
+
+        // Vertical mouse wheel buttons
+        if buttonPressEvent.detail == 4 ||
+           buttonPressEvent.detail == 5 {
+            event : Event;
+            event.kind = Event.Kind.MouseWheelScrolled;
+            if buttonPressEvent.detail == 4 {
+                event.mouseWheel.delta = 1.;
+            } else {
+                event.mouseWheel.delta = -1.;
+            }
+            Basic.array_add(*window.events, event);
+        }
     }
 }
 

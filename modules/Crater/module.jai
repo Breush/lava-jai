@@ -29,6 +29,7 @@ Event :: struct {
         WindowClosed;
         WindowSizeChanged;
         MousePointerMoved;
+        MouseWheelScrolled;
         KeyPressed;
         KeyReleased;
         TextEntered;
@@ -46,6 +47,10 @@ Event :: struct {
         dy : s16;
     }
 
+    MouseWheelData :: struct {
+        delta : float32;
+    }
+
     KeyData :: struct {
         which : Key;
     }
@@ -60,6 +65,7 @@ Event :: struct {
     union {
         windowSize : WindowSizeData;     // On WindowSizeChanged
         mousePointer : MousePointerData; // On MousePointerMoved
+        mouseWheel : MouseWheelData;     // On MouseWheelScrolled
         key : KeyData;                   // On KeyPressed, KeyReleased
         text : TextData;                 // On TextEntered
     }
