@@ -12,7 +12,10 @@ vec4 :: _vec4(float32);
 svec4 :: _vec4(s32);
 uvec4 :: _vec4(u32);
 
+// Side-note, contrary to GLSL, we are row-major. So 3x4 means 3 rows and 4 columns.
+mat3 :: Matrix3;
 mat4 :: Matrix4;
+mat3x4 :: Matrix4x3;
 
 // Following GLM naming.
 quat :: Quaternion;
@@ -22,38 +25,94 @@ quat :: Quaternion;
 
     Rationale is that, sometimes, we don't want to use mat4 directly
     if this is just for affine transforms.
-
-    @note Non-uniform scaling is not allowed:
-        this representation would fail for
-        inverses or compositions (both might add shear).
 */
 trs :: struct {
     translation : vec3;
     rotation : quat;
-    scaling : float = 1.;
+    scaling : vec3 = .{1, 1, 1};
 }
 
-make_mat4 :: (transform : trs) -> mat4 {
-    matrix : mat4 = ---;
-    matrix = make_rotation_matrix4(transform.rotation);
-    matrix *= make_scaling_mat4(transform.scaling);
+make_mat3x4 :: (transform : trs) -> mat3x4 {
+    matrix : mat3x4;
+    tmpMatrix := make_rotation_matrix3(transform.rotation);
+    tmpMatrix *= make_scaling_mat3(transform.scaling);
+
+    copy(*matrix, tmpMatrix);
     matrix.coef[0][3] = transform.translation.x;
     matrix.coef[1][3] = transform.translation.y;
     matrix.coef[2][3] = transform.translation.z;
     return matrix;
 }
 
+// Decompose as TRS as long as there is no shear/skew.
+make_trs :: (matrix : $T/interface AnyMatrix4x3) -> trs {
+    transform : trs;
+
+    transform.translation.x = matrix.coef[0][3];
+    transform.translation.y = matrix.coef[1][3];
+    transform.translation.z = matrix.coef[2][3];
+
+    transform.scaling.x = sqrt(matrix.coef[0][0] * matrix.coef[0][0] + matrix.coef[0][1] * matrix.coef[0][1] + matrix.coef[0][2] * matrix.coef[0][2]);
+    transform.scaling.y = sqrt(matrix.coef[1][0] * matrix.coef[1][0] + matrix.coef[1][1] * matrix.coef[1][1] + matrix.coef[1][2] * matrix.coef[1][2]);
+    transform.scaling.z = sqrt(matrix.coef[2][0] * matrix.coef[2][0] + matrix.coef[2][1] * matrix.coef[2][1] + matrix.coef[2][2] * matrix.coef[2][2]);
+
+    transform.rotation = get_rotation(matrix);
+
+    return transform;
+}
+
+/*
+    A TRS but with scaling being uniform.
+    This allows for inverses and compositions
+    within the same data structure.
+    (With non-uniform scaling, shear might happen.)
+*/
+trf :: struct {
+    translation : vec3;
+    rotation : quat;
+    factor : float = 1.;
+}
+
+multiply :: (lhs : trf, rhs : trf) -> trf {
+    result : trf;
+    result.translation.std = lhs.translation + rotate(lhs.scaling * rhs.translation, lhs.rotation);
+    result.scaling = lhs.scaling * rhs.scaling;
+    result.rotation = lhs.rotation * rhs.rotation;
+    return result;
+}
+
 to_radians :: (degrees : float32) -> float32 {
     return degrees * #run cast(float32) (PI / 180.);
 }
 
-make_scaling_mat4 :: (scaling : float32) -> mat4 {
+make_scaling_mat3 :: (scaling : vec3) -> mat3 {
+    matrix : mat3 = ---;
+    matrix = inline matrix3_identity();
+    matrix.coef[0][0] = scaling.x;
+    matrix.coef[1][1] = scaling.y;
+    matrix.coef[2][2] = scaling.z;
+    return matrix;
+}
+
+make_scaling_mat4 :: (factor : float32) -> mat4 {
     matrix : mat4 = ---;
     matrix = inline matrix4_identity();
-    matrix.coef[0][0] = scaling;
-    matrix.coef[1][1] = scaling;
-    matrix.coef[2][2] = scaling;
+    matrix.coef[0][0] = factor;
+    matrix.coef[1][1] = factor;
+    matrix.coef[2][2] = factor;
     return matrix;
+}
+
+copy :: (to: *$T1/interface AnyMatrix3, from: $T2/interface AnyMatrix3) {
+    to.coef[0][0] = from.coef[0][0];
+    to.coef[0][1] = from.coef[0][1];
+    to.coef[0][2] = from.coef[0][2];
+    to.coef[1][0] = from.coef[1][0];
+    to.coef[1][1] = from.coef[1][1];
+    to.coef[1][2] = from.coef[1][2];
+    to.coef[2][0] = from.coef[2][0];
+    to.coef[2][1] = from.coef[2][1];
+    to.coef[2][2] = from.coef[2][2];
 }
 
 /*

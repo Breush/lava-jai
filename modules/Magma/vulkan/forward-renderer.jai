@@ -42,20 +42,8 @@ _forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
 }
 
 _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8) -> bool {
-    engine := forwardRenderer.scene.engine;
-    frameObject := *forwardRenderer.frameObjects[frameIndex];
+    commandBuffer := forwardRenderer.frameObjects[frameIndex].commandBuffer;
 
-    // Works like a fence, we're waiting for the previous command buffer to be done.
-    _wait_timeline_semaphore(engine.device, frameObject.renderSemaphore, frameObject.renderSemaphoreFinishedValue);
-
-    commandBuffer := frameObject.commandBuffer;
-    commandBufferBeginInfo : Vk.CommandBufferBeginInfo;
-    commandBufferBeginInfo.sType = .CommandBufferBeginInfo;
-
-    _CHECK(Vk.begin_command_buffer(commandBuffer, *commandBufferBeginInfo),
-           "Unable to begin command buffer.");
-
-    // Rendering
     renderPassBeginInfo : Vk.RenderPassBeginInfo;
     renderPassBeginInfo.sType = .RenderPassBeginInfo;
     renderPassBeginInfo.renderPass = forwardRenderer.renderPass;
@@ -84,25 +72,6 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     }
 
     Vk.cmd_end_render_pass(commandBuffer);
-    Vk.end_command_buffer(commandBuffer);
-
-    // Submit
-    frameObject.renderSemaphoreFinishedValue += 1;
-    timelineSemaphoreSI : Vk.TimelineSemaphoreSubmitInfo;
-    timelineSemaphoreSI.sType = .TimelineSemaphoreSubmitInfo;
-    timelineSemaphoreSI.signalSemaphoreValueCount = 1;
-    timelineSemaphoreSI.pSignalSemaphoreValues = *frameObject.renderSemaphoreFinishedValue;
-
-    submitInfo : Vk.SubmitInfo;
-    submitInfo.sType = .SubmitInfo;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = *commandBuffer;
-    submitInfo.pNext = *timelineSemaphoreSI;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = *frameObject.renderSemaphore;
-
-    _CHECK(Vk.queue_submit(engine.graphicsQueue, 1, *submitInfo, null),
-           "Unable to submit command buffer.");
 
     return true;
 }

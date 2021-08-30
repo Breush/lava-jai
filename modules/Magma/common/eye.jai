@@ -71,7 +71,7 @@ OrbitCamera :: struct {
 
 orbit_camera_init :: (orbitCamera : *OrbitCamera, eye : *Eye) {
     orbitCamera.eye = eye;
-    orbit_camera_infinite_perspective_projection(orbitCamera, #run Chamber.to_radians(100), 0.1, false);
+    orbit_camera_infinite_perspective_projection(orbitCamera, #run Chamber.to_radians(100), 0.01, false);
     orbit_camera_origin_target(orbitCamera, .{0, 0, 0}, .{1, 0, 0}, false);
     eye_commit(eye);
 }
@@ -91,6 +91,22 @@ orbit_camera_origin_target :: (orbitCamera : *OrbitCamera, origin : Chamber.vec3
     orbitCamera.origin = origin;
     orbitCamera.target = target;
     orbitCamera.eye.viewMatrix = Chamber.look_at_matrix(origin, target);
+
+    #if commit {
+        eye_commit(orbitCamera.eye);
+    }
+}
+
+orbit_camera_radius :: (using orbitCamera : *OrbitCamera) -> float32 #must {
+    return length(target - origin);
+}
+
+orbit_camera_add_to_radius :: (using orbitCamera : *OrbitCamera, delta : float32, $commit := true) {
+    radius := length(target - origin) + delta;
+    direction := normalize(target - origin);
+    origin.std = target - radius * direction;
+
+    orbitCamera.eye.viewMatrix = Chamber.look_at_matrix(orbitCamera.origin, orbitCamera.target);
 
     #if commit {
         eye_commit(orbitCamera.eye);

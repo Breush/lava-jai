@@ -2,24 +2,7 @@
 
 #load "holders.jai";
 
-_CHECK :: (result : $R, returnedValue : $T, message : string) #expand {
-    #if type_of(result) == bool {
-        if !result {
-            // @todo Use official context logger.
-            Chamber.debug(message, "\n");
-            `return returnedValue;
-        }
-    } else {
-        if result != .Success {
-            Chamber.debug(message, " (", result, ")\n");
-            `return returnedValue;
-        }
-    }
-}
-
-_CHECK :: (result : $R, message : string) #expand {
-    _CHECK(result, false, message);
-}
+_CHECK :: Chamber._CHECK;
 
 _wait_timeline_semaphore :: (device : Vk.Device, semaphore : Vk.Semaphore, value : u64) {
     semaphoreWI : Vk.SemaphoreWaitInfo ;

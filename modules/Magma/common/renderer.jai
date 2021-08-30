@@ -37,8 +37,10 @@ destroy_renderer :: (renderer : *Renderer) {
 renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
     impl_renderer_cleanup(renderer);
 
-    if renderer.kind == Renderer.Kind.ForwardRenderer {
+    if renderer.kind == .ForwardRenderer {
         _forward_renderer_cleanup(cast(*ForwardRenderer) renderer, resetMemory);
+    } else {
+        Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     }
 }
 
@@ -50,6 +52,7 @@ renderer_make_orbit_camera :: (renderer : *Renderer, eyeIndex : u32 = 0) -> Orbi
 
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
+    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     return null;
 }
 
@@ -61,7 +64,7 @@ renderer_get_output :: (renderer : *Renderer, outputIndex : u8 = 0) -> RendererO
 }
 
 /*
-    A forward renderer draw meshes the simple way.
+    A forward renderer draws meshes the simple way.
 
     It is usually fast enough except if you have multiple
     dynamic lights or complex lighting shaders.

@@ -4,7 +4,7 @@ Chamber :: #import "Chamber";
 
 /*
     @fixme Magma roadmap:
-    - @fixme Autorecompile shaders
+    - Autorecompile shaders
     - ComposePostProcess
     - Raytracing
 */

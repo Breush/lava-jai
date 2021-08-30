@@ -28,3 +28,22 @@ debug :: (args: ..Any) {
     Basic.print(format, ..args);
     Basic.print("\n");
 }
+
+_CHECK :: (result : $R, returnedValue : $T, message : string) #expand {
+    #if type_of(result) == bool {
+        if !result {
+            // @todo Use official context logger.
+            debug(message, "\n");
+            `return returnedValue;
+        }
+    } else {
+        if result != .Success {
+            debug(message, " (", result, ")\n");
+            `return returnedValue;
+        }
+    }
+}
+
+_CHECK :: (result : $R, message : string) #expand {
+    _CHECK(result, false, message);
+}

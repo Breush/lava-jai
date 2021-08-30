@@ -77,7 +77,7 @@ _renderer_post_init :: (renderer : *Renderer) -> bool {
         return _forward_renderer_post_init(cast(*ForwardRenderer) renderer);
     }
 
-    // Issue, unknown renderer.
+    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     return false;
 }
 
@@ -88,12 +88,46 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
     }
     renderer.lastFrameIndex = frameIndex;
 
+    engine := renderer.scene.engine;
+    frameObject := *renderer.frameObjects[frameIndex];
+
+    // Works like a fence, we're waiting for the previous command buffer to be done.
+    _wait_timeline_semaphore(engine.device, frameObject.renderSemaphore, frameObject.renderSemaphoreFinishedValue);
+
+    commandBuffer := frameObject.commandBuffer;
+    commandBufferBeginInfo : Vk.CommandBufferBeginInfo;
+    commandBufferBeginInfo.sType = .CommandBufferBeginInfo;
+
+    _CHECK(Vk.begin_command_buffer(commandBuffer, *commandBufferBeginInfo),
+           "Unable to begin command buffer.");
+
     if renderer.kind == .ForwardRenderer {
-        return _forward_renderer_render(cast(*ForwardRenderer) renderer, frameIndex);
+        _forward_renderer_render(cast(*ForwardRenderer) renderer, frameIndex);
+    } else {
+        Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     }
 
-    // Issue, unknown renderer.
-    return false;
+    Vk.end_command_buffer(commandBuffer);
+
+    // Submit
+    frameObject.renderSemaphoreFinishedValue += 1;
+    timelineSemaphoreSI : Vk.TimelineSemaphoreSubmitInfo;
+    timelineSemaphoreSI.sType = .TimelineSemaphoreSubmitInfo;
+    timelineSemaphoreSI.signalSemaphoreValueCount = 1;
+    timelineSemaphoreSI.pSignalSemaphoreValues = *frameObject.renderSemaphoreFinishedValue;
+
+    submitInfo : Vk.SubmitInfo;
+    submitInfo.sType = .SubmitInfo;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = *commandBuffer;
+    submitInfo.pNext = *timelineSemaphoreSI;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = *frameObject.renderSemaphore;
+
+    _CHECK(Vk.queue_submit(engine.graphicsQueue, 1, *submitInfo, null),
+           "Unable to submit command buffer.");
+
+    return true;
 }
 
 _renderer_output_get_render_semaphore :: (output : RendererOutput, frameIndex : u8) -> Vk.Semaphore, u64 {
@@ -106,7 +140,7 @@ _renderer_output_get_image :: (output : RendererOutput, frameIndex : u8) -> Vk.I
         return _forward_renderer_get_output_image(cast(*ForwardRenderer) output.renderer, output.index, frameIndex);
     }
 
-    // Issue, unknown renderer.
+    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
     return null;
 }
 
@@ -115,7 +149,7 @@ _renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
         return _forward_renderer_get_output_extent(cast(*ForwardRenderer) output.renderer, output.index);
     }
 
-    // Issue, unknown renderer.
+    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
     return .{};
 }
 
@@ -128,20 +162,31 @@ _fill_vertex_input_descs :: ($T : Type, binding : u32, locationStart : u32, inpu
 
     location := locationStart;
     for *member : typeInfo.members {
+        if member.type.runtime_size == 12 { // vec3
         `vertexInputAttributeDescs[location].binding = binding;
         `vertexInputAttributeDescs[location].location = location;
         `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
-
-        if member.type.runtime_size == 12 { // vec3
             `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32Sfloat;
+            location += 1;
         } else if member.type.runtime_size == 16 { // vec4
+            `vertexInputAttributeDescs[location].binding = binding;
+            `vertexInputAttributeDescs[location].location = location;
+            `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
             `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32A32Sfloat;
+            location += 1;
+        } else if member.type.runtime_size == 48 { // mat3x4
+            for i : 0 .. 2 {
+                `vertexInputAttributeDescs[location + i].binding = binding;
+                `vertexInputAttributeDescs[location + i].location = cast(u32) (location + i);
+                `vertexInputAttributeDescs[location + i].offset = cast(u32) (member.offset_in_bytes + i * 16);
+                `vertexInputAttributeDescs[location + i].format = Vk.Format.R32G32B32A32Sfloat;
+            }
+            location += 3;
         } else {
             memberTypeInfo := cast(*Type_Info_Struct) member.type;
             Chamber.debug("Unknown format for ", typeInfo.name, ".", member.name, " (", memberTypeInfo.name, ").\n");
             Basic.assert(false);
         }
-        location += 1;
     }
 
     return location;

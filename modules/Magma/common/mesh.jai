@@ -33,9 +33,7 @@ VertexInput :: struct {
 }
 
 InstanceInput :: struct {
-    matrixRow0 : Chamber.vec4;
-    matrixRow1 : Chamber.vec4;
-    matrixRow2 : Chamber.vec4;
+    matrix : Chamber.mat3x4;
 }
 
 // Allocate, init and register a new mesh.
@@ -91,10 +89,9 @@ mesh_commit_indices :: (mesh : *Mesh) {
 
 mesh_commit_instance :: (mesh : *Mesh, $copyTrs := true) {
     #if copyTrs {
-        matrix := Chamber.make_mat4(mesh.transform);
-        mesh.instance.matrixRow0.std = matrix.v[0];
-        mesh.instance.matrixRow1.std = matrix.v[1];
-        mesh.instance.matrixRow2.std = matrix.v[2];
+        mesh.instance.matrix = Chamber.make_mat3x4(mesh.transform);
+    } else {
+        mesh.transform = Chamber.make_trs(mesh.instance.matrix);
     }
 
     mesh.instanceDirty = true;
