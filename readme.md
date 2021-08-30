@@ -21,8 +21,10 @@ The core principles of **lava** are:
 
 | Example  | Description | Result |
 | ---- | ---- | ---- |
-| [**crater**-events](https://github.com/Breush/lava/tree/master/examples/crater-events)  | How to interact with `Crater.Window` by grabbing keyboard and mouse events. | `MousePointerMoved -> {592, 128, -2, -2}` |
-| [**magma**-scenes](https://github.com/Breush/lava/tree/master/examples/magma-scenes)  | How to setup multiple windows and `Magma.Scene`. Showing how to use viewports and cameras. | @todo Add image. |
+| [**crater**-events](https://github.com/Breush/lava/tree/master/examples/crater-events) | How to interact with `Crater.Window` by grabbing keyboard and mouse events. | `MousePointerMoved -> {592, 128, -2, -2}` |
+| [**magma**-scenes](https://github.com/Breush/lava/tree/master/examples/magma-scenes) | How to setup multiple windows and `Magma.Scene`. Showing how to use viewports and cameras. | @todo Add image. |
+| [**magma**-vr](https://github.com/Breush/lava/tree/master/examples/magma-vr) | How to setup a VR environment. | @todo Add image. |
+| [**sill**-meshes](https://github.com/Breush/lava/tree/master/examples/sill-meshes) | How to load meshes from `.glb` files and create basic shapes. | @todo Add image. |
 
 ## Current status
 
@@ -30,16 +32,15 @@ The core principles of **lava** are:
     - Linux support OK using generated Xcb/Xkb bindings.
     - Windows support using DWM not started.
     - Missing fullscreen option.
-- [10%] **Magma** (real-time 3D engine)
+- [40%] **Magma** (real-time 3D engine)
     - Linux support OK using Vulkan.
     - Using Vulkan for all platforms is the goal, but currently untested.
-    - Missing everything but simple rendering inside a window.
 - [0%] **Dike** (physics engine)
     - Port not started. Goal is to use Bullet as BE for all platforms.
 - [0%] **Flow** (sound engine)
     - Port not started.
-- [0%] **Sill** (game engine - Jai API)
-    - Port not started.
+- [20%] **Sill** (game engine - Jai API)
+    - Basic support for now.
 - [0%] **Caldera** (game engine - drag&drop editor)
     - Not started.
 

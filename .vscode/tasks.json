@@ -6,7 +6,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "jai ${workspaceFolder}/examples/magma-vr/first.jai",
+            "command": "jai ${workspaceFolder}/examples/sill-meshes/first.jai",
             "presentation": {
                 "echo": true,
                 "reveal": "never",
@@ -63,7 +63,7 @@
         {
             "label": "run",
             "type": "shell",
-            "command": " ${workspaceFolder}/examples/bin/magma-vr",
+            "command": " ${workspaceFolder}/examples/bin/sill-meshes",
             "options": {
                 "env": {
                     "VK_LAYER_PATH": "${workspaceFolder}/bindings/Vulkan/layers",

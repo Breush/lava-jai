@@ -8,7 +8,7 @@
             "name": "(gdb) Lancer",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/examples/bin/magma-vr",
+            "program": "${workspaceFolder}/examples/bin/sill-meshes",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
