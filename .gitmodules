@@ -1,3 +1,6 @@
 [submodule "assets"]
 	path = assets
 	url = https://github.com/Breush/lava-jai-assets
+[submodule "bindings"]
+	path = bindings
+	url = https://github.com/Breush/lava-jai-bindings
