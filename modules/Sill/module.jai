@@ -1,7 +1,6 @@
 /*
     @fixme Sill roadmap:
     - Entity hierarchy (+ TransformComponent -- and a way to access other components from one)
-    - MeshComponent: Materials (textures) + Data cache...
 */
 
 #load "engine.jai";

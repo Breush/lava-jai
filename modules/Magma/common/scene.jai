@@ -25,7 +25,7 @@ destroy_scene :: (scene : *Scene, destroyResources : bool) {
             destroy_mesh(mesh);
         }
         for renderer : scene.renderers {
-            destroy_renderer(renderer);
+            destroy_renderer(renderer, destroyResources);
         }
     }
 

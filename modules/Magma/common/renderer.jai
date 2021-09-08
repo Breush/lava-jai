@@ -15,6 +15,8 @@ Renderer :: struct {
     scene : *Scene;
     kind : Kind;
 
+    shaders : [..]*Shader;
+
     using rendererImpl : RendererImpl;
 
     allocator : Allocator;
@@ -26,7 +28,13 @@ RendererOutput :: struct {
     index : u8;
 }
 
-destroy_renderer :: (renderer : *Renderer) {
+destroy_renderer :: (renderer : *Renderer, destroyResources : bool) {
+    if destroyResources {
+        for shader : renderer.shaders {
+            destroy_shader(shader, destroyResources);
+        }
+    }
+
     renderer_cleanup(renderer, resetMemory = false);
 
     if renderer.allocator != null {
@@ -36,6 +44,8 @@ destroy_renderer :: (renderer : *Renderer) {
 
 renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
     impl_renderer_cleanup(renderer);
+
+    Basic.array_free(renderer.shaders);
 
     if renderer.kind == .ForwardRenderer {
         _forward_renderer_cleanup(cast(*ForwardRenderer) renderer, resetMemory);
@@ -50,6 +60,15 @@ renderer_make_orbit_camera :: (renderer : *Renderer, eyeIndex : u32 = 0) -> Orbi
     return orbitCamera;
 }
 
+renderer_find_shader :: (renderer : *Renderer, id : string) -> *Shader {
+    for shader : renderer.shaders {
+        if shader.id == id {
+            return shader;
+        }
+    }
+    return null;
+}
+
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
     Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
@@ -61,6 +80,10 @@ renderer_get_output :: (renderer : *Renderer, outputIndex : u8 = 0) -> RendererO
     output.renderer = renderer;
     output.index = outputIndex;
     return output;
+}
+
+renderer_register :: (renderer : *Renderer, shader : *Shader) {
+    Basic.array_add(*renderer.shaders, shader);
 }
 
 /*

@@ -13,7 +13,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
-                { "name": "VK_LAYER_PATH", "value": "${workspaceFolder}/bindings/Vulkan/validation-layers" },
+                { "name": "VK_LAYER_PATH", "value": "${workspaceFolder}/bindings/Vulkan/layers" },
                 { "name": "XR_API_LAYER_PATH", "value": "${workspaceFolder}/bindings/OpenXr/api-layers" },
                 { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/bindings/OpenXr:${env:LD_LIBRARY_PATH}" }
             ],

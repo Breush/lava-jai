@@ -55,9 +55,6 @@ META_STRING :: #string DONE
 SillMeta :: struct {
 %1
 %2
-    _update_entities :: (engine : *Sill.Engine, dt : float64) {
-        // @todo Have automatic components update called. (Only if there update method exists.)
-    }
 }
 DONE
 
@@ -138,45 +135,71 @@ _generate :: (workspace : s64) {
 
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
-        Basic.append(*builder, "\n        ");
-        Basic.append(*builder, metaEntity.idCamelCase);
-        Basic.append(*builder, " : [..]");
-        Basic.append(*builder, metaEntity.name);
-        Basic.append(*builder, ";");
+        Basic.print_to_builder(*builder, "\n        % : [..]%;", metaEntity.idCamelCase, metaEntity.name);
     }
     Basic.append(*builder, "\n    }");
 
     entitiesString := Basic.builder_to_string(*builder);
 
-    // Building create_xxx_entity string
+    // Building functions string
     Basic.reset(*builder);
 
     for metaEntity : metaEntityList {
-        Basic.append(*builder, "\n    create_");
-        Basic.append(*builder, metaEntity.idSnakeCase);
-        Basic.append(*builder, "_entity :: (engine : *Sill.Engine) -> *");
-        Basic.append(*builder, metaEntity.name);
-        Basic.append(*builder, " {\n");
-        Basic.append(*builder, "        array := *engine.entities.");
-        Basic.append(*builder, metaEntity.idCamelCase);
-        Basic.append(*builder, ";\n");
+        Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.name);
+        Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        Basic.array_resize(array, array.count + 1);\n");
         Basic.append(*builder, "        entity := Basic.peek_pointer(engine.entities.mesh);\n");
-        // @todo entity_init should be generated, so that components are inited too.
-        // And that ugly component loop below should be hidden in entity_init.
-        Basic.append(*builder, "        entity.engine = engine;\n");
-        for component : metaEntity.components {
-            Basic.append(*builder, "        entity.");
-            Basic.append(*builder, component);
-            Basic.append(*builder, ".entity = entity;\n");
-        }
+        Basic.append(*builder, "        engine.Meta.entity_init(entity, engine);\n");
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
     }
 
-    createEntitiesString := Basic.builder_to_string(*builder);
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.name);
+        Basic.append(*builder, "        entity.engine = engine;\n");
+        for component : metaEntity.components {
+            Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component);
+            Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", component);
+        }
+        Basic.append(*builder, "    }\n");
+    }
+
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.name);
+        for component : metaEntity.components {
+            Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component);
+        }
+        Basic.append(*builder, "    }\n");
+    }
+
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.name);
+        for component : metaEntity.components {
+            Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", component);
+        }
+        Basic.append(*builder, "    }\n");
+    }
+
+    Basic.append(*builder, "\n    _cleanup_entities :: (engine : *Sill.Engine) {\n");
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
+        Basic.append(*builder, "            engine.Meta.entity_cleanup(entity);\n");
+        Basic.append(*builder, "        }\n");
+        Basic.print_to_builder(*builder, "        Basic.array_free(engine.entities.%);\n", metaEntity.idCamelCase);
+    }
+    Basic.append(*builder, "    }\n");
+
+    Basic.append(*builder, "\n    _update_entities :: (engine : *Sill.Engine, dt : float64) {\n");
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
+        Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
+        Basic.append(*builder, "        }\n");
+    }
+    Basic.append(*builder, "    }\n");
+
+    functionsString := Basic.builder_to_string(*builder);
 
     // Generating final meta
-    metaString := Basic.sprint(META_STRING, entitiesString, createEntitiesString);
+    metaString := Basic.sprint(META_STRING, entitiesString, functionsString);
     Compiler.add_build_string(metaString, workspace);
 }

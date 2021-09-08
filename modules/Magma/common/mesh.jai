@@ -14,6 +14,7 @@ Mesh :: struct {
     vertices : [..]VertexInput;
     indices : [..]u16;
     instance : InstanceInput;
+    material : *Material;
 
     verticesDirty : bool;
     indicesDirty : bool;
@@ -30,6 +31,8 @@ Mesh :: struct {
 VertexInput :: struct {
     position : Chamber.vec3;
     normal : Chamber.vec3;
+    tangent : Chamber.vec4;
+    uv : Chamber.vec2;
 }
 
 InstanceInput :: struct {

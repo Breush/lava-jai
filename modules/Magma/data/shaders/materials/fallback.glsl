@@ -1,16 +1,21 @@
 #version 450
-#extension GL_ARB_separate_shader_objects : enable
 
-#include "../../modules/Magma/data/shaders/eye.set"
+// @fixme Currently to be compiled with:
+// glslc --target-env=vulkan1.2 -DVERTEX -fshader-stage=vertex fallback.glsl -o fallback.vert.spv && glslc --target-env=vulkan1.2 -DFRAGMENT -fshader-stage=fragment fallback.glsl -o fallback.frag.spv
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in float depth;
+// ------------------
+// ----- VERTEX -----
 
-layout(location = 0) out vec4 outColor;
+#if defined(VERTEX)
 
-// @fixme Hey, these should be shipped with Magma!
-// And they are currently in examples...
+#include "../default.vert"
+
+// --------------------
+// ----- FRAGMENT -----
+
+#elif defined(FRAGMENT)
+
+#include "../default-header.frag"
 
 void main() {
     setupEye();
@@ -24,10 +29,10 @@ void main() {
         r = light reflected direction if surface was a perfect mirror,
             from the fragment to the outside
     */
-    vec3 n = normalize(normal);
-    vec3 v = normalize(position - eye.position);
+    vec3 n = tbn * vec3(0, 0, 1);
+    vec3 v = normalize(position.xyz - eye.position);
     // @todo Make lights be configurable
-    vec3 ls[] = {vec3(-1, -2, -3), vec3(3, 2, -1)};
+    vec3 ls[] = { vec3(-1, -0.2, 0.1), vec3(-1, 1, 0.1), vec3(0.5, 0, -1) };
 
     // Light-specific
     vec3 lightDiffuseColor = vec3(0.95);
@@ -38,13 +43,15 @@ void main() {
 
     // Material-specific
     float kd = 0.8;
-    float ks = 0.75;
+    float ks = 0.5;
     float alpha = 16;
 
     vec3 diffuse = vec3(0);
     vec3 specular = vec3(0);
 
-    for (int i = 0; i < 2; ++i) {
+    // @todo We could centralize these functions, and do the same with PBR.
+
+    for (int i = 0; i < 3; ++i) {
         vec3 l = normalize(ls[i]);
 
         float n_l = dot(n, l);
@@ -61,11 +68,11 @@ void main() {
         }
     }
 
-
-    vec3 color = max(vec3(0.05), kd * diffuse + ks * specular);
+    vec3 color = max(vec3(0.01), kd * diffuse + ks * specular);
     outColor = vec4(color, 1.0);
 
-    // @fixme This is very strange, why would that be needed?
-    // Isn't it automatic?
-    gl_FragDepth = depth;
+    // :FragDepthNeeded
+    gl_FragDepth = position.w;
 }
+
+#endif

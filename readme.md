@@ -32,14 +32,14 @@ The core principles of **lava** are:
     - Linux support OK using generated Xcb/Xkb bindings.
     - Windows support using DWM not started.
     - Missing fullscreen option.
-- [40%] **Magma** (real-time 3D engine)
+- [70%] **Magma** (real-time 3D engine)
     - Linux support OK using Vulkan.
     - Using Vulkan for all platforms is the goal, but currently untested.
 - [0%] **Dike** (physics engine)
     - Port not started. Goal is to use Bullet as BE for all platforms.
 - [0%] **Flow** (sound engine)
     - Port not started.
-- [20%] **Sill** (game engine - Jai API)
+- [40%] **Sill** (game engine - Jai API)
     - Basic support for now.
 - [0%] **Caldera** (game engine - drag&drop editor)
     - Not started.

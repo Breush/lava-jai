@@ -1,10 +1,6 @@
 #scope_module
 
 ForwardRendererImpl :: struct {
-    pipeline : Vk.Pipeline;
-    pipelineLayout : Vk.PipelineLayout;
-    renderPass : Vk.RenderPass;
-
     extraFrameObjects : [Engine.FRAME_INDEX_COUNT]struct {
         imageHolder : ImageHolder;
         imageView : Vk.ImageView;
@@ -12,6 +8,11 @@ ForwardRendererImpl :: struct {
         depthImageView : Vk.ImageView;
         framebuffer : Vk.Framebuffer;
     };
+
+    // Fallback material when mesh have none. (Basic Phong.)
+    // @note The shader won't be registered within the renderer.
+    shaderFallback : Shader;
+    materialFallback : Material;
 }
 
 impl_forward_renderer_init :: (forwardRenderer : *ForwardRenderer) {
@@ -22,7 +23,10 @@ impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
     engine := forwardRenderer.scene.engine;
     Vk.device_wait_idle(engine.device); // @todo Anything more clever?
 
-    _cleanup_render_pass(forwardRenderer);
+    material_cleanup(*forwardRenderer.materialFallback);
+    shader_cleanup(*forwardRenderer.shaderFallback);
+
+    Vk.destroy_render_pass(engine.device, forwardRenderer.renderPass, null);
 
     for *extraFrameObject : forwardRenderer.extraFrameObjects {
         _image_holder_cleanup(*extraFrameObject.imageHolder);
@@ -38,6 +42,11 @@ _forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
 
     if !_init_render_pass(forwardRenderer) then return false;
     if !_init_extra_frame_objects(forwardRenderer) then return false;
+
+    // Resources
+    shader_init(*forwardRenderer.shaderFallback, forwardRenderer, "fallback");
+    material_init(*forwardRenderer.materialFallback, *forwardRenderer.shaderFallback);
+
     return true;
 }
 
@@ -65,9 +74,31 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     Vk.cmd_push_constants(commandBuffer, forwardRenderer.pipelineLayout, cast(u32) eyePushConstantStages, 0,
                           size_of(EyeShaderObject), *forwardRenderer.eye.shaderObject);
 
-    // Drawing opaque meshes
-    Vk.cmd_bind_pipeline(commandBuffer, Vk.PipelineBindPoint.Graphics, forwardRenderer.pipeline);
+    // Drawing meshes
+    // @note We have a small trick here. If we had set lastDrawnMaterial to null,
+    // the first iteration could go wrong, as a mesh material can be null.
+    // So, we set it to something impossible.
+    lastDrawnMaterial := cast(*Material) 0x1;
+    lastBoundPipeline : Vk.Pipeline = null;
+
+    // @todo Sort meshes by shaders, in order to reduce context switches.
     for mesh : forwardRenderer.scene.meshes {
+        if mesh.material != lastDrawnMaterial {
+            lastDrawnMaterial = mesh.material;
+            if mesh.material != null {
+                if lastBoundPipeline != mesh.material.shader.pipeline {
+                    lastBoundPipeline = mesh.material.shader.pipeline;
+                    Vk.cmd_bind_pipeline(commandBuffer, Vk.PipelineBindPoint.Graphics, lastBoundPipeline);
+                }
+                _material_draw(mesh.material, commandBuffer);
+            } else {
+                if lastBoundPipeline != forwardRenderer.materialFallback.shader.pipeline {
+                    lastBoundPipeline = forwardRenderer.materialFallback.shader.pipeline;
+                    Vk.cmd_bind_pipeline(commandBuffer, Vk.PipelineBindPoint.Graphics, lastBoundPipeline);
+                }
+                _material_draw(*forwardRenderer.materialFallback, commandBuffer);
+            }
+        }
         _mesh_draw(mesh, commandBuffer);
     }
 
@@ -86,114 +117,23 @@ _forward_renderer_get_output_extent :: (forwardRenderer : *ForwardRenderer, outp
     return forwardRenderer.eye.extent;
 }
 
+_get_push_constant_range :: () -> Vk.PushConstantRange {
+    // @note These are the shared data between all other pipelines (i.e. materials)
+    // so they must all derive from that. But we might have a design issue, here.
+    pushConstantRange : Vk.PushConstantRange;
+    pushConstantRange.size = size_of(EyeShaderObject);
+    pushConstantRange.stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
+    return pushConstantRange;
+}
+
 #scope_file
 
 _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
     engine := forwardRenderer.scene.engine;
-    // ----- Shaders
-
-    vertShaderModule := _engine_get_shader_module(engine, "./examples/magma-scenes/phong.vert.spv");
-    fragShaderModule := _engine_get_shader_module(engine, "./examples/magma-scenes/phong.frag.spv");
-
-    vertShaderStageCI : Vk.PipelineShaderStageCreateInfo;
-    vertShaderStageCI.sType = .PipelineShaderStageCreateInfo;
-    vertShaderStageCI.stage = Vk.ShaderStageFlagBits.Vertex;
-    vertShaderStageCI.module = vertShaderModule;
-    vertShaderStageCI.pName = "main";
-    // @todo Using pSpecializationInfo might be interesting here!
-
-    fragShaderStageCI : Vk.PipelineShaderStageCreateInfo;
-    fragShaderStageCI.sType = .PipelineShaderStageCreateInfo;
-    fragShaderStageCI.stage = Vk.ShaderStageFlagBits.Fragment;
-    fragShaderStageCI.module = fragShaderModule;
-    fragShaderStageCI.pName = "main";
-
-    shaderStages : [2]Vk.PipelineShaderStageCreateInfo;
-    shaderStages[0] = vertShaderStageCI;
-    shaderStages[1] = fragShaderStageCI;
-
-    // ---
-
-    vertexInputBindingDescs : [2]Vk.VertexInputBindingDescription;
-    vertexInputAttributeDescs : [5]Vk.VertexInputAttributeDescription;
-
-    nextLocation := _fill_vertex_input_descs(VertexInput, 0, 0, Vk.VertexInputRate.Vertex);
-    _fill_vertex_input_descs(InstanceInput, 1, nextLocation, Vk.VertexInputRate.Instance);
-
-    vertexInputStateCI : Vk.PipelineVertexInputStateCreateInfo;
-    vertexInputStateCI.sType = .PipelineVertexInputStateCreateInfo;
-    vertexInputStateCI.vertexBindingDescriptionCount = vertexInputBindingDescs.count;
-    vertexInputStateCI.pVertexBindingDescriptions = *vertexInputBindingDescs[0];
-    vertexInputStateCI.vertexAttributeDescriptionCount = vertexInputAttributeDescs.count;
-    vertexInputStateCI.pVertexAttributeDescriptions = vertexInputAttributeDescs.data;
-
-    inputAssemblyStateCI : Vk.PipelineInputAssemblyStateCreateInfo;
-    inputAssemblyStateCI.sType = .PipelineInputAssemblyStateCreateInfo;
-    inputAssemblyStateCI.topology = Vk.PrimitiveTopology.TriangleList;
-    inputAssemblyStateCI.primitiveRestartEnable = Vk.FALSE;
-
-    // ---
-
-    viewport : Vk.Viewport;
-    viewport.width = cast(float32) forwardRenderer.eye.extent.width;
-    viewport.height = cast(float32) forwardRenderer.eye.extent.height;
-
-    scissor : Vk.Rect2D;
-    scissor.extent.width = forwardRenderer.eye.extent.width;
-    scissor.extent.height = forwardRenderer.eye.extent.height;
-
-    viewportStateCI : Vk.PipelineViewportStateCreateInfo;
-    viewportStateCI.sType = .PipelineViewportStateCreateInfo;
-    viewportStateCI.viewportCount = 1;
-    viewportStateCI.pViewports = *viewport;
-    viewportStateCI.scissorCount = 1;
-    viewportStateCI.pScissors = *scissor;
-
-    // ---
-
-    rasterizationStateCI : Vk.PipelineRasterizationStateCreateInfo;
-    rasterizationStateCI.sType = .PipelineRasterizationStateCreateInfo;
-    rasterizationStateCI.depthClampEnable = Vk.FALSE; // @todo True for shadow maps?
-    rasterizationStateCI.polygonMode = Vk.PolygonMode.Fill;
-    rasterizationStateCI.lineWidth = 1.;
-    rasterizationStateCI.cullMode = cast(u32) Vk.CullModeFlagBits.Back;
-    rasterizationStateCI.frontFace = Vk.FrontFace.CounterClockwise;
-    // @todo .depthBiasEnable Useful for shadow maps?
-
-    // ---
-
-    multisampleStateCI : Vk.PipelineMultisampleStateCreateInfo;
-    multisampleStateCI.sType = .PipelineMultisampleStateCreateInfo;
-    multisampleStateCI.sampleShadingEnable = Vk.FALSE;
-    multisampleStateCI.rasterizationSamples = Vk.SampleCountFlagBits._1;
-
-    // ---
-
-    depthStencilStateCI : Vk.PipelineDepthStencilStateCreateInfo;
-    depthStencilStateCI.sType = .PipelineDepthStencilStateCreateInfo;
-    depthStencilStateCI.depthTestEnable = Vk.TRUE;
-    depthStencilStateCI.depthWriteEnable = Vk.TRUE;
-    depthStencilStateCI.depthCompareOp = Vk.CompareOp.Greater;
-    depthStencilStateCI.depthBoundsTestEnable = Vk.FALSE;
-    depthStencilStateCI.stencilTestEnable = Vk.FALSE;
-
-    // ---
-
-    colorBlendAttachmentState : Vk.PipelineColorBlendAttachmentState;
-    colorBlendAttachmentState.colorWriteMask = cast(u32) (Vk.ColorComponentFlagBits.R | Vk.ColorComponentFlagBits.G | Vk.ColorComponentFlagBits.B | Vk.ColorComponentFlagBits.A);
-    colorBlendAttachmentState.blendEnable = Vk.FALSE;
-
-    colorBlendStateCI : Vk.PipelineColorBlendStateCreateInfo;
-    colorBlendStateCI.sType = .PipelineColorBlendStateCreateInfo;
-    colorBlendStateCI.logicOpEnable = Vk.FALSE;
-    colorBlendStateCI.attachmentCount = 1;
-    colorBlendStateCI.pAttachments = *colorBlendAttachmentState;
 
     // --- Pipeline Layout
 
-    pushConstantRange : Vk.PushConstantRange;
-    pushConstantRange.size = size_of(EyeShaderObject);
-    pushConstantRange.stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
+    pushConstantRange := _get_push_constant_range();
 
     pipelineLayoutCI : Vk.PipelineLayoutCreateInfo;
     pipelineLayoutCI.sType = .PipelineLayoutCreateInfo;
@@ -202,6 +142,7 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
 
     _CHECK(Vk.create_pipeline_layout(engine.device, *pipelineLayoutCI, null, *forwardRenderer.pipelineLayout),
            "Unable to create pipeline layout.");
+    _set_debug_utils_name(engine.device, forwardRenderer.pipelineLayout, "forwardRenderer.pipelineLayout");
 
     // ----- RenderPass
 
@@ -262,28 +203,6 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
     _CHECK(Vk.create_render_pass(engine.device, *renderPassCI, null, *forwardRenderer.renderPass),
            "Unable to create render pass.");
 
-    // ----- Pipeline
-
-    pipelineCI : Vk.GraphicsPipelineCreateInfo;
-    pipelineCI.sType = .GraphicsPipelineCreateInfo;
-    pipelineCI.stageCount = shaderStages.count;
-    pipelineCI.pStages = shaderStages.data;
-    pipelineCI.pVertexInputState = *vertexInputStateCI;
-    pipelineCI.pInputAssemblyState = *inputAssemblyStateCI;
-    pipelineCI.pViewportState = *viewportStateCI;
-    pipelineCI.pRasterizationState = *rasterizationStateCI;
-    pipelineCI.pMultisampleState = *multisampleStateCI;
-    pipelineCI.pDepthStencilState = *depthStencilStateCI;
-    pipelineCI.pColorBlendState = *colorBlendStateCI;
-    pipelineCI.pDynamicState = null;
-    pipelineCI.layout = forwardRenderer.pipelineLayout;
-    pipelineCI.renderPass = forwardRenderer.renderPass;
-    pipelineCI.subpass = 0;
-    pipelineCI.basePipelineHandle = null;
-
-    _CHECK(Vk.create_graphics_pipelines(engine.device, null, 1, *pipelineCI, null, *forwardRenderer.pipeline),
-           "Unable to create graphics pipeline.");
-
     return true;
 }
 
@@ -297,7 +216,7 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
         }
         _set_debug_utils_name(engine.device, extraFrameObject.imageHolder.image, "forwardRenderer.extraFrameObjects[].image");
 
-        extraFrameObject.imageView = _image_holder_create_view(extraFrameObject.imageHolder);
+        extraFrameObject.imageView = _image_holder_create_view(*extraFrameObject.imageHolder);
         if extraFrameObject.imageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.imageView, "forwardRenderer.extraFrameObjects[].imageView");
 
@@ -307,7 +226,7 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
         }
         _set_debug_utils_name(engine.device, extraFrameObject.depthImageHolder.image, "forwardRenderer.extraFrameObjects[].depthImage");
 
-        extraFrameObject.depthImageView = _image_holder_create_view(extraFrameObject.depthImageHolder);
+        extraFrameObject.depthImageView = _image_holder_create_view(*extraFrameObject.depthImageHolder);
         if extraFrameObject.depthImageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.depthImageView, "forwardRenderer.extraFrameObject[].depthImageView");
 
@@ -330,12 +249,4 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
     }
 
     return true;
-}
-
-_cleanup_render_pass :: (forwardRenderer : *ForwardRenderer) {
-    engine := forwardRenderer.scene.engine;
-
-    Vk.destroy_render_pass(engine.device, forwardRenderer.renderPass, null);
-    Vk.destroy_pipeline(engine.device, forwardRenderer.pipeline, null);
-    Vk.destroy_pipeline_layout(engine.device, forwardRenderer.pipelineLayout, null);
 }

@@ -23,6 +23,16 @@ create_engine :: ($_Meta : Type) -> *Engine(_Meta) {
     return engine;
 }
 
+destroy_engine :: (engine : *Engine) {
+    Magma.destroy_engine(engine.renderEngine);
+
+    engine_cleanup(engine, resetMemory = false);
+
+    if engine.allocator != null {
+        Basic.free(engine, engine.allocator, engine.allocator_data);
+    }
+}
+
 // :CameraInEngineTBR
 camera : Magma.OrbitCamera;
 
@@ -39,7 +49,15 @@ engine_init :: (engine : *EngineBase) {
 
     // :CameraInEngineTBR
     camera = Magma.renderer_make_orbit_camera(engine.renderer);
-    Magma.orbit_camera_origin_target(*camera, .{-1, 0.2, 0.5}, .{0, 0, 0});
+    Magma.orbit_camera_origin_target(*camera, .{2, 0, 0.5}, .{0, 0, 0.5});
+}
+
+engine_cleanup :: (engine : *Engine, resetMemory := true) {
+    engine.Meta._cleanup_entities(engine);
+
+    if resetMemory {
+        <<engine = Engine(engine.Meta).{};
+    }
 }
 
 engine_run :: (engine : *Engine) {
@@ -71,6 +89,7 @@ engine_run :: (engine : *Engine) {
         // We play logic at a constant rate.
         updateTimeLag += elapsedTime;
         while (updateTimeLag >= updateTime) {
+            Basic.reset_temporary_storage();
             _engine_handle_input(engine);
             engine.Meta._update_entities(engine, updateTime);
             updateTimeLag -= updateTime;

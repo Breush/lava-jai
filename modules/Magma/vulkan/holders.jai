@@ -1,13 +1,15 @@
 ImageHolder :: struct {
     Kind :: enum {
         Unknown :: 0;
-        RendererOut;  // R8G8B8A8Srgb - Color | TransferSrc
+        Texture;      // R8G8B8A8Unorm - Color | Sampled | TransferDst
+        RendererOut;  // R8G8B8A8Srgb - Color | Sampled | TransferSrc
         Depth;        // D32Sfloat    - DepthStencil
     }
 
     engine : *Engine;
     kind : Kind;
     image : Vk.Image;
+    extent : Chamber.uvec2;
     format : Vk.Format;
     deviceMemory : Vk.DeviceMemory;
 }
@@ -17,6 +19,7 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
                        _extent : Chamber.uvec2) -> bool {
     engine = _engine;
     kind = _kind;
+    extent = _extent;
 
     // Image itself
     imageCI : Vk.ImageCreateInfo;
@@ -35,6 +38,9 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
     if kind == .RendererOut {
         format = Vk.Format.R8G8B8A8Srgb;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
+    } else if kind == .Texture {
+        format = Vk.Format.R8G8B8A8Unorm;
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
     } else if kind == .Depth {
         format = Vk.Format.D32Sfloat;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.DepthStencilAttachment;
@@ -46,6 +52,7 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 
     _CHECK(Vk.create_image(engine.device, *imageCI, null, *image),
            "Unable to create image.");
+    _set_debug_utils_name(engine.device, image, "imageHolder.image");
 
     // Device memory
     memoryRequirements : Vk.MemoryRequirements;
@@ -73,10 +80,35 @@ _image_holder_cleanup :: (using imageHolder : *ImageHolder, resetMemory := true)
     }
 }
 
-_image_holder_create_view :: (using imageHolder : ImageHolder) -> Vk.ImageView {
+_image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8) {
+    stagingBufferHolder : BufferHolder;
+    _buffer_holder_init(*stagingBufferHolder, engine, .Staging, .Direct, cast(u64) data.count);
+    _buffer_holder_copy(*stagingBufferHolder, data.data, cast(Vk.DeviceSize) data.count);
+    defer _buffer_holder_cleanup(*stagingBufferHolder, resetMemory=false);
+
+    commandBuffer := _one_time_command_buffer_begin(engine.device, engine.graphicsCommandPool);
+
+    _change_image_layout(commandBuffer, image, .Undefined, .TransferDstOptimal);
+
+    bufferImageCopy : Vk.BufferImageCopy;
+    bufferImageCopy.imageSubresource.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
+    bufferImageCopy.imageSubresource.baseArrayLayer = 0;
+    bufferImageCopy.imageSubresource.layerCount = 1;
+    bufferImageCopy.imageSubresource.mipLevel = 0;
+    bufferImageCopy.imageExtent.width = extent.width;
+    bufferImageCopy.imageExtent.height = extent.height;
+    bufferImageCopy.imageExtent.depth = 1;
+
+    Vk.cmd_copy_buffer_to_image(commandBuffer, stagingBufferHolder.buffer, image, .TransferDstOptimal, 1, *bufferImageCopy);
+    _change_image_layout(commandBuffer, image, .TransferDstOptimal, .ShaderReadOnlyOptimal);
+
+    _one_time_command_buffer_end(commandBuffer, engine.device, engine.graphicsCommandPool, engine.graphicsQueue);
+}
+
+_image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView {
     aspect : Vk.ImageAspectFlags;
 
-    if kind == .RendererOut {
+    if kind == .RendererOut || kind == .Texture {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Color;
     } else if kind == .Depth {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Depth;
@@ -112,6 +144,7 @@ BufferHolder :: struct {
         Staging;        // TransferSrc
         ShaderVertex;   // VertexBuffer
         ShaderIndex;    // IndexBuffer
+        ShaderUniform;  // UniformBuffer
     }
 
     CpuIo :: enum {
@@ -150,6 +183,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
     if (cpuIo == .PersistentStaging) {
         stagingBufferHolder = Basic.New(BufferHolder);
         _buffer_holder_init(stagingBufferHolder, engine, .Staging, .Direct, size);
+        _set_debug_utils_name(engine.device, stagingBufferHolder.buffer, "bufferHolder.stagingBuffer");
     }
 
     bufferCIFlags : Vk.BufferUsageFlags;
@@ -159,6 +193,8 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.VertexBuffer;
     } else if kind == .ShaderIndex {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.IndexBuffer;
+    } else if kind == .ShaderUniform {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.UniformBuffer;
     }
 
     if cpuIo == .OnDemandStaging || cpuIo == .PersistentStaging {
@@ -171,7 +207,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
     bufferCI.usage = bufferCIFlags;
     bufferCI.sharingMode = Vk.SharingMode.Exclusive;
     _CHECK(Vk.create_buffer(engine.device, *bufferCI, null, *buffer),
-        "Unable to create buffer.");
+           "Unable to create buffer.");
 
     memoryRequirements : Vk.MemoryRequirements;
     Vk.get_buffer_memory_requirements(engine.device, buffer, *memoryRequirements);
@@ -188,7 +224,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
                                                               memoryPropertyFlags);
 
     _CHECK(Vk.allocate_memory(engine.device, *memoryAI, null, *deviceMemory),
-        "Unable to create buffer device memory.");
+           "Unable to create buffer device memory.");
 
     Vk.bind_buffer_memory(engine.device, buffer, deviceMemory, 0);
 
@@ -209,11 +245,11 @@ _buffer_holder_cleanup :: (using bufferHolder : *BufferHolder, resetMemory := tr
     }
 }
 
-_buffer_holder_copy :: (using bufferHolder : BufferHolder, data : $T) -> bool {
+_buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : $T) -> bool {
     return _buffer_holder_copy(bufferHolder, *data, size_of(T));
 }
 
-_buffer_holder_copy :: (using bufferHolder : BufferHolder, data : *void, dataSize : Vk.DeviceSize) -> bool {
+_buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSize : Vk.DeviceSize) -> bool {
     if cpuIo == .Direct {
         targetData : *void;
         Vk.map_memory(engine.device, deviceMemory, 0, size, 0, *targetData);
@@ -222,12 +258,12 @@ _buffer_holder_copy :: (using bufferHolder : BufferHolder, data : *void, dataSiz
     } else if cpuIo == .OnDemandStaging {
         stagingBufferHolder : BufferHolder;
         _buffer_holder_init(*stagingBufferHolder, engine, .Staging, .Direct, dataSize);
-        _buffer_holder_copy(stagingBufferHolder, data, dataSize);
+        _buffer_holder_copy(*stagingBufferHolder, data, dataSize);
         _copy_buffer(engine.device, engine.graphicsQueue, engine.graphicsCommandPool,
                      stagingBufferHolder.buffer, buffer, cast(u64) dataSize, 0, 0);
         _buffer_holder_cleanup(*stagingBufferHolder, resetMemory=false);
     } else if cpuIo == .PersistentStaging {
-        _buffer_holder_copy(<<stagingBufferHolder, data, dataSize);
+        _buffer_holder_copy(stagingBufferHolder, data, dataSize);
         _copy_buffer(engine.device, engine.graphicsQueue, engine.graphicsCommandPool,
                      stagingBufferHolder.buffer, buffer, cast(u64) dataSize, 0, 0);
     } else {

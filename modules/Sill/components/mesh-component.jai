@@ -14,6 +14,28 @@ MeshComponent :: struct {
     nodes : [..]MeshNode;
 }
 
+component_init :: (iMesh : *MeshComponent) {
+    // Nothing to do
+}
+
+component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
+    for *node : iMesh.nodes {
+        // @todo Really improve what cleanup means...
+        // Here, for instance, do we need to remove the primitives for the render engine?
+        Basic.array_free(node.primitives);
+        Basic.array_free(node.children);
+    }
+    Basic.array_free(iMesh.nodes);
+
+    if resetMemory {
+        <<iMesh = MeshComponent.{};
+    }
+}
+
+component_update :: (iMesh : *MeshComponent, dt : float64) {
+    // Nothing to do
+}
+
 mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
     Basic.print("(nodes:%)\n", iMesh.nodes.count);
     for *node : iMesh.nodes {
@@ -35,40 +57,17 @@ mesh_commit_nodes :: (iMesh : *MeshComponent) {
 
 // Returns false on error.
 mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
-    glbFullContent, readOk := File.read_entire_file(filePath);
+    fileContent, readOk := File.read_entire_file(filePath);
     _CHECK(readOk, "Unable to read GLB file.");
-    defer Basic.free(glbFullContent);
-    glbContent := glbFullContent;
+    defer Basic.free(fileContent);
 
-    // Parse header
-    glb : Glb;
-    glb.header = cast(*GlbHeader) glbContent.data;
-    _CHECK(glb.header.magic == 0x46546C67, "Not a GLB file.");
-    Basic.advance(*glbContent, size_of(GlbHeader));
+    glb := Chamber.glb_parse(fileContent);
+    defer json_free(glb.json);
 
-    // Parse JSON chunk
-    jsonChunkHeader := cast(*GlbChunkHeader) glbContent.data;
-    _CHECK(jsonChunkHeader.type == 0x4E4F534A, "GLB file: no JSON chunk.");
-    Basic.advance(*glbContent, size_of(GlbChunkHeader));
+    cache : Cache;
 
-    glb.json.data = glbContent.data;
-    glb.json.count = jsonChunkHeader.length;
-    Basic.advance(*glbContent, jsonChunkHeader.length);
-
-    // Parse bin chunk
-    binChunkHeader := cast(*GlbChunkHeader) glbContent.data;
-    _CHECK(binChunkHeader.type == 0x004E4942, "GLB file: no BIN chunk.");
-    Basic.advance(*glbContent, size_of(GlbChunkHeader));
-
-    glb.bin.data = glbContent.data;
-    glb.bin.count = binChunkHeader.length;
-
-    // Parse JSON itself
-    json := json_parse_string(glb.json);
-    defer json_free(json);
-
-    rootSceneIndex := cast(u64) json["scene"].number;
-    rootScene := json["scenes"][rootSceneIndex];
+    rootSceneIndex := cast(u64) glb.json["scene"].number;
+    rootScene := glb.json["scenes"][rootSceneIndex];
     rootSceneNodes := rootScene["nodes"];
 
     // @note We create a root node to apply a transform on the whole object.
@@ -76,7 +75,7 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
     Basic.array_resize(*iMesh.nodes, iMesh.nodes.count + 1);
     iRootNodeIndex := iMesh.nodes.count - 1;
     for nodeIndex : rootSceneNodes.array {
-        iNodeIndex := _glb_load_node(iMesh, cast(u64) nodeIndex.number, glb, json, iRootNodeIndex);
+        iNodeIndex := _glb_load_node(iMesh, cast(u64) nodeIndex.number, glb, *cache, iRootNodeIndex);
         if iNodeIndex != -1 {
             Basic.array_add(*iMesh.nodes[iRootNodeIndex].children, iNodeIndex);
         }
@@ -99,6 +98,11 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
 }
 
 #scope_file
+
+Cache :: struct {
+    bufferViewToTexture : Table(u64, *Magma.Texture);
+    material : Table(u64, *Magma.Material);
+}
 
 _update_node_transforms :: (nodes : []MeshNode, node : *MeshNode, parentMatrix : Chamber.mat3x4) {
     node._matrix = Chamber.make_mat3x4(node.transform);
@@ -127,26 +131,8 @@ _debug_print_nodes :: (nodes : []MeshNode, node : *MeshNode, indentLevel := 0) {
 
 // ----- GLB loading
 
-// @todo We might have an issue due to endianess.
-GlbHeader :: struct {
-    magic : u32;
-    version : u32;
-    length : u32;
-}
-
-GlbChunkHeader :: struct {
-    length : u32;
-    type : u32;
-}
-
-Glb :: struct {
-    header : *GlbHeader;
-    json : string;
-    bin : []u8;
-}
-
-_glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, json : JsonValue, iParentNodeIndex : s64) -> s64 {
-    node := json["nodes"][nodeIndex];
+_glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, cache : *Cache, iParentNodeIndex : s64) -> s64 {
+    node := glb.json["nodes"][nodeIndex];
 
     children := node["children"];
     nodeMesh := node["mesh"];
@@ -157,18 +143,18 @@ _glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, json : Js
 
     // Node transform
     iNodeIndex := iMesh.nodes.count - 1;
-    iMesh.nodes[iNodeIndex].transform = _glb_get_transform(node);
+    iMesh.nodes[iNodeIndex].transform = Chamber.glb_get_transform(node);
     iMesh.nodes[iNodeIndex].parent = iParentNodeIndex;
 
     // Load geometry if any
     if nodeMesh.type == .NUMBER {
         meshIndex := cast(u64) nodeMesh.number;
-        _glb_load_mesh(iMesh, meshIndex, glb, json);
+        _glb_load_mesh(iMesh, meshIndex, glb, cache);
     }
 
     if children.type == .ARRAY {
         for child : children.array {
-            iChildNodeIndex := _glb_load_node(iMesh, cast(u64) child.number, glb, json, iNodeIndex);
+            iChildNodeIndex := _glb_load_node(iMesh, cast(u64) child.number, glb, cache, iNodeIndex);
             if iChildNodeIndex != -1 {
                 Basic.array_add(*iMesh.nodes[iNodeIndex].children, iChildNodeIndex);
             }
@@ -178,44 +164,70 @@ _glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, json : Js
     return iNodeIndex;
 }
 
-_glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, json : JsonValue) {
+_glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, cache : *Cache) {
     iNode := Basic.peek_pointer(iMesh.nodes);
 
-    mesh := json["meshes"][meshIndex];
+    mesh := glb.json["meshes"][meshIndex];
 
     primitives := mesh["primitives"];
 
     for primitive : primitives.array {
+        iPrimitive := Magma.create_mesh(iMesh.entity.engine.scene);
+        Basic.array_add(*iNode.primitives, iPrimitive);
+
         // Extracting primitive attributes from JSON and BIN
         primitiveAttributes := primitive["attributes"];
         positionsAccessorIndex := cast(u64) primitiveAttributes["POSITION"].number;
-        positions := _glb_access(positionsAccessorIndex, glb, json, Chamber.vec3);
+        positions := glb_get_accessor(glb, positionsAccessorIndex, Chamber.vec3);
 
         normals : []Chamber.vec3;
         if primitiveAttributes["NORMAL"].type == .NUMBER {
             normalsAccessorIndex := cast(u64) primitiveAttributes["NORMAL"].number;
-            normals = _glb_access(normalsAccessorIndex, glb, json, Chamber.vec3);
+            normals = glb_get_accessor(glb, normalsAccessorIndex, Chamber.vec3);
+        }
+
+        tangents : []Chamber.vec4;
+        if primitiveAttributes["TANGENT"].type == .NUMBER {
+            tangentsAccessorIndex := cast(u64) primitiveAttributes["TANGENT"].number;
+            tangents = glb_get_accessor(glb, tangentsAccessorIndex, Chamber.vec4);
+        }
+
+        uvs : []Chamber.vec2;
+        if primitiveAttributes["TEXCOORD_0"].type == .NUMBER {
+            uvsAccessorIndex := cast(u64) primitiveAttributes["TEXCOORD_0"].number;
+            uvs = glb_get_accessor(glb, uvsAccessorIndex, Chamber.vec2);
+        }
+
+        if primitive["material"].type != .INVALID {
+            materialIndex := cast(u64) primitive["material"].number;
+            _glb_set_material(iMesh, iPrimitive, materialIndex, glb, cache);
         }
 
         indices : []u16;
         indicesAccessorIndex := cast(u64) primitive["indices"].number;
-        indicesComponentType := cast(u64) json["accessors"][indicesAccessorIndex]["componentType"].number;
+        indicesComponentType := cast(u64) glb.json["accessors"][indicesAccessorIndex]["componentType"].number;
         if indicesComponentType == 5123 {
-            indices = _glb_access(indicesAccessorIndex, glb, json, u16);
+            indices = glb_get_accessor(glb, indicesAccessorIndex, u16);
         } else {
             Chamber.debug("Unsupported GLB indices component type.");
             continue;
         }
 
         // Constructing the primitive mesh itself
-        iPrimitive := Magma.create_mesh(iMesh.entity.engine.scene);
-        Basic.array_add(*iNode.primitives, iPrimitive);
-
         Basic.array_resize(*iPrimitive.vertices, positions.count);
         for *vertex, i : iPrimitive.vertices {
             vertex.position = positions[i];
             if normals.count != 0 {
                 vertex.normal = normals[i];
+            }
+            if tangents.count != 0 {
+                Basic.print("HEY\n");
+            } else {
+                // @todo Autocompute tangents if we don't have them.
+                vertex.tangent = .{1, 0, 0, 1};
+            }
+            if uvs.count != 0 {
+                vertex.uv = uvs[i];
             }
         }
 
@@ -231,85 +243,82 @@ _glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, json : Js
     }
 }
 
-_glb_get_transform :: (json : JsonValue) -> Chamber.trs {
-    transform : Chamber.trs;
-
-    matrix := json["matrix"];
-    if matrix.type == .ARRAY {
-        // @note As per glsl convention, the matrix is listed column-major,
-        // but we store it as row-major.
-        m : Chamber.mat4;
-        m.coef[0][0] = cast(float32) matrix.array[0].number;
-        m.coef[1][0] = cast(float32) matrix.array[1].number;
-        m.coef[2][0] = cast(float32) matrix.array[2].number;
-        m.coef[3][0] = cast(float32) matrix.array[3].number;
-        m.coef[0][1] = cast(float32) matrix.array[4].number;
-        m.coef[1][1] = cast(float32) matrix.array[5].number;
-        m.coef[2][1] = cast(float32) matrix.array[6].number;
-        m.coef[3][1] = cast(float32) matrix.array[7].number;
-        m.coef[0][2] = cast(float32) matrix.array[8].number;
-        m.coef[1][2] = cast(float32) matrix.array[9].number;
-        m.coef[2][2] = cast(float32) matrix.array[10].number;
-        m.coef[3][2] = cast(float32) matrix.array[11].number;
-        m.coef[0][3] = cast(float32) matrix.array[12].number;
-        m.coef[1][3] = cast(float32) matrix.array[13].number;
-        m.coef[2][3] = cast(float32) matrix.array[14].number;
-        m.coef[3][3] = cast(float32) matrix.array[15].number;
-        transform = Chamber.make_trs(m);
-    } else {
-        translation := json["translation"];
-        rotation := json["rotation"];
-        scale := json["scale"];
-
-        if translation.type == .ARRAY {
-            transform.translation.x = cast(float32) translation[0].number;
-            transform.translation.y = cast(float32) translation[1].number;
-            transform.translation.z = cast(float32) translation[2].number;
-        }
-
-        if rotation.type == .ARRAY {
-            transform.rotation.x = cast(float32) rotation[0].number;
-            transform.rotation.y = cast(float32) rotation[1].number;
-            transform.rotation.z = cast(float32) rotation[2].number;
-            transform.rotation.w = cast(float32) rotation[3].number;
-        }
-
-        if scale.type == .ARRAY {
-            transform.scaling.x = cast(float32) scale[0].number;
-            transform.scaling.y = cast(float32) scale[1].number;
-            transform.scaling.z = cast(float32) scale[2].number;
-        }
+_glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, materialIndex : u64, glb : Glb, cache : *Cache) {
+    cachedMaterial := table_find_pointer(cache.material, materialIndex);
+    if cachedMaterial != null {
+        iPrimitive.material = <<cachedMaterial;
+        return;
     }
 
-    return transform;
+    material := glb.json["materials"][materialIndex];
+
+    iShader := Magma.renderer_find_shader(iMesh.entity.engine.renderer, "roughness-metallic");
+    if iShader == null {
+        iShader = Magma.create_shader(iMesh.entity.engine.renderer, "roughness-metallic");
+    }
+
+    iMaterial := Magma.create_material(iShader);
+
+    if material["normalTexture"].type != .INVALID {
+        _glb_set_texture(iMaterial, "normalMap", material["normalTexture"], glb, cache);
+        Magma.material_set(iMaterial, "normalMapEnabled", true);
+    }
+
+    _glb_set_texture(iMaterial, "occlusionMap", material["occlusionTexture"], glb, cache);
+
+    if material["emissiveTexture"].type != .INVALID {
+        _glb_set_texture(iMaterial, "emissiveMap", material["emissiveTexture"], glb, cache);
+        Magma.material_set(iMaterial, "emissiveMapEnabled", true);
+    }
+
+    if material["pbrMetallicRoughness"].type != .INVALID {
+        pbrMetallicRoughness := material["pbrMetallicRoughness"];
+        _glb_set_texture(iMaterial, "albedoMap", pbrMetallicRoughness["baseColorTexture"], glb, cache);
+        _glb_set_texture(iMaterial, "roughnessMetallicMap", pbrMetallicRoughness["metallicRoughnessTexture"], glb, cache);
+    }
+
+    iPrimitive.material = iMaterial;
+    table_add(*cache.material, materialIndex, iMaterial);
 }
 
-_glb_access :: (accessorIndex : u64, glb : Glb, json : JsonValue, $T : Type) -> []T {
-    accessor := json["accessors"][accessorIndex];
-    count := cast(s64) accessor["count"].number;
-    accessorByteOffset : u64 = 0;
-    if accessor["byteOffset"].type == .NUMBER {
-        accessorByteOffset = cast(u64) accessor["byteOffset"].number;
+_glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureRef : JsonValue, glb : Glb, cache : *Cache) {
+    if textureRef.type == .INVALID then return;
+
+    textureIndex := cast(u64) textureRef["index"].number;
+    texture := glb.json["textures"][textureIndex];
+
+    imageIndex := cast(u64) texture["source"].number;
+    image := glb.json["images"][imageIndex];
+    bufferViewIndex := cast(u64) image["bufferView"].number;
+
+    // @todo We could load textures asynchronously using a Thread_Group
+    // @todo Engine-wise texture cache (based on pixels hash).
+    cachedTexture := table_find_pointer(cache.bufferViewToTexture, bufferViewIndex);
+    if cachedTexture != null {
+        Magma.material_set(iMaterial, uniformName, <<cachedTexture);
+        return;
     }
 
-    bufferViewIndex := cast(u64) accessor["bufferView"].number;
-    bufferView := json["bufferViews"][bufferViewIndex];
-    byteOffset : u64 = 0;
-    if bufferView["byteOffset"].type == .NUMBER {
-        byteOffset = cast(u64) bufferView["byteOffset"].number;
-    }
-    byteStride : u64 = 0;
-    if bufferView["byteStride"].type == .NUMBER {
-        byteStride = cast(u64) bufferView["byteStride"].number;
-        _CHECK(byteStride == size_of(T), T.[], "GLB byteStride is not supported yet.");
-    }
+    bufferView := Chamber.glb_get_buffer_view(glb, bufferViewIndex);
 
-    result : []T;
-    result.data = cast(*T) (glb.bin.data + accessorByteOffset + byteOffset);
-    result.count = count;
+    extent : Chamber.uvec2;
+    pixelsRaw := stbi_load_from_memory(bufferView.data, xx bufferView.count, xx *extent.width, xx *extent.height, null, 4);
 
-    return result;
+    pixels : []u8;
+    pixels.data = pixelsRaw;
+    pixels.count = extent.width * extent.height * 4;
+
+    iTexture := Magma.create_texture(iMaterial.shader.renderer.scene.engine);
+    Magma.texture_load_from_memory(iTexture, pixels, extent);
+    stbi_image_free(pixelsRaw);
+
+    Magma.material_set(iMaterial, uniformName, iTexture);
+    table_add(*cache.bufferViewToTexture, bufferViewIndex, iTexture);
 }
+
+#scope_file
 
 #import "Math";
+#import "stb_image";
 #import "Chamber";
+#import "Hash_Table";

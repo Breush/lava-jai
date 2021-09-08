@@ -51,14 +51,14 @@ _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
 _rebuild_vertex_buffer :: (using mesh : *Mesh) -> bool {
     _buffer_holder_init(*vertexBufferHolder, scene.engine, .ShaderVertex, .OnDemandStaging,
                         size_of(VertexInput) * cast(u64) vertices.count);
-    _buffer_holder_copy(vertexBufferHolder, vertices.data, vertexBufferHolder.size);
+    _buffer_holder_copy(*vertexBufferHolder, vertices.data, vertexBufferHolder.size);
     return true;
 }
 
 _rebuild_index_buffer :: (using mesh : *Mesh) -> bool {
     _buffer_holder_init(*indexBufferHolder, scene.engine, .ShaderIndex, .OnDemandStaging,
                         size_of(u16) * cast(u64) indices.count);
-    _buffer_holder_copy(indexBufferHolder, indices.data, indexBufferHolder.size);
+    _buffer_holder_copy(*indexBufferHolder, indices.data, indexBufferHolder.size);
     return true;
 }
 
@@ -67,6 +67,6 @@ _rebuild_instance_buffer :: (using mesh : *Mesh) -> bool {
     // If the mesh is "static", then .OnDemandStaging might make more sense.
     _buffer_holder_init(*instanceBufferHolder, scene.engine, .ShaderVertex, .PersistentStaging,
                         size_of(InstanceInput));
-    _buffer_holder_copy(instanceBufferHolder, instance);
+    _buffer_holder_copy(*instanceBufferHolder, instance);
     return true;
 }

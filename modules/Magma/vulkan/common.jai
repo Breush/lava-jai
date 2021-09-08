@@ -119,6 +119,10 @@ _set_debug_utils_name :: (device : Vk.Device, object : Vk.CommandBuffer, name : 
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.CommandBuffer, name);
 }
 
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.Buffer, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.Buffer, name);
+}
+
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.Image, name : *u8) {
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.Image, name);
 }
@@ -141,4 +145,8 @@ _set_debug_utils_name :: (device : Vk.Device, object : Vk.Framebuffer, name : *u
 
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.CommandPool, name : *u8) {
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.CommandPool, name);
+}
+
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.PipelineLayout, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.PipelineLayout, name);
 }

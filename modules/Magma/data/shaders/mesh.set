@@ -2,11 +2,13 @@
 // Per vertex
 layout(location = 0) in vec3 inVertexPosition;
 layout(location = 1) in vec3 inVertexNormal;
+layout(location = 2) in vec4 inVertexTangent;
+layout(location = 3) in vec2 inVertexUv;
 
 // Per instance
-layout(location = 2) in vec4 inInstanceMatrixRow0;
-layout(location = 3) in vec4 inInstanceMatrixRow1;
-layout(location = 4) in vec4 inInstanceMatrixRow2;
+layout(location = 4) in vec4 inInstanceMatrixRow0;
+layout(location = 5) in vec4 inInstanceMatrixRow1;
+layout(location = 6) in vec4 inInstanceMatrixRow2;
 
 struct MeshShaderObject {
     mat4 matrix;

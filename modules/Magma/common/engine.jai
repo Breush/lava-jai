@@ -23,6 +23,7 @@ Engine :: struct {
     options : Options;
 
     scenes : [..]*Scene;
+    textures : [..]*Texture;
     targets : [..]*Target;
 
     vr : Vr;
@@ -43,10 +44,13 @@ create_engine :: (options : Engine.Options = .{}) -> *Engine {
 destroy_engine :: (engine : *Engine, destroyResources := true) {
     if destroyResources {
         for scene : engine.scenes {
-            destroy_scene(scene, true);
+            destroy_scene(scene, destroyResources);
         }
         for target : engine.targets {
             destroy_target(target);
+        }
+        for texture : engine.textures {
+            destroy_texture(texture);
         }
     }
 
@@ -80,6 +84,7 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
 
     Basic.array_free(engine.scenes);
     Basic.array_free(engine.targets);
+    Basic.array_free(engine.textures);
 
     if resetMemory {
         <<engine = Engine.{};
@@ -100,12 +105,15 @@ engine_draw :: (engine : *Engine) {
     impl_engine_draw(engine);
 }
 
+engine_register :: (engine : *Engine, scene : *Scene) {
+    Basic.array_add(*engine.scenes, scene);
+}
+
 engine_register :: (engine : *Engine, target : *Target) {
     Basic.array_add(*engine.targets, target);
     impl_engine_register(engine, target);
 }
 
-engine_register :: (engine : *Engine, scene : *Scene) {
-    Basic.array_add(*engine.scenes, scene);
-    impl_engine_register(engine, scene);
+engine_register :: (engine : *Engine, texture : *Texture) {
+    Basic.array_add(*engine.textures, texture);
 }

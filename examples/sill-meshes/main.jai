@@ -21,4 +21,10 @@ main :: () {
     Sill.mesh_load_glb(*glbMeshEntity.mesh, "./assets/models/corset.glb");
 
     Sill.engine_run(engine);
+
+    // Just for sakeness, but you shouldn't be destroying anything if you're just
+    // terminating the program.
+    Sill.destroy_engine(engine);
+
+    // Basic.report_memory_leaks();
 }

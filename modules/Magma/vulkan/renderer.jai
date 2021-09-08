@@ -10,6 +10,8 @@
     - *draw*    Means both *render* and *present*
 */
 RendererImpl :: struct {
+    pipelineLayout : Vk.PipelineLayout;
+    renderPass : Vk.RenderPass;
     imageLayout : Vk.ImageLayout;
 
     lastFrameIndex := cast,trunc(u8) ~0;
@@ -37,6 +39,8 @@ impl_renderer_cleanup :: (renderer : *Renderer) {
     }
 
     Vk.destroy_command_pool(engine.device, renderer.commandPool, null);
+
+    Vk.destroy_pipeline_layout(engine.device, renderer.pipelineLayout, null);
 }
 
 _renderer_post_init :: (renderer : *Renderer) -> bool {
@@ -162,7 +166,13 @@ _fill_vertex_input_descs :: ($T : Type, binding : u32, locationStart : u32, inpu
 
     location := locationStart;
     for *member : typeInfo.members {
-        if member.type.runtime_size == 12 { // vec3
+        if member.type.runtime_size == 8 { // vec2
+        `vertexInputAttributeDescs[location].binding = binding;
+        `vertexInputAttributeDescs[location].location = location;
+        `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
+            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32Sfloat;
+            location += 1;
+        } else if member.type.runtime_size == 12 { // vec3
         `vertexInputAttributeDescs[location].binding = binding;
         `vertexInputAttributeDescs[location].location = location;
         `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;

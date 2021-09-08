@@ -1,7 +1,10 @@
 Basic :: #import "Basic";
 
+#load "glb-parser.jai";
 #load "json.jai";
+#load "lib-extensions.jai";
 #load "linear-algebra.jai";
+#load "spirv-parser.jai";
 
 WindowHandle :: struct {
     union {

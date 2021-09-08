@@ -17,6 +17,9 @@ EngineImpl :: struct {
     transferQueue : Vk.Queue;
     presentQueue : Vk.Queue;
 
+    samplerDefault : Vk.Sampler;
+    textureWhite : Texture; // @note Won't be registered within engine
+
     // General purpose commandPool, for one-time submits.
     graphicsCommandPool : Vk.CommandPool;
 
@@ -36,7 +39,12 @@ QueueIndices :: struct {
     present : int = -1;
 }
 
-ShaderModuleMap :: Hash.Table(Key_Type=string, Value_Type=Vk.ShaderModule);
+ShaderModule :: struct {
+    vk : Vk.ShaderModule;
+    using spv : Chamber.Spv;
+}
+
+ShaderModuleMap :: Hash.Table(string, ShaderModule);
 
 impl_engine_init :: (engine : *Engine) {
     _init_instance(engine);
@@ -44,8 +52,16 @@ impl_engine_init :: (engine : *Engine) {
 }
 
 impl_engine_cleanup :: (engine : *Engine) {
+    texture_cleanup(*engine.textureWhite);
+
+    Vk.destroy_sampler(engine.device, engine.samplerDefault, null);
+
     for shaderModule : engine.shaderModuleMap {
-        Vk.destroy_shader_module(engine.device, shaderModule, null);
+        Vk.destroy_shader_module(engine.device, shaderModule.vk, null);
+        for *uniformFrame, uniformName : shaderModule.uniformsFrame {
+            Basic.free(uniformName);
+        }
+        Hash.uninit(*shaderModule.uniformsFrame);
     }
 
     Vk.destroy_command_pool(engine.device, engine.graphicsCommandPool, null);
@@ -88,10 +104,6 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
     }
 }
 
-impl_engine_register :: (engine : *Engine, scene : *Scene) {
-    // Nothing to do yet.
-}
-
 impl_engine_draw :: (engine : *Engine) -> bool {
     if engine.device == null then return true;
     if engine.targets.count == 0 then return true;
@@ -107,23 +119,25 @@ impl_engine_draw :: (engine : *Engine) -> bool {
     return true;
 }
 
-_engine_get_shader_module :: (engine : *Engine, shaderPath : string) -> Vk.ShaderModule {
-    shaderModule, ok := Hash.table_find(engine.shaderModuleMap, shaderPath);
-    if ok then return shaderModule;
+_engine_get_shader_module :: (engine : *Engine, shaderPath : string, $parseUniforms := false) -> *ShaderModule {
+    shaderModule := Hash.table_find_pointer(engine.shaderModuleMap, shaderPath);
+    if shaderModule != null then return shaderModule;
+    shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderPath, .{});
 
     shaderCode, readOk := File.read_entire_file(shaderPath);
     _CHECK(readOk, null, "Unable to read shader file.");
     defer Basic.free(shaderCode);
+
+    shaderModule.spv = Chamber.spirv_parse(shaderCode, parseUniforms);
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
     shaderModuleCI.sType = .ShaderModuleCreateInfo;
     shaderModuleCI.codeSize = cast(u64) shaderCode.count;
     shaderModuleCI.pCode = cast(*u32) shaderCode.data;
 
-    _CHECK(Vk.create_shader_module(engine.device, *shaderModuleCI, null, *shaderModule), null,
+    _CHECK(Vk.create_shader_module(engine.device, *shaderModuleCI, null, *shaderModule.vk), null,
            "Unable to create shader module.");
 
-    Hash.table_add(*engine.shaderModuleMap, key=shaderPath, value=shaderModule);
     return shaderModule;
 }
 
@@ -340,9 +354,34 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
         Vk.load_device_proc(engine.device, *Vk.set_debug_utils_object_name_ext, "vkSetDebugUtilsObjectNameEXT");
     }
 
+    _init_global_resources(engine);
+
+    return true;
+}
+
+_init_global_resources :: (engine : *Engine) -> bool {
     if !_create_graphics_command_pool(engine, *engine.graphicsCommandPool, false) {
         return false;
     }
+
+    samplerCI : Vk.SamplerCreateInfo;
+    samplerCI.sType = .SamplerCreateInfo;
+    samplerCI.magFilter = .Linear;
+    samplerCI.minFilter = .Linear;
+    samplerCI.addressModeU = .Repeat;
+    samplerCI.addressModeV = .Repeat;
+    samplerCI.addressModeW = .Repeat;
+    samplerCI.anisotropyEnable = Vk.FALSE; // @todo Disabled for now, but we kind of want that!
+    samplerCI.unnormalizedCoordinates = Vk.FALSE; // @todo Can be useful for full-screen effects.
+    samplerCI.compareEnable = Vk.FALSE;
+    samplerCI.mipmapMode = .Linear;
+    samplerCI.maxLod = 10; // @todo What is this, exactly?
+
+    _CHECK(Vk.create_sampler(engine.device, *samplerCI, null, *engine.samplerDefault),
+           "Unable to create sampler.");
+
+    texture_init(*engine.textureWhite, engine);
+    texture_load_from_memory(*engine.textureWhite, .[0xFF, 0xFF, 0xFF, 0xFF], .{1, 1});
 
     return true;
 }
@@ -417,7 +456,7 @@ _debug_message_callback :: (
         // @note SteamVR has inconsistent SPIRV, so we still need to continue...
         engine := cast(*Engine) userData;
         if !(engine.options.targetFlags & .Vr) {
-            Basic.exit(1);
+            Basic.assert(false);
         }
     }
     return Vk.FALSE;
