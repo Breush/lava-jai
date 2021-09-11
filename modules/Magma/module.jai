@@ -1,6 +1,5 @@
 /*
     @fixme Magma roadmap:
-    - Autorecompile shaders (shaderc)
     - ComposePostProcess
     - Raytracing
 */

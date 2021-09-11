@@ -22,11 +22,9 @@ _init_pipeline :: (shader : *Shader) -> bool {
     engine := shader.renderer.scene.engine;
 
     // @todo Get the absolute path of the module via meta-programming?
-    vertPath := Basic.tprint("./modules/Magma/data/shaders/materials/%.vert.spv", shader.id);
-    fragPath := Basic.tprint("./modules/Magma/data/shaders/materials/%.frag.spv", shader.id);
-
-    vertShaderModule := _engine_get_shader_module(engine, vertPath);
-    fragShaderModule := _engine_get_shader_module(engine, fragPath, true);
+    shaderPath := Basic.tprint("./modules/Magma/data/shaders/materials/%.glsl", shader.id);
+    vertShaderModule := _engine_get_shader_module(engine, shaderPath, .Vertex);
+    fragShaderModule := _engine_get_shader_module(engine, shaderPath, .Fragment, true);
     shader.uniformsFrame = *fragShaderModule.uniformsFrame;
 
     // --- Pipeline Layout

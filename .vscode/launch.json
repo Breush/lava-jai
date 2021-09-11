@@ -15,7 +15,7 @@
             "environment": [
                 { "name": "VK_LAYER_PATH", "value": "${workspaceFolder}/bindings/Vulkan/layers" },
                 { "name": "XR_API_LAYER_PATH", "value": "${workspaceFolder}/bindings/OpenXr/api-layers" },
-                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/bindings/OpenXr:${env:LD_LIBRARY_PATH}" }
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/bindings/OpenXr:${workspaceFolder}/bindings/Shaderc:${env:LD_LIBRARY_PATH}" }
             ],
             "externalConsole": false,
             "MIMode": "gdb",

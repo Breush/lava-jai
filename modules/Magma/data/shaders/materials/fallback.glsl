@@ -1,8 +1,5 @@
 #version 450
 
-// @fixme Currently to be compiled with:
-// glslc --target-env=vulkan1.2 -DVERTEX -fshader-stage=vertex fallback.glsl -o fallback.vert.spv && glslc --target-env=vulkan1.2 -DFRAGMENT -fshader-stage=fragment fallback.glsl -o fallback.frag.spv
-
 // ------------------
 // ----- VERTEX -----
 

@@ -119,21 +119,28 @@ impl_engine_draw :: (engine : *Engine) -> bool {
     return true;
 }
 
-_engine_get_shader_module :: (engine : *Engine, shaderPath : string, $parseUniforms := false) -> *ShaderModule {
-    shaderModule := Hash.table_find_pointer(engine.shaderModuleMap, shaderPath);
+_engine_get_shader_module :: (engine : *Engine, shaderPath : string, kind : Chamber.ShaderKind, $parseUniforms := false) -> *ShaderModule {
+    macroDefinition : string;
+    if kind == .Vertex {
+        macroDefinition = "VERTEX";
+    } else if kind == .Fragment {
+        macroDefinition = "FRAGMENT";
+    }
+
+    shaderModuleId := Basic.tprint("%.%", shaderPath, macroDefinition);
+    shaderModule := Hash.table_find_pointer(engine.shaderModuleMap, shaderModuleId);
     if shaderModule != null then return shaderModule;
-    shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderPath, .{});
+    shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderModuleId, .{});
 
-    shaderCode, readOk := File.read_entire_file(shaderPath);
-    _CHECK(readOk, null, "Unable to read shader file.");
-    defer Basic.free(shaderCode);
+    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition);
+    defer Basic.array_free(spvCode);
 
-    shaderModule.spv = Chamber.spirv_parse(shaderCode, parseUniforms);
+    shaderModule.spv = Chamber.spirv_parse(spvCode, parseUniforms);
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
     shaderModuleCI.sType = .ShaderModuleCreateInfo;
-    shaderModuleCI.codeSize = cast(u64) shaderCode.count;
-    shaderModuleCI.pCode = cast(*u32) shaderCode.data;
+    shaderModuleCI.codeSize = cast(u64) spvCode.count;
+    shaderModuleCI.pCode = cast(*u32) spvCode.data;
 
     _CHECK(Vk.create_shader_module(engine.device, *shaderModuleCI, null, *shaderModule.vk), null,
            "Unable to create shader module.");

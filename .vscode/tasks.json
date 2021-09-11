@@ -68,7 +68,7 @@
                 "env": {
                     "VK_LAYER_PATH": "${workspaceFolder}/bindings/Vulkan/layers",
                     "XR_API_LAYER_PATH": "${workspaceFolder}/bindings/OpenXr/api-layers",
-                    "LD_LIBRARY_PATH": "${workspaceFolder}/bindings/OpenXr:${env:LD_LIBRARY_PATH}",
+                    "LD_LIBRARY_PATH": "${workspaceFolder}/bindings/OpenXr:${workspaceFolder}/bindings/Shaderc:${env:LD_LIBRARY_PATH}",
                 }
             },
             "presentation": {

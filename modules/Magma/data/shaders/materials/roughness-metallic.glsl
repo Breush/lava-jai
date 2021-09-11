@@ -6,9 +6,6 @@
  * @todo Update it to follow https://github.com/KhronosGroup/glTF-Sample-Viewer/blob/master/source/Renderer/shaders/
  */
 
-// @fixme Currently to be compiled with:
-// glslc --target-env=vulkan1.2 -DVERTEX -fshader-stage=vertex roughness-metallic.glsl -o roughness-metallic.vert.spv && glslc --target-env=vulkan1.2 -DFRAGMENT -fshader-stage=fragment roughness-metallic.glsl -o roughness-metallic.frag.spv
-
 // ------------------
 // ----- VERTEX -----
 

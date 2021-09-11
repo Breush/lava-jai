@@ -81,6 +81,9 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
         }
     }
 
+    uninit(*cache.bufferViewToTexture);
+    uninit(*cache.material);
+
     // Going from glTF right-handed Y up, Z forward,
     // to ours right-handed Z up, X forward.
     // @todo Too bad this does not work...
@@ -221,7 +224,7 @@ _glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, cache : *
                 vertex.normal = normals[i];
             }
             if tangents.count != 0 {
-                Basic.print("HEY\n");
+                vertex.tangent = tangents[i];
             } else {
                 // @todo Autocompute tangents if we don't have them.
                 vertex.tangent = .{1, 0, 0, 1};

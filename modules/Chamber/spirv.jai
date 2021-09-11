@@ -33,7 +33,51 @@ UniformsFrame :: Table(string, struct {
     }
 });
 
-spirv_parse :: (fileContent : string, $parseUniforms := false) -> Spv {
+ShaderKind :: enum {
+    Vertex;
+    Fragment;
+}
+
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string) -> [..]u8 {
+    spvCode : [..]u8;
+
+    glslFileContent, readOk := File.read_entire_file(glslFile);
+    _CHECK(readOk, spvCode, "Unable to read shader file.");
+    defer Basic.free(glslFileContent);
+
+    shadercShaderKind : Shaderc.ShaderKind;
+    if shaderKind == .Vertex {
+        shadercShaderKind = .GlslVertexShader;
+    } else if shaderKind == .Fragment {
+        shadercShaderKind = .GlslFragmentShader;
+    }
+
+    userData : ShadercUserData;
+    compiler := Shaderc.compiler_initialize();
+    compileOptions := Shaderc.compile_options_initialize();
+    Shaderc.compile_options_set_source_language(compileOptions, .Glsl);
+    Shaderc.compile_options_add_macro_definition(compileOptions, macroDefinition.data, xx macroDefinition.count, null, 0);
+    Shaderc.compile_options_set_include_callbacks(compileOptions, _include_resolver, _include_result_releaser, *userData);
+    compilationResult := Shaderc.compile_into_spv(compiler, glslFileContent.data, xx glslFileContent.count, shadercShaderKind,
+                                                  glslFile.data, "main", compileOptions);
+    defer Shaderc.result_release(compilationResult);
+
+    status := Shaderc.result_get_compilation_status(compilationResult);
+    if status != .Success {
+        Basic.print("Error: %\n", Basic.to_string(Shaderc.result_get_error_message(compilationResult)));
+        return spvCode;
+    }
+
+    spvCodeView : []u8;
+    spvCodeView.data = Shaderc.result_get_bytes(compilationResult);
+    spvCodeView.count = xx Shaderc.result_get_length(compilationResult);
+
+    // Making a copy of the code, as it will be wiped out by Shaderc.result_release
+    Basic.array_copy(*spvCode, spvCodeView);
+    return spvCode;
+}
+
+spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
     spv : Spv;
 
     spvCode : []u32;
@@ -243,6 +287,50 @@ SpvDecoration :: enum u32 {
     Offset :: 35;
 }
 
+ShadercUserData :: struct {
+    // @note We are limiting the number of includes to 16 for now,
+    // but as described in the speed tag below, it would be better to
+    // just store their content once and for all.
+    includeResults : [16]Shaderc.IncludeResult;
+    includeResultsCount : u32;
+}
+
+// @todo @speed Looks like shaderc is re-asking for the same files
+// multiple times. We could store them in a persistent way
+// and feed shaderc accordingly. (Need to reduce paths too.)
+_include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
+                      requestingSource : *u8, includeDepth : u64) -> *Shaderc.IncludeResult #c_call {
+    ctx : Context;
+    includeResult : *Shaderc.IncludeResult;
+    push_context ctx {
+        _, requestingPath := Compiler.get_basename_and_path(Basic.to_string(requestingSource));
+        shaderPath := Basic.sprint("%/%", requestingPath, Basic.to_string(requestedSource));
+        shaderCode, readOk := File.read_entire_file(shaderPath);
+
+        userData := cast(*ShadercUserData) _userData;
+        includeResult = *userData.includeResults[userData.includeResultsCount];
+        userData.includeResultsCount += 1;
+
+        includeResult.sourceName = shaderPath.data;
+        includeResult.sourceNameLength = xx shaderPath.count;
+        includeResult.content = shaderCode.data;
+        includeResult.contentLength = xx shaderCode.count;
+        _CHECK(readOk, null, "Unable to read shader file.");
+    }
+    return includeResult;
+}
+
+_include_result_releaser :: (_userData : *void, includeResult : *Shaderc.IncludeResult) #c_call {
+    ctx : Context;
+    push_context ctx {
+        Basic.free(includeResult.content);
+        Basic.free(includeResult.sourceName);
+    }
+}
+
 #scope_file
 
+Compiler :: #import "Compiler"; // For get_basename_and_path
+Shaderc :: #import "Shaderc";
+File :: #import "File";
 #import "Hash_Table";
