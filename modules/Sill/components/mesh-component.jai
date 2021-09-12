@@ -10,12 +10,17 @@ MeshNode :: struct {
 
 MeshComponent :: struct {
     using component : Component;
+    transform : *TransformComponent;
 
     nodes : [..]MeshNode;
+
+    _nodesTransformsDirty : bool;
 }
 
 component_init :: (iMesh : *MeshComponent) {
-    // Nothing to do
+    transform_on_world_transform_changed(iMesh.transform,
+                                         xx (iMesh : *MeshComponent) { iMesh._nodesTransformsDirty = true; },
+                                         iMesh);
 }
 
 component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
@@ -34,6 +39,15 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
 
 component_update :: (iMesh : *MeshComponent, dt : float64) {
     // Nothing to do
+    if iMesh._nodesTransformsDirty {
+        iMesh._nodesTransformsDirty = false;
+        matrix := Chamber.make_mat3x4(iMesh.transform.worldTransform);
+        for *node : iMesh.nodes {
+            if node.parent == -1 {
+                _update_node_transforms(iMesh.nodes, node, matrix);
+            }
+        }
+    }
 }
 
 mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
@@ -46,13 +60,7 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
 }
 
 mesh_commit_nodes :: (iMesh : *MeshComponent) {
-    identity := matrix4x3_identity();
-
-    for *node : iMesh.nodes {
-        if node.parent == -1 {
-            _update_node_transforms(iMesh.nodes, node, identity);
-        }
-    }
+    iMesh._nodesTransformsDirty = true;
 }
 
 // Returns false on error.
@@ -102,11 +110,6 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
 
 #scope_file
 
-Cache :: struct {
-    bufferViewToTexture : Table(u64, *Magma.Texture);
-    material : Table(u64, *Magma.Material);
-}
-
 _update_node_transforms :: (nodes : []MeshNode, node : *MeshNode, parentMatrix : Chamber.mat3x4) {
     node._matrix = Chamber.make_mat3x4(node.transform);
     matrix := parentMatrix * node._matrix;
@@ -133,6 +136,11 @@ _debug_print_nodes :: (nodes : []MeshNode, node : *MeshNode, indentLevel := 0) {
 }
 
 // ----- GLB loading
+
+Cache :: struct {
+    bufferViewToTexture : Table(u64, *Magma.Texture);
+    material : Table(u64, *Magma.Material);
+}
 
 _glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, cache : *Cache, iParentNodeIndex : s64) -> s64 {
     node := glb.json["nodes"][nodeIndex];

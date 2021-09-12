@@ -1,10 +1,11 @@
 /*
     @fixme Sill roadmap:
-    - Entity hierarchy (+ TransformComponent -- and a way to access other components from one)
+    - Entity hierarchy
 */
 
 #load "engine.jai";
 #load "components/mesh-component.jai";
+#load "components/transform-component.jai";
 
 // An entity base, once a struct inherits from it,
 // add components as fields to the latter.

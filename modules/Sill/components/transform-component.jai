@@ -1,0 +1,67 @@
+TransformComponent :: struct {
+    using component : Component;
+
+    using transform : Chamber.trf;
+    worldTransform : Chamber.trf;
+
+    worldTransformChangedCallbacks : [..]struct {
+        function : WorldTransformChangedCallbackType;
+        userData : *void;
+    };
+
+    WorldTransformChangedCallbackType :: #type (userData : *void);
+}
+
+component_init :: (iTransform : *TransformComponent) {
+    // Nothing to do
+}
+
+component_cleanup :: (iTransform : *TransformComponent, resetMemory := true) {
+    if resetMemory {
+        <<iTransform = TransformComponent.{};
+    }
+}
+
+component_update :: (iTransform : *TransformComponent, dt : float64) {
+    // Nothing to do
+}
+
+transform_translate :: (iTransform : *TransformComponent, delta : Chamber.vec3) {
+    iTransform.translation.std += delta;
+    _update_world_transform(iTransform);
+}
+
+transform_rotate :: (iTransform : *TransformComponent, angle : float32, axis : Chamber.vec3) {
+    rotationDelta : Chamber.quat = ---;
+    set_from_axis_and_angle(*rotationDelta, axis, angle);
+    iTransform.rotation = rotationDelta * iTransform.rotation;
+    _update_world_transform(iTransform);
+}
+
+transform_scale :: (iTransform : *TransformComponent, scaleFactor : float32) {
+    iTransform.factor *= scaleFactor;
+    _update_world_transform(iTransform);
+}
+
+transform_on_world_transform_changed :: (iTransform : *TransformComponent, function : TransformComponent.WorldTransformChangedCallbackType, userData : *void) {
+    Basic.array_add(*iTransform.worldTransformChangedCallbacks, .{});
+    callback := Basic.peek_pointer(iTransform.worldTransformChangedCallbacks);
+    callback.function = function;
+    callback.userData = userData;
+}
+
+#scope_file
+
+_update_world_transform :: (iTransform : *TransformComponent) {
+    // @todo No entity parenting yet, so no difference between world and local transforms.
+    iTransform.worldTransform = iTransform.transform;
+    _call_world_transform_changed_callbacks(iTransform);
+}
+
+_call_world_transform_changed_callbacks :: (iTransform : *TransformComponent) {
+    for callback : iTransform.worldTransformChangedCallbacks {
+        callback.function(callback.userData);
+    }
+}
+
+#import "Math";

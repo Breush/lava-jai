@@ -39,6 +39,7 @@ make_example_workspace :: (exampleName : string) {
             break;
         }
     }
+
     Compiler.compiler_end_intercept(workspace);
 
     // Do not generate executable for this build program

@@ -2,10 +2,12 @@
 
 Basic :: #import "Basic";
 Sill :: #import "Sill";
+Math :: #import "Math";
 
 MeshEntity :: struct {
     using entity : Sill.Entity;
 
+    transform : Sill.TransformComponent;
     mesh : Sill.MeshComponent;
 }
 
@@ -19,6 +21,8 @@ main :: () {
     glbMeshEntity.name = "mesh.glb";
 
     Sill.mesh_load_glb(*glbMeshEntity.mesh, "./assets/models/corset.glb");
+    Sill.transform_scale(*glbMeshEntity.transform, 20);
+    Sill.transform_rotate(*glbMeshEntity.transform, Math.PI, .{0, 0, 1});
 
     Sill.engine_run(engine);
 

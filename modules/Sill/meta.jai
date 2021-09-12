@@ -6,8 +6,9 @@
  *
  * ```
  * Player :: struct {
- *     using entity : Sill.Entity;  // Provides hierarchy and transform.
- *     mesh : MeshComponent;        // Provides a way to attach a mesh to the entity.
+ *     using entity : Sill.Entity;
+ *     transform : TransformComponent;  // Provides a way to move the entity around. It is a requirement of MeshComponent.
+ *     mesh : MeshComponent;            // Provides a way to attach a mesh to the entity.
  * }
  * ```
  *
@@ -43,13 +44,35 @@ sill_meta_handle_message :: (message : *Compiler.Message) {
 #scope_file
 
 MetaEntity :: struct {
-    name : string;          // "MyCustomEntity" Expected PascalCase is user source code.
+    structName : string;    // "MyCustomEntity" Expected PascalCase is user source code.
     idCamelCase : string;   // "myCustom"
     idSnakeCase : string;   // "my_custom"
-    components : [..]string;
+    components : [..]Component;
+
+    // This entity has multiple components defined as "some : SomeComponent;"
+    Component :: struct {
+        structName : string;    // "SomeComponent"
+        id : string;            // "some"
+        // SomeComponent's dependencies ids are mapped to MyCustomEntity's components ids.
+        dependencies : [..]struct {
+            id : string;
+            targetComponentId : string;
+        };
+    }
+}
+
+MetaComponent :: struct {
+    structName : string;                    // MyCustomComponent
+    dependencies : [..]Dependency;
+
+    Dependency :: struct {
+        structName : string;
+        id : string;
+    }
 }
 
 metaEntityList : [..]MetaEntity;
+metaComponentList : [..]MetaComponent;
 
 META_STRING :: #string DONE
 SillMeta :: struct {
@@ -59,6 +82,35 @@ SillMeta :: struct {
 DONE
 
 _generated := false;
+
+// Will pass through pointers to get the base type.
+_get_type_module_and_identifier :: (codeTypeInst : *Compiler.Code_Type_Instantiation) -> (string, string) {
+    typeInst := codeTypeInst;
+    if typeInst == null then return "", "";
+
+    while typeInst.pointer_to != null {
+        typeInst = typeInst.pointer_to;
+    }
+
+    type := typeInst.type_valued_expression;
+    if type == null then return "", "";
+
+    while type.kind == .BINARY_OPERATOR {
+        type = (cast(*Compiler.Code_Binary_Operator) type).right;
+    }
+    if type.kind != .IDENT then return "", "";
+
+    typeIdent := cast(*Compiler.Code_Ident) type;
+
+    module : string;
+    if typeIdent.resolved_declaration &&
+        typeIdent.resolved_declaration.location.enclosing_load &&
+        typeIdent.resolved_declaration.location.enclosing_load.enclosing_import {
+        module = typeIdent.resolved_declaration.location.enclosing_load.enclosing_import.module_name;
+    }
+
+    return module, typeIdent.name;
+}
 
 _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
     if codeDeclaration == null then return;
@@ -74,21 +126,17 @@ _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
         if memberCodeDeclaration.flags & .IS_MARKED_AS_USING == 0 then continue;
 
         // Checking if the base struct is Entity from the Sill module.
-        memberCodeType := memberCodeDeclaration.type_inst.type_valued_expression;
-        while memberCodeType.kind == .BINARY_OPERATOR {
-            memberCodeType = (cast(*Compiler.Code_Binary_Operator) memberCodeType).right;
-        }
+        module, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
+        if typeIdentifier == "" then continue;
 
-        if memberCodeType.kind != .IDENT then continue;
-        memberCodeTypeIdent := cast(*Compiler.Code_Ident) memberCodeType;
-
-        if memberCodeTypeIdent.name == "Entity" &&
-           memberCodeTypeIdent.resolved_declaration &&
-           memberCodeTypeIdent.resolved_declaration.location.enclosing_load &&
-           memberCodeTypeIdent.resolved_declaration.location.enclosing_load.enclosing_import &&
-           memberCodeTypeIdent.resolved_declaration.location.enclosing_load.enclosing_import.module_name == "Sill" {
-            _add_meta_entity(codeDeclaration.name, codeStruct.block.members);
-            break;
+        if module == "Sill" {
+            if typeIdentifier == "Entity" {
+                _add_meta_entity(codeDeclaration.name, codeStruct.block.members);
+                break;
+            } else if typeIdentifier == "Component" {
+                _add_meta_component(codeDeclaration.name, codeStruct.block.members);
+                break;
+            }
         }
     }
 }
@@ -97,7 +145,7 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
     Basic.array_resize(*metaEntityList, metaEntityList.count + 1);
     metaEntity := Basic.peek_pointer(metaEntityList);
 
-    metaEntity.name = name;
+    metaEntity.structName = name;
 
     // Extracting canonical name
     nameWords := split_from_pascal_or_camel_case(name);
@@ -118,9 +166,88 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
             continue;
         }
 
-        // @todo Should probably check if it is indeed a component.
-        Basic.array_add(*metaEntity.components, memberCodeDeclaration.name);
+        _, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
+        if typeIdentifier == "" then continue;
+
+        // Ensuring that all components have their dependencies resolved.
+        metaComponent := _find_meta_component(typeIdentifier);
+        if metaComponent == null then continue;
+
+        // @note We know this is a component because we found a matching
+        // meta-component.
+        component : MetaEntity.Component;
+        component.id = memberCodeDeclaration.name;
+        component.structName = typeIdentifier;
+
+        for dependency : metaComponent.dependencies {
+            entityDependeeComponent := _find_meta_entity_component(metaEntity, dependency.structName);
+            if entityDependeeComponent == null {
+                message := Basic.sprint("[SillMeta] Component % of entity % cannot resolve its dependency to %.",
+                                        component.structName, metaEntity.structName, dependency.structName);
+                Compiler.compiler_report(message, Compiler.make_location(memberCodeDeclaration.type_inst));
+                continue;
+            }
+
+            Basic.array_add(*component.dependencies, .{});
+            otherDependency := Basic.peek_pointer(component.dependencies);
+            otherDependency.id = dependency.id;
+            otherDependency.targetComponentId = entityDependeeComponent.id;
+        }
+
+        Basic.array_add(*metaEntity.components, component);
     }
+}
+
+_find_meta_entity_component :: (metaEntity : *MetaEntity, name : string) -> *MetaEntity.Component {
+    for *component : metaEntity.components {
+        if component.structName == name {
+            return component;
+        }
+    }
+    return null;
+}
+
+_add_meta_component :: (name : string, members : []*Compiler.Code_Scope_Entry) {
+    Basic.array_resize(*metaComponentList, metaComponentList.count + 1);
+    metaComponent := Basic.peek_pointer(metaComponentList);
+
+    metaComponent.structName = name;
+
+    for member : members {
+        if member.kind != .DECLARATION then continue;
+
+        memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
+        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING != 0 ||
+           memberCodeDeclaration.flags & .IS_IMPORTED != 0 {
+            continue;
+        }
+
+        _, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
+        if typeIdentifier == "" then continue;
+
+        // @note No better way to find that this is really a component,
+        // because the dependency is of pointer type. So, things might
+        // not be resolved at this time.
+        // @todo Store everything needed, and wait for everything to be ready
+        // before computing MetaEntity dependencies?
+        if !String.ends_with(typeIdentifier, "Component") {
+            continue;
+        }
+
+        dependency : MetaComponent.Dependency;
+        dependency.structName = typeIdentifier;
+        dependency.id = memberCodeDeclaration.name;
+        Basic.array_add(*metaComponent.dependencies, dependency);
+    }
+}
+
+_find_meta_component :: (name : string) -> *MetaComponent {
+    for *metaComponent : metaComponentList {
+        if metaComponent.structName == name {
+            return metaComponent;
+        }
+    }
+    return null;
 }
 
 _generate :: (workspace : s64) {
@@ -135,7 +262,7 @@ _generate :: (workspace : s64) {
 
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n        % : [..]%;", metaEntity.idCamelCase, metaEntity.name);
+        Basic.print_to_builder(*builder, "\n        % : [..]%;", metaEntity.idCamelCase, metaEntity.structName);
     }
     Basic.append(*builder, "\n    }");
 
@@ -145,7 +272,7 @@ _generate :: (workspace : s64) {
     Basic.reset(*builder);
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.name);
+        Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        Basic.array_resize(array, array.count + 1);\n");
         Basic.append(*builder, "        entity := Basic.peek_pointer(engine.entities.mesh);\n");
@@ -155,27 +282,30 @@ _generate :: (workspace : s64) {
     }
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.name);
+        Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
         Basic.append(*builder, "        entity.engine = engine;\n");
         for component : metaEntity.components {
-            Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component);
-            Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", component);
+            Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component.id);
+            for componentDependency : component.dependencies {
+                Basic.print_to_builder(*builder, "        entity.%.% = *entity.%;\n", component.id, componentDependency.id,  componentDependency.targetComponentId);
+            }
+            Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
     }
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.name);
+        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
         for component : metaEntity.components {
-            Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component);
+            Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
     }
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.name);
+        Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.structName);
         for component : metaEntity.components {
-            Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", component);
+            Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
     }

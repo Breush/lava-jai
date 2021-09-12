@@ -73,10 +73,22 @@ trf :: struct {
     factor : float = 1.;
 }
 
+make_mat3x4 :: (transform : trf) -> mat3x4 {
+    matrix : mat3x4;
+    tmpMatrix := make_rotation_matrix3(transform.rotation);
+    tmpMatrix *= make_scaling_mat3(transform.factor);
+
+    copy(*matrix, tmpMatrix);
+    matrix.coef[0][3] = transform.translation.x;
+    matrix.coef[1][3] = transform.translation.y;
+    matrix.coef[2][3] = transform.translation.z;
+    return matrix;
+}
+
 multiply :: (lhs : trf, rhs : trf) -> trf {
     result : trf;
     result.translation.std = lhs.translation + rotate(lhs.scaling * rhs.translation, lhs.rotation);
-    result.scaling = lhs.scaling * rhs.scaling;
+    result.factor = lhs.factor * rhs.factor;
     result.rotation = lhs.rotation * rhs.rotation;
     return result;
 }
@@ -94,9 +106,9 @@ make_scaling_mat3 :: (scaling : vec3) -> mat3 {
     return matrix;
 }
 
-make_scaling_mat4 :: (factor : float32) -> mat4 {
-    matrix : mat4 = ---;
-    matrix = inline matrix4_identity();
+make_scaling_mat3 :: (factor : float32) -> mat3 {
+    matrix : mat3 = ---;
+    matrix = inline matrix3_identity();
     matrix.coef[0][0] = factor;
     matrix.coef[1][1] = factor;
     matrix.coef[2][2] = factor;
