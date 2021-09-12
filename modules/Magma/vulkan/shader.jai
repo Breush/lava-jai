@@ -21,8 +21,7 @@ impl_shader_cleanup :: (shader : *Shader) {
 _init_pipeline :: (shader : *Shader) -> bool {
     engine := shader.renderer.scene.engine;
 
-    // @todo Get the absolute path of the module via meta-programming?
-    shaderPath := Basic.tprint("./modules/Magma/data/shaders/materials/%.glsl", shader.id);
+    shaderPath := Basic.tprint("%/shaders/materials/%.glsl", DATA_PATH, shader.id);
     vertShaderModule := _engine_get_shader_module(engine, shaderPath, .Vertex);
     fragShaderModule := _engine_get_shader_module(engine, shaderPath, .Fragment, true);
     shader.uniformsFrame = *fragShaderModule.uniformsFrame;

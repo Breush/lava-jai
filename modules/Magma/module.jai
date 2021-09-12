@@ -19,6 +19,8 @@
 
 #scope_module
 
+DATA_PATH :: #run Basic.tprint("%data", #filepath);
+
 Basic :: #import "Basic";
 File :: #import "File";
 Chamber :: #import "Chamber";
