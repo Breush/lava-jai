@@ -33,7 +33,7 @@ eye_init :: (eye : *Eye, extent : Chamber.uvec2) {
     eye.extent = extent;
     eye.viewMatrix = Chamber.look_at_matrix(.{0, 0, 0}, .{1, 0, 0});
     Chamber.infinite_perspective_projection(*eye.projectionMatrix, #run Chamber.to_radians(100.),
-                                            cast(float32) extent.width / cast(float32) extent.height, 0.1);
+                                            cast(float32) extent.width / cast(float32) extent.height, 0.01);
     eye_commit(eye);
 }
 

@@ -117,6 +117,8 @@ _init_pipeline :: (shader : *Shader) -> bool {
     viewport : Vk.Viewport;
     viewport.width = cast(float32) eye.extent.width;
     viewport.height = cast(float32) eye.extent.height;
+    viewport.minDepth = 0.;
+    viewport.maxDepth = 1.;
 
     scissor : Vk.Rect2D;
     scissor.extent.width = eye.extent.width;
@@ -153,7 +155,7 @@ _init_pipeline :: (shader : *Shader) -> bool {
     depthStencilStateCI.sType = .PipelineDepthStencilStateCreateInfo;
     depthStencilStateCI.depthTestEnable = Vk.TRUE;
     depthStencilStateCI.depthWriteEnable = Vk.TRUE;
-    depthStencilStateCI.depthCompareOp = Vk.CompareOp.Greater;
+    depthStencilStateCI.depthCompareOp = .Greater;
     depthStencilStateCI.depthBoundsTestEnable = Vk.FALSE;
     depthStencilStateCI.stencilTestEnable = Vk.FALSE;
 

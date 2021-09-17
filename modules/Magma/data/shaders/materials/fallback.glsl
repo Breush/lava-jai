@@ -67,9 +67,6 @@ void main() {
 
     vec3 color = max(vec3(0.01), kd * diffuse + ks * specular);
     outColor = vec4(color, 1.0);
-
-    // :FragDepthNeeded
-    gl_FragDepth = position.w;
 }
 
 #endif

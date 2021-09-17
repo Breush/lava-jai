@@ -218,9 +218,6 @@ void main() {
     color += emissive;
 
     outColor = vec4(color, 1);
-
-    // :FragDepthNeeded
-    gl_FragDepth = position.w;
 }
 
 #endif

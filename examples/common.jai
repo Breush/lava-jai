@@ -43,9 +43,5 @@ make_example_workspace :: (exampleName : string) {
     Compiler.compiler_end_intercept(workspace);
 
     // Do not generate executable for this build program
-    {
-        options := Compiler.get_build_options();
-        options.output_type = .NO_OUTPUT;
-        Compiler.set_build_options(options);
-    }
+    Compiler.set_build_options_dc(.{ do_output = false });
 }
