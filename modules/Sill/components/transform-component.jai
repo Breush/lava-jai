@@ -17,6 +17,8 @@ component_init :: (iTransform : *TransformComponent) {
 }
 
 component_cleanup :: (iTransform : *TransformComponent, resetMemory := true) {
+    Basic.array_free(iTransform.worldTransformChangedCallbacks);
+
     if resetMemory {
         <<iTransform = TransformComponent.{};
     }
@@ -46,6 +48,13 @@ transform_scale :: (iTransform : *TransformComponent, scaleFactor : float32) {
     if abs(scaleFactor - 1.) < 0.001 then return;
 
     iTransform.factor *= scaleFactor;
+    _update_world_transform(iTransform);
+}
+
+transform_origin_target :: (iTransform : *TransformComponent, origin : Chamber.vec3, target : Chamber.vec3, referenceUp := Chamber.vec3.{0, 0, 1}) {
+    iTransform.translation = origin;
+    // @todo @speed Could probably be optimized, no need to compute a temporary matrix here.
+    iTransform.rotation = get_rotation(Chamber.orientation_matrix(origin, target, referenceUp));
     _update_world_transform(iTransform);
 }
 

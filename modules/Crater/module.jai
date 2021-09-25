@@ -11,6 +11,9 @@ Window :: struct {
     mousePosition : Chamber.svec2;
     opened : bool;
 
+    pointerAutoCentered := false;
+    pointerHidden := false;
+
     using impl : WindowImpl;
 
     allocator : Allocator;
@@ -48,7 +51,7 @@ Event :: struct {
     }
 
     MouseWheelData :: struct {
-        delta : float32;
+        dy : float32;
     }
 
     KeyData :: struct {
@@ -82,7 +85,7 @@ Key :: enum {
     ControlLeft; ControlRight;
     ShiftLeft; ShiftRight;
     Delete;
-    Tab; Backspace;
+    Tab; Space; Backspace;
 }
 
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
@@ -152,4 +155,14 @@ window_close :: (window : *Window) {
     if !window.opened then return;
     window.opened = false;
     impl_window_close(window);
+}
+
+window_pointer_auto_centered :: (window : *Window, autoCentered := true) {
+    window.pointerAutoCentered = autoCentered;
+    impl_window_update_pointer_auto_centered(window);
+}
+
+window_pointer_hidden :: (window : *Window, hidden := true) {
+    window.pointerHidden = hidden;
+    impl_window_update_pointer_hidden(window);
 }

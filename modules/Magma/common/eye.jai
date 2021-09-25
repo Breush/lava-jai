@@ -114,33 +114,7 @@ orbit_camera_add_to_radius :: (using orbitCamera : *OrbitCamera, delta : float32
 }
 
 orbit_camera_rotate_around_target :: (orbitCamera : *OrbitCamera, longitudeAngle : float32, latitudeAngle : float32, $commit := true) {
-    relativePosition : Chamber.vec3;
-    relativePosition.std = orbitCamera.origin - orbitCamera.target;
-
-    if longitudeAngle < -0.001 || longitudeAngle > 0.001 {
-        longitudeDelta := Chamber.rotate_z(relativePosition, longitudeAngle) - relativePosition;
-        orbitCamera.origin.std += longitudeDelta;
-    }
-
-    if latitudeAngle < -0.001 || latitudeAngle > 0.001 {
-        currentLatitudeAngle := asin(relativePosition.z / length(relativePosition));
-        if (currentLatitudeAngle + latitudeAngle > PI / 2. - 0.01) {
-            latitudeAngle = PI / 2. - 0.01 - currentLatitudeAngle;
-        }
-        else if (currentLatitudeAngle + latitudeAngle < -PI / 2. + 0.01) {
-            latitudeAngle = -PI / 2. + 0.01 - currentLatitudeAngle;
-        }
-
-        axis : Chamber.vec3 = ---;
-        axis.x = relativePosition.y;
-        axis.y = -relativePosition.x;
-        axis.z = 0;
-        normalize(*axis);
-
-        latitudeDelta := Chamber.rotate(relativePosition, latitudeAngle, axis) - relativePosition;
-        orbitCamera.origin.std += latitudeDelta;
-    }
-
+    orbitCamera.origin.std += Chamber.rotate_around_target(orbitCamera.origin, orbitCamera.target, latitudeAngle, longitudeAngle);
     orbitCamera.eye.viewMatrix = Chamber.look_at_matrix(orbitCamera.origin, orbitCamera.target);
 
     #if commit {

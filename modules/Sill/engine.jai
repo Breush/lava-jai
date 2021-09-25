@@ -1,9 +1,16 @@
 EngineBase :: struct {
     window : *Crater.Window;
     renderEngine : *Magma.Engine;
-    windowTarget : *Magma.WindowTarget;
     scene : *Magma.Scene;
+
+    windowTarget : *Magma.WindowTarget;
     renderer : *Magma.Renderer;
+
+    vrTarget : *Magma.VrTarget;
+    vrLeftRenderer : *Magma.Renderer;
+    vrRightRenderer : *Magma.Renderer;
+
+    input : Input;
 }
 
 Engine :: struct ($_Meta : Type) {
@@ -33,26 +40,39 @@ destroy_engine :: (engine : *Engine) {
     }
 }
 
-// :CameraInEngineTBR
-camera : Magma.OrbitCamera;
-
+// @todo Enable VR on option, currently doing so as long as available.
 engine_init :: (engine : *EngineBase) {
     // Windowing
     engine.window = Crater.create_window(.{width=1600, height=900}, "sill");
 
     // Rendering
-    engine.renderEngine = Magma.create_engine();
+    renderEngineOptions : Magma.Engine.Options;
+    renderEngineOptions.targetFlags |= .Vr;
+    engine.renderEngine = Magma.create_engine(renderEngineOptions);
     engine.windowTarget = Magma.create_window_target(engine.renderEngine, Crater.window_get_handle(engine.window));
     engine.scene = Magma.create_scene(engine.renderEngine);
-    engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
-    Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.renderer));
 
-    // :CameraInEngineTBR
-    camera = Magma.renderer_make_orbit_camera(engine.renderer);
-    Magma.orbit_camera_origin_target(*camera, .{2, 0, 0.5}, .{0, 0, 0.5});
+    if (engine.renderEngine.vr.enabled) {
+        engine.vrTarget = Magma.create_vr_target(engine.renderEngine);
+
+        leftEyeExtent := Magma.vr_target_recommended_eye_extent(engine.vrTarget, .Left);
+        rightEyeExtent := Magma.vr_target_recommended_eye_extent(engine.vrTarget, .Right);
+        engine.vrLeftRenderer = Magma.create_forward_renderer(engine.scene, leftEyeExtent);
+        engine.vrRightRenderer = Magma.create_forward_renderer(engine.scene, rightEyeExtent);
+
+        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrLeftRenderer), Magma.VrTarget.LEFT_EYE_BIND_INDEX);
+        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrRightRenderer), Magma.VrTarget.RIGHT_EYE_BIND_INDEX);
+
+        // @todo Companion window, probably with own renderer.
+        engine.renderer = engine.vrLeftRenderer;
+    } else {
+        engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
+        Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.renderer));
+    }
 }
 
 engine_cleanup :: (engine : *Engine, resetMemory := true) {
+    _input_cleanup(*engine.input);
     engine.Meta._cleanup_entities(engine);
 
     if resetMemory {
@@ -90,7 +110,8 @@ engine_run :: (engine : *Engine) {
         updateTimeLag += elapsedTime;
         while (updateTimeLag >= updateTime) {
             Basic.reset_temporary_storage();
-            _engine_handle_input(engine);
+            _input_reset(*engine.input);
+            _engine_handle_input_events(engine);
             engine.Meta._update_entities(engine, updateTime);
             updateTimeLag -= updateTime;
         }
@@ -103,7 +124,7 @@ engine_run :: (engine : *Engine) {
 
 #scope_file
 
-_engine_handle_input :: (engine : *EngineBase) {
+_engine_handle_input_events :: (engine : *EngineBase) {
     event := Crater.window_poll_event(engine.window);
 
     while event.kind != Crater.Event.Kind.None {
@@ -116,16 +137,8 @@ _engine_handle_input :: (engine : *EngineBase) {
             Crater.destroy_window(engine.window);
             return;
         }
-        // @fixme :CameraInEngineTBR Have actions and BehaviorComponent to
-        // allow that code to be outside the engine.
-        else if event.kind == .MousePointerMoved {
-            dx := cast(float) event.mousePointer.dx / 100.;
-            dy := cast(float) event.mousePointer.dy / 100.;
-            Magma.orbit_camera_rotate_around_target(*camera, -dx, dy);
-        }
-        else if event.kind == .MouseWheelScrolled {
-            Magma.orbit_camera_add_to_radius(*camera, -Magma.orbit_camera_radius(*camera) * event.mouseWheel.delta / 10.);
-        }
+
+        _input_handle_event(*engine.input, event);
 
         event = Crater.window_poll_event(engine.window);
     }

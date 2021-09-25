@@ -294,6 +294,40 @@ rotate :: (v : vec3, angle : float32, axis : vec3) -> vec3 {
     return result;
 }
 
+// Given an origin/target, returns the delta to be applied to the origin to rotate around the target.
+rotate_around_target :: (origin : vec3, target : vec3,
+                         longitudeAngle : float32, latitudeAngle : float32) -> vec3 {
+    delta : vec3;
+    relativePosition : vec3;
+    relativePosition.std = origin - target;
+
+    if longitudeAngle < -0.001 || longitudeAngle > 0.001 {
+        longitudeDelta := rotate_z(relativePosition, longitudeAngle) - relativePosition;
+        delta.std += longitudeDelta;
+    }
+
+    if latitudeAngle < -0.001 || latitudeAngle > 0.001 {
+        currentLatitudeAngle := asin(relativePosition.z / length(relativePosition));
+        if (currentLatitudeAngle + latitudeAngle > PI / 2. - 0.01) {
+            latitudeAngle = PI / 2. - 0.01 - currentLatitudeAngle;
+        }
+        else if (currentLatitudeAngle + latitudeAngle < -PI / 2. + 0.01) {
+            latitudeAngle = -PI / 2. + 0.01 - currentLatitudeAngle;
+        }
+
+        axis : vec3 = ---;
+        axis.x = relativePosition.y;
+        axis.y = -relativePosition.x;
+        axis.z = 0;
+        normalize(*axis);
+
+        latitudeDelta := rotate(relativePosition, latitudeAngle, axis) - relativePosition;
+        delta.std += latitudeDelta;
+    }
+
+    return delta;
+}
+
 #scope_file
 
 #import "Math";

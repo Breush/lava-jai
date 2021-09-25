@@ -13,6 +13,7 @@ WindowImpl :: struct {
     xcbScreen : *Xcb.Screen;
     xcbProtocolsReply : *Xcb.InternAtomReply;
     xcbDeleteWindowReply : *Xcb.InternAtomReply;
+    xcbEmptyCursor : u32;
 
     xkbContext : *Xkb.Context;
     xkbKeymap : *Xkb.Keymap;
@@ -21,8 +22,14 @@ WindowImpl :: struct {
     xkbComposeState : *Xkb.ComposeState;
 
     // To prevent big deltas when moving the mouse the first time.
-    needsMousePositionReset : bool;
+    pointerPositionToReset : bool;
+    pointerCurrentlyCentered : bool;
 }
+
+EVENT_MASKS :: cast(u32) (Xcb.EventMask.PointerMotion |
+                          Xcb.EventMask.ButtonPress |
+                          Xcb.EventMask.KeyPress | Xcb.EventMask.KeyRelease |
+                          Xcb.EventMask.StructureNotify);
 
 impl_window_init :: (window : *Window) -> bool {
     if !setup_xcb(window) then return false;
@@ -30,15 +37,12 @@ impl_window_init :: (window : *Window) -> bool {
 
     // Creating window indeed
     window.xcbId = Xcb.generate_id(window.xcbConnection);
-    window.needsMousePositionReset = true;
+    window.pointerPositionToReset = true;
 
     valueMask := cast(u32) (Xcb.Cw.BackPixel | Xcb.Cw.EventMask);
     valueList : [8]u32;
     valueList[0] = window.xcbScreen.blackPixel;
-    valueList[1] = cast(u32) (Xcb.EventMask.PointerMotion |
-                              Xcb.EventMask.ButtonPress |
-                              Xcb.EventMask.KeyPress | Xcb.EventMask.KeyRelease |
-                              Xcb.EventMask.StructureNotify);
+    valueList[1] = EVENT_MASKS;
 
     Xcb.create_window(window.xcbConnection, 0, window.xcbId, window.xcbScreen.root, 0, 0, window.videoMode.width, window.videoMode.height, 0,
                       cast(u16) Xcb.WindowClass.InputOutput, window.xcbScreen.rootVisual, valueMask, *valueList[0]);
@@ -80,15 +84,15 @@ impl_window_process_events :: (window : *Window) {
         context.default_allocator(Allocator_Mode.FREE, 0, 0, event, null);
     }
 
-    // if (m_mouseKeptCentered && !m_mouseCurrentlyCentered) {
-    //     mouseMoveIgnored(true);
-    //     xcb_warp_pointer(m_connection, XCB_NONE, m_window, 0, 0, 0, 0,
-    //                      m_extent.width / 2, m_extent.height / 2);
-    //     mouseMoveIgnored(false);
+    if window.pointerAutoCentered && !window.pointerCurrentlyCentered {
+        _ignore_pointer_move(window, true);
+        Xcb.warp_pointer(window.xcbConnection, Xcb.NONE, window.xcbId, 0, 0, 0, 0,
+                         cast(s16) window.videoMode.width / 2, cast(s16) window.videoMode.height / 2);
+        _ignore_pointer_move(window, false);
 
-    //     m_mouseCurrentlyCentered = true;
-    //     m_mousePositionToReset = true; // Won't emit delta for the centering
-    // }
+        window.pointerCurrentlyCentered = true;
+        window.pointerPositionToReset = true; // Won't emit delta for the centering
+    }
 }
 
 impl_window_close :: (window : *Window) {
@@ -100,6 +104,25 @@ impl_window_close :: (window : *Window) {
     // in C code, so we don't want to call any other allocators.
     context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
     context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
+}
+
+impl_window_update_pointer_auto_centered :: (window : *Window) {
+    window.pointerCurrentlyCentered = false;
+}
+
+impl_window_update_pointer_hidden :: (window : *Window) {
+    if window.xcbEmptyCursor == Xcb.NONE {
+        window.xcbEmptyCursor = Xcb.generate_id(window.xcbConnection);
+        pixmap := Xcb.generate_id(window.xcbConnection);
+        Xcb.create_pixmap(window.xcbConnection, 1, pixmap, window.xcbId, 1, 1);
+        Xcb.create_cursor(window.xcbConnection, window.xcbEmptyCursor, pixmap, pixmap,
+                          0, 0, 0, 0, 0, 0, 0, 0);
+        Xcb.free_pixmap(window.xcbConnection, pixmap);
+    }
+
+    values := ifx window.pointerHidden then window.xcbEmptyCursor else Xcb.NONE;
+    Xcb.change_window_attributes(window.xcbConnection, window.xcbId, cast(u32) Xcb.Cw.Cursor, *values);
+    Xcb.flush(window.xcbConnection);
 }
 
 #scope_file
@@ -210,16 +233,16 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         event.mousePointer.dy = event.mousePointer.y - cast(s16) window.mousePosition.y;
 
 
-        if (window.needsMousePositionReset) {
+        if (window.pointerPositionToReset) {
             window.mousePosition.x = motionNotifyEvent.eventX;
             window.mousePosition.y = motionNotifyEvent.eventY;
             event.mousePointer.dx = 0;
             event.mousePointer.dy = 0;
-            window.needsMousePositionReset = false;
+            window.pointerPositionToReset = false;
         } else {
             window.mousePosition.x = event.mousePointer.x;
             window.mousePosition.y = event.mousePointer.y;
-            // m_mouseCurrentlyCentered = false;
+            window.pointerCurrentlyCentered = false;
         }
 
         Basic.array_add(*window.events, event);
@@ -292,9 +315,9 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
             event : Event;
             event.kind = Event.Kind.MouseWheelScrolled;
             if buttonPressEvent.detail == 4 {
-                event.mouseWheel.delta = 1.;
+                event.mouseWheel.dy = 1.;
             } else {
-                event.mouseWheel.delta = -1.;
+                event.mouseWheel.dy = -1.;
             }
             Basic.array_add(*window.events, event);
         }
@@ -303,6 +326,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
 
 _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     if keysym == {
+    case Xkb.KEY_space; return Key.Space;
     case Xkb.KEY_a; #through; case Xkb.KEY_A; return Key.A;
     case Xkb.KEY_b; #through; case Xkb.KEY_B; return Key.B;
     case Xkb.KEY_c; #through; case Xkb.KEY_C; return Key.C;
@@ -358,4 +382,12 @@ _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     }
 
     return Key.Unknown;
+}
+
+_ignore_pointer_move :: (window : *Window, ignore := true) {
+    eventMasks : = EVENT_MASKS;
+    if ignore {
+        eventMasks ^= cast(u32) Xcb.EventMask.PointerMotion;
+    }
+    Xcb.change_window_attributes(window.xcbConnection, window.xcbId, cast(u32) Xcb.Cw.EventMask, *eventMasks);
 }
