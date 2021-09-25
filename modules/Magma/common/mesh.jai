@@ -92,7 +92,7 @@ mesh_commit_indices :: (mesh : *Mesh) {
 
 mesh_commit_instance :: (mesh : *Mesh, $copyTrs := true) {
     #if copyTrs {
-        mesh.instance.matrix = Chamber.make_mat3x4(mesh.transform);
+        mesh.instance.matrix = Chamber.make_matrix(mesh.transform);
     } else {
         mesh.transform = Chamber.make_trs(mesh.instance.matrix);
     }

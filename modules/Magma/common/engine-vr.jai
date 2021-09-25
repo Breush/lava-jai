@@ -141,7 +141,7 @@ vr_vulkan_required_instance_extensions :: (vr : *Vr) -> []string {
         }
     }
     if vr.vulkanInstanceExtensions != null {
-        extensions := String.split(Basic.to_string(vr.vulkanInstanceExtensions), " ");
+        extensions := String.split(Basic.to_string(vr.vulkanInstanceExtensions), " "); // @note Temporary allocator
         // Forcing zero-terminated strings.
         for extension : extensions {
             extension.data[extension.count] = 0;
@@ -163,7 +163,7 @@ vr_vulkan_required_device_extensions :: (vr : *Vr) -> []string {
         }
     }
     if vr.vulkanDeviceExtensions != null {
-        extensions := String.split(Basic.to_string(vr.vulkanDeviceExtensions), " ");
+        extensions := String.split(Basic.to_string(vr.vulkanDeviceExtensions), " "); // @note Temporary allocator
         // Forcing zero-terminated strings.
         for extension : extensions {
             extension.data[extension.count] = 0;

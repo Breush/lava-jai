@@ -199,7 +199,6 @@ _init_instance :: (engine : *Engine) -> bool {
     // VR extensions
     if engine.vr.enabled {
         extensions := vr_vulkan_required_instance_extensions(*engine.vr);
-        defer Basic.array_free(extensions);
         for extension : extensions {
             Basic.array_add(*enabledExtensions, extension.data);
         }
@@ -325,7 +324,6 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     // VR extensions
     if engine.vr.enabled {
         extensions := vr_vulkan_required_device_extensions(*engine.vr);
-        defer Basic.array_free(extensions);
         for extension : extensions {
             Basic.array_add(*enabledExtensions, extension.data);
         }

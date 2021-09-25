@@ -298,16 +298,6 @@ _init_swapchain :: (vrTarget : *VrTarget) -> bool {
     Xr.array_fill(*swapchainFormats, Xr.enumerate_swapchain_formats, vrTarget.session);
     defer Basic.array_free(swapchainFormats);
 
-    bestFormatIndex := -1;
-    for format, formatIndex : swapchainFormats {
-        if cast(Vk.Format) format == .R8G8B8A8Srgb {
-            bestFormatIndex = formatIndex;
-            break;
-        }
-    }
-
-    _CHECK(bestFormatIndex != -1, "Could not find valid OpenXR swapchain format.");
-
     for *swapchainInfo, viewIndex : vrTarget.swapchainInfos {
         // @todo Make that user configurable?
         swapchainInfo.extent.width = vrTarget.configurationViews[viewIndex].recommendedImageRectWidth;
@@ -316,7 +306,7 @@ _init_swapchain :: (vrTarget : *VrTarget) -> bool {
         swapchainCI : Xr.SwapchainCreateInfo;
         swapchainCI.type = .TypeSwapchainCreateInfo;
         swapchainCI.arraySize = 1;
-        swapchainCI.format = bestFormatIndex;
+        swapchainCI.format = cast(s64) Vk.Format.R8G8B8A8Srgb;
         swapchainCI.width = swapchainInfo.extent.width;
         swapchainCI.height = swapchainInfo.extent.height;
         swapchainCI.mipCount = 1;
@@ -324,7 +314,7 @@ _init_swapchain :: (vrTarget : *VrTarget) -> bool {
         swapchainCI.sampleCount = 1;
         swapchainCI.usageFlags = Xr.SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
         _CHECK(Xr.create_swapchain(vrTarget.session, *swapchainCI, *swapchainInfo.swapchain),
-               "Unable to create OpenXR session.");
+               "Unable to create OpenXR swapchain.");
 
         Xr.array_fill_stype(*swapchainInfo.images, Xr.enumerate_swapchain_images, swapchainInfo.swapchain, .TypeSwapchainImageVulkanKhr);
 

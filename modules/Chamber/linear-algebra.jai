@@ -32,8 +32,8 @@ trs :: struct {
     scaling : vec3 = .{1, 1, 1};
 }
 
-make_mat3x4 :: (transform : trs) -> mat3x4 {
-    matrix : mat3x4;
+make_matrix :: (transform : trs, $T := mat3x4) -> T {
+    matrix : T;
     tmpMatrix := make_rotation_matrix3(transform.rotation);
     tmpMatrix *= make_scaling_mat3(transform.scaling);
 
@@ -41,6 +41,11 @@ make_mat3x4 :: (transform : trs) -> mat3x4 {
     matrix.coef[0][3] = transform.translation.x;
     matrix.coef[1][3] = transform.translation.y;
     matrix.coef[2][3] = transform.translation.z;
+
+    #if T == mat4 {
+        matrix.coef[3][3] = 1;
+    }
+
     return matrix;
 }
 
@@ -73,8 +78,8 @@ trf :: struct {
     factor : float = 1.;
 }
 
-make_mat3x4 :: (transform : trf) -> mat3x4 {
-    matrix : mat3x4;
+make_matrix :: (transform : trf, $T := mat3x4) -> T {
+    matrix : T;
     tmpMatrix := make_rotation_matrix3(transform.rotation);
     tmpMatrix *= make_scaling_mat3(transform.factor);
 
@@ -82,6 +87,11 @@ make_mat3x4 :: (transform : trf) -> mat3x4 {
     matrix.coef[0][3] = transform.translation.x;
     matrix.coef[1][3] = transform.translation.y;
     matrix.coef[2][3] = transform.translation.z;
+
+    #if T == mat4 {
+        matrix.coef[3][3] = 1;
+    }
+
     return matrix;
 }
 
