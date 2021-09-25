@@ -38,10 +38,9 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
 }
 
 component_update :: (iMesh : *MeshComponent, dt : float64) {
-    // Nothing to do
     if iMesh._nodesTransformsDirty {
         iMesh._nodesTransformsDirty = false;
-        matrix := Chamber.make_mat3x4(iMesh.transform.worldTransform);
+        matrix := Chamber.make_matrix(iMesh.transform.worldTransform);
         for *node : iMesh.nodes {
             if node.parent == -1 {
                 _update_node_transforms(iMesh.nodes, node, matrix);
@@ -61,6 +60,64 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
 
 mesh_commit_nodes :: (iMesh : *MeshComponent) {
     iMesh._nodesTransformsDirty = true;
+}
+
+mesh_make_plane :: (iMesh : *MeshComponent,
+                    extent := Chamber.uvec2.{1, 1}) {
+    mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+
+    // Positions
+    positions := Chamber.vec3.[
+        // Bottom
+        .{ 1., -1., 0.},
+        .{-1., -1., 0.},
+        .{-1.,  1., 0.},
+        .{ 1.,  1., 0.},
+        // Top
+        .{ 1., -1., 0.},
+        .{ 1.,  1., 0.},
+        .{-1.,  1., 0.},
+        .{-1., -1., 0.},
+    ];
+    for *position : positions {
+        position.x *= extent.width / 2.;
+        position.y *= extent.height / 2.;
+    }
+
+    normals := Chamber.vec3.[
+        // Bottom
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        // Top
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+    ];
+
+    indices := u16.[
+        0,  1,  2,  2,  3,  0,
+        4,  5,  6,  6,  7,  4,
+    ];
+
+    Basic.array_resize(*mesh.vertices, positions.count);
+    for *vertex, i : mesh.vertices {
+        vertex.position = positions[i];
+        vertex.normal = normals[i];
+    }
+
+    Basic.array_resize(*mesh.indices, indices.count);
+    memcpy(mesh.indices.data, indices.data, size_of(u16) * indices.count);
+
+    Magma.mesh_commit_vertices(mesh);
+    Magma.mesh_commit_indices(mesh);
+
+    // Node transform
+    iNode := Basic.array_add(*iMesh.nodes);
+
+    Basic.array_add(*iNode.primitives, mesh);
 }
 
 // Returns false on error.
@@ -111,7 +168,7 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
 #scope_file
 
 _update_node_transforms :: (nodes : []MeshNode, node : *MeshNode, parentMatrix : Chamber.mat3x4) {
-    node._matrix = Chamber.make_mat3x4(node.transform);
+    node._matrix = Chamber.make_matrix(node.transform);
     matrix := parentMatrix * node._matrix;
 
     for primitive : node.primitives {
@@ -150,12 +207,11 @@ _glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, cache : *
 
     _CHECK(children.type != .INVALID || nodeMesh.type != .INVALID, -1, "GLB node is empty and has no children. It has been removed.");
 
-    Basic.array_resize(*iMesh.nodes, iMesh.nodes.count + 1);
-
     // Node transform
+    iNode := Basic.array_add(*iMesh.nodes);
     iNodeIndex := iMesh.nodes.count - 1;
-    iMesh.nodes[iNodeIndex].transform = Chamber.glb_get_transform(node);
-    iMesh.nodes[iNodeIndex].parent = iParentNodeIndex;
+    iNode.transform = Chamber.glb_get_transform(node);
+    iNode.parent = iParentNodeIndex;
 
     // Load geometry if any
     if nodeMesh.type == .NUMBER {
@@ -167,6 +223,8 @@ _glb_load_node :: (iMesh : *MeshComponent, nodeIndex : u64, glb : Glb, cache : *
         for child : children.array {
             iChildNodeIndex := _glb_load_node(iMesh, cast(u64) child.number, glb, cache, iNodeIndex);
             if iChildNodeIndex != -1 {
+                // @note Can't use iNode here directly as it's pointer might be invalidated
+                // by new nodes.
                 Basic.array_add(*iMesh.nodes[iNodeIndex].children, iChildNodeIndex);
             }
         }

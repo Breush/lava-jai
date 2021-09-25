@@ -4,6 +4,9 @@
 */
 
 #load "engine.jai";
+#load "input.jai";
+#load "components/behavior-component.jai";
+#load "components/camera-component.jai";
 #load "components/mesh-component.jai";
 #load "components/transform-component.jai";
 

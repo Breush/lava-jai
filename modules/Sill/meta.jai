@@ -75,6 +75,8 @@ metaEntityList : [..]MetaEntity;
 metaComponentList : [..]MetaComponent;
 
 META_STRING :: #string DONE
+#import "Bucket_Array";
+
 SillMeta :: struct {
 %1
 %2
@@ -142,9 +144,7 @@ _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
 }
 
 _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
-    Basic.array_resize(*metaEntityList, metaEntityList.count + 1);
-    metaEntity := Basic.peek_pointer(metaEntityList);
-
+    metaEntity := Basic.array_add(*metaEntityList);
     metaEntity.structName = name;
 
     // Extracting canonical name
@@ -208,9 +208,7 @@ _find_meta_entity_component :: (metaEntity : *MetaEntity, name : string) -> *Met
 }
 
 _add_meta_component :: (name : string, members : []*Compiler.Code_Scope_Entry) {
-    Basic.array_resize(*metaComponentList, metaComponentList.count + 1);
-    metaComponent := Basic.peek_pointer(metaComponentList);
-
+    metaComponent := Basic.array_add(*metaComponentList);
     metaComponent.structName = name;
 
     for member : members {
@@ -262,7 +260,8 @@ _generate :: (workspace : s64) {
 
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n        % : [..]%;", metaEntity.idCamelCase, metaEntity.structName);
+        // @todo We could make the size of buckets configurable.
+        Basic.print_to_builder(*builder, "\n        % : Bucket_Array(%, 16);", metaEntity.idCamelCase, metaEntity.structName);
     }
     Basic.append(*builder, "\n    }");
 
@@ -274,8 +273,8 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
-        Basic.append(*builder, "        Basic.array_resize(array, array.count + 1);\n");
-        Basic.append(*builder, "        entity := Basic.peek_pointer(engine.entities.mesh);\n");
+        Basic.append(*builder, "        entity, _ := find_and_occupy_empty_slot(array);\n");
+        Basic.print_to_builder(*builder, "        <<entity = %.{};\n", metaEntity.structName);
         Basic.append(*builder, "        engine.Meta.entity_init(entity, engine);\n");
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
@@ -315,7 +314,7 @@ _generate :: (workspace : s64) {
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_cleanup(entity);\n");
         Basic.append(*builder, "        }\n");
-        Basic.print_to_builder(*builder, "        Basic.array_free(engine.entities.%);\n", metaEntity.idCamelCase);
+        Basic.print_to_builder(*builder, "        bucket_array_reset(*engine.entities.%);\n", metaEntity.idCamelCase);
     }
     Basic.append(*builder, "    }\n");
 

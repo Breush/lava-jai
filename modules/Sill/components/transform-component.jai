@@ -27,11 +27,15 @@ component_update :: (iTransform : *TransformComponent, dt : float64) {
 }
 
 transform_translate :: (iTransform : *TransformComponent, delta : Chamber.vec3) {
+    if abs(delta.x) < 0.001 && abs(delta.y) < 0.001 && abs(delta.z) < 0.001 then return;
+
     iTransform.translation.std += delta;
     _update_world_transform(iTransform);
 }
 
 transform_rotate :: (iTransform : *TransformComponent, angle : float32, axis : Chamber.vec3) {
+    if abs(angle) < 0.001 then return;
+
     rotationDelta : Chamber.quat = ---;
     set_from_axis_and_angle(*rotationDelta, axis, angle);
     iTransform.rotation = rotationDelta * iTransform.rotation;
@@ -39,6 +43,8 @@ transform_rotate :: (iTransform : *TransformComponent, angle : float32, axis : C
 }
 
 transform_scale :: (iTransform : *TransformComponent, scaleFactor : float32) {
+    if abs(scaleFactor - 1.) < 0.001 then return;
+
     iTransform.factor *= scaleFactor;
     _update_world_transform(iTransform);
 }
