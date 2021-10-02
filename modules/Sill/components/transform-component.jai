@@ -28,6 +28,11 @@ component_update :: (iTransform : *TransformComponent, dt : float64) {
     // Nothing to do
 }
 
+transform_set :: (iTransform : *TransformComponent, transform : Chamber.trf) {
+    iTransform.transform = transform;
+    _update_world_transform(iTransform);
+}
+
 transform_translate :: (iTransform : *TransformComponent, delta : Chamber.vec3) {
     if abs(delta.x) < 0.001 && abs(delta.y) < 0.001 && abs(delta.z) < 0.001 then return;
 

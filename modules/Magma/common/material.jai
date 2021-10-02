@@ -107,8 +107,17 @@ material_set :: (material : *Material, uniformName : string, value : bool) {
 
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 
-    offset := 0;
     <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(u32) value;
+    impl_material_uniform_commit(material, parentUniform);
+}
+
+material_set :: (material : *Material, uniformName : string, value : $T) {
+    uniform := table_find_pointer(<<material.shader.uniformsFrame, uniformName);
+    Basic.assert(uniform != null && uniform.kind == .BlockField);
+
+    parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
+
+    <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) = value;
     impl_material_uniform_commit(material, parentUniform);
 }
 

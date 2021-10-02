@@ -292,12 +292,25 @@ _select_best_surface_format :: (surfaceFormats : []Vk.SurfaceFormatKHR) -> Vk.Su
 }
 
 _select_best_present_mode :: (presentModes : []Vk.PresentModeKHR) -> Vk.PresentModeKHR {
+    immediateAvailable := false;
+    fifoRelaxedAvailable := false;
+
     for presentMode : presentModes {
-        if presentMode == Vk.PresentModeKHR.Mailbox {
+        // We prefer mailbox if available
+        if presentMode == .Mailbox {
             return presentMode;
+        } else if presentMode == .Immediate {
+            immediateAvailable = true;
+        } else if presentMode == .FifoRelaxed {
+            fifoRelaxedAvailable = true;
         }
     }
-    return Vk.PresentModeKHR.Fifo;
+
+    // We prefer non V-Sync if available
+    if immediateAvailable then return .Immediate;
+    if fifoRelaxedAvailable then return .FifoRelaxed;
+
+    return .Fifo;
 }
 
 _cleanup_swapchain :: (windowTarget : *WindowTarget) {

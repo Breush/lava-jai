@@ -342,12 +342,32 @@ _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, material
 
     if material["pbrMetallicRoughness"].type != .INVALID {
         pbrMetallicRoughness := material["pbrMetallicRoughness"];
+        _glb_set_attribute(iMaterial, "albedo", pbrMetallicRoughness["baseColorFactor"]);
         _glb_set_texture(iMaterial, "albedoMap", pbrMetallicRoughness["baseColorTexture"], glb, cache);
         _glb_set_texture(iMaterial, "roughnessMetallicMap", pbrMetallicRoughness["metallicRoughnessTexture"], glb, cache);
+
+        // @fixme Ok, we're just cheating here, the default values should be decided within the shader.
+        if pbrMetallicRoughness["baseColorFactor"].type == .INVALID {
+            color := Chamber.vec4.{1, 1, 1, 1};
+            Magma.material_set(iMaterial, "albedo", color);
+        }
     }
 
     iPrimitive.material = iMaterial;
     table_add(*cache.material, materialIndex, iMaterial);
+}
+
+_glb_set_attribute :: (iMaterial : *Magma.Material, uniformName : string, valueRef : JsonValue) {
+    if valueRef.type == .INVALID then return;
+
+    if valueRef.type == .ARRAY && valueRef.array.count == 4 {
+        color : Chamber.vec4;
+        color.r = cast(float32) valueRef.array[0].number;
+        color.g = cast(float32) valueRef.array[1].number;
+        color.b = cast(float32) valueRef.array[2].number;
+        color.a = cast(float32) valueRef.array[3].number;
+        Magma.material_set(iMaterial, "albedo", color);
+    }
 }
 
 _glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureRef : JsonValue, glb : Glb, cache : *Cache) {

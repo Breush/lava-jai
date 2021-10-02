@@ -20,6 +20,29 @@ mat3x4 :: Matrix4x3;
 // Following GLM naming.
 quat :: Quaternion;
 
+vec2Interface :: struct(T : Type) {
+    x, y : T;
+}
+
+vec3Interface :: struct(T : Type) {
+    x, y, z : T;
+}
+
+make_vec4 :: (v : $T/interface vec3Interface, w : float32) -> vec4 {
+    result : vec4 = ---;
+    result.xyz = v;
+    result.w = w;
+    return result;
+}
+
+make_vec4 :: (v : $T/interface vec2Interface, z : float32, w : float32) -> vec4 {
+    result : vec4 = ---;
+    result.xy = v;
+    result.z = z;
+    result.w = w;
+    return result;
+}
+
 /*
     A 3D transform, stored as TRS.
 
@@ -93,6 +116,19 @@ make_matrix :: (transform : trf, $T := mat3x4) -> T {
     }
 
     return matrix;
+}
+
+inverse :: (transform : trf) -> trf {
+    result : trf;
+    result.rotation = conjugate(transform.rotation);
+    if transform.factor == 0. {
+        result.factor = 0.;
+        result.translation.std = -rotate(transform.translation, result.rotation);
+    } else {
+        result.factor = 1. / transform.factor;
+        result.translation.std = -result.factor * rotate(transform.translation, result.rotation);
+    }
+    return result;
 }
 
 multiply :: (lhs : trf, rhs : trf) -> trf {

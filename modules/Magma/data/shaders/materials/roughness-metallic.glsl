@@ -22,7 +22,6 @@
 #include "../constants.glsl"
 
 // @todo glTF provides more uniforms:
-// vec4 albedoColor = vec4(1, 1, 1, 1);
 // float roughnessFactor = 1;
 // float metallicFactor = 1;
 
@@ -32,6 +31,8 @@ layout(std140, set = MATERIAL_DESCRIPTOR_SET_INDEX, binding = 0) uniform Materia
     // we don't care if it is enabled or not.
     bool normalMapEnabled;      // Normal will default to (0, 0, 1)
     bool emissiveMapEnabled;    // Emissive will default to (0, 0, 0)
+
+    vec4 albedo; // @todo How to tell that we want that full white by default?
 } material;
 
 layout(set = MATERIAL_DESCRIPTOR_SET_INDEX, binding = 1) uniform sampler2D normalMap;
@@ -141,7 +142,7 @@ vec3 lightContribution(vec3 position, Pbr pbr, vec3 l) {
 void main() {
     setupEye();
 
-    vec3 albedo = texture(albedoMap, uv).rgb;
+    vec3 albedo = material.albedo.rgb * texture(albedoMap, uv).rgb;
     float occlusion = texture(occlusionMap, uv).r;
     float roughness = texture(roughnessMetallicMap, uv).g;
     float metallic = texture(roughnessMetallicMap, uv).b;
@@ -217,7 +218,7 @@ void main() {
 
     color += emissive;
 
-    outColor = vec4(color, 1);
+    outColor = vec4(color, material.albedo.a);
 }
 
 #endif
