@@ -104,8 +104,8 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
 
     // ----- Blitting the image handle to the swapchain one
 
-    rendererOutputExtent := _renderer_output_get_extent(windowTarget.rendererOutput);
-    rendererImage := _renderer_output_get_image(windowTarget.rendererOutput, frameIndex);
+    rendererOutputExtent := renderer_output_get_extent(windowTarget.rendererOutput);
+    rendererImageInfo := _renderer_output_get_image_info(windowTarget.rendererOutput, frameIndex);
     swapchainImage := windowTarget.swapchainImages[windowTarget.swapchainImageIndex];
     _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.Undefined, Vk.ImageLayout.TransferDstOptimal);
 
@@ -124,8 +124,10 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     filter := Vk.Filter.Linear;
     if windowTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
 
-    Vk.cmd_blit_image(commandBuffer, rendererImage, Vk.ImageLayout.TransferSrcOptimal,
+    _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.layout, Vk.ImageLayout.TransferSrcOptimal);
+    Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
                       swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
+    _change_image_layout(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal, rendererImageInfo.layout);
 
     _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.TransferDstOptimal, Vk.ImageLayout.PresentSrcKhr);
 

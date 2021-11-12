@@ -19,7 +19,7 @@
 #elif defined(FRAGMENT)
 
 #include "../default-header.frag"
-#include "../constants.glsl"
+#include "../../constants.glsl"
 
 // @todo glTF provides more uniforms:
 // float roughnessFactor = 1;

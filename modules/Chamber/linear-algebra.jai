@@ -20,12 +20,20 @@ mat3x4 :: Matrix4x3;
 // Following GLM naming.
 quat :: Quaternion;
 
-vec2Interface :: struct(T : Type) {
-    x, y : T;
+
+vec2Interface :: struct {
+    x, y : float32;
 }
 
-vec3Interface :: struct(T : Type) {
-    x, y, z : T;
+vec3Interface :: struct {
+    x, y, z : float32;
+}
+
+make_vec3 :: (v : $T/interface vec2Interface, z : float32) -> vec3 {
+    result : vec3 = ---;
+    result.xy = v;
+    result.z = z;
+    return result;
 }
 
 make_vec4 :: (v : $T/interface vec3Interface, w : float32) -> vec4 {
@@ -41,6 +49,18 @@ make_vec4 :: (v : $T/interface vec2Interface, z : float32, w : float32) -> vec4 
     result.z = z;
     result.w = w;
     return result;
+}
+
+operator+ :: (v1 : vec3, v2 : vec3) -> vec3 {
+    value : vec3 = ---;
+    value.std = v1.std + v2.std;
+    return value;
+}
+
+operator* :: (v : vec3, factor : float32) -> vec3 #symmetric {
+    value : vec3 = ---;
+    value.std = v.std * factor;
+    return value;
 }
 
 /*

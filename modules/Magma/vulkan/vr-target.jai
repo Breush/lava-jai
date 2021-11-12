@@ -203,8 +203,8 @@ _render :: (vrTarget : *VrTarget, frameIndex : u8, frameState : *Xr.FrameState, 
         compositionLayerViews[viewIndex].subImage.imageRect.extent.height = cast(s32) swapchainInfo.extent.height;
 
         // Copying image data
-        rendererOutputExtent := _renderer_output_get_extent(vrTarget.rendererOutputs[viewIndex]);
-        rendererImage := _renderer_output_get_image(vrTarget.rendererOutputs[viewIndex], frameIndex);
+        rendererOutputExtent := renderer_output_get_extent(vrTarget.rendererOutputs[viewIndex]);
+        rendererImageInfo := _renderer_output_get_image_info(vrTarget.rendererOutputs[viewIndex], frameIndex);
         swapchainImage := swapchainInfo.images[swapchainImageIndex].image;
 
         renderSemaphore, renderSemaphoreFinishedValue := _renderer_output_get_render_semaphore(vrTarget.rendererOutputs[viewIndex], frameIndex);
@@ -227,8 +227,10 @@ _render :: (vrTarget : *VrTarget, frameIndex : u8, frameState : *Xr.FrameState, 
         if vrTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
 
         _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.ColorAttachmentOptimal, Vk.ImageLayout.TransferDstOptimal);
-        Vk.cmd_blit_image(commandBuffer, rendererImage, Vk.ImageLayout.TransferSrcOptimal,
+        _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.layout, Vk.ImageLayout.TransferSrcOptimal);
+        Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
                           swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
+        _change_image_layout(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal, rendererImageInfo.layout);
         _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.TransferDstOptimal, Vk.ImageLayout.ColorAttachmentOptimal);
     }
 

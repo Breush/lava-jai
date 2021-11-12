@@ -53,9 +53,10 @@ destroy_material :: (material : *Material) {
 
 material_init :: (material : *Material, shader : *Shader) {
     material.shader = shader;
+    material.descriptorSetIndex = renderer_get_material_descriptor_set_index(material.shader.renderer);
 
     for *uniformFrame, uniformName : shader.uniformsFrame {
-        if uniformFrame.set == MATERIAL_DESCRIPTOR_SET_INDEX {
+        if uniformFrame.set == material.descriptorSetIndex {
             Basic.assert(uniformFrame.kind != .Unknown);
 
             uniform : Material.Uniform;
@@ -117,7 +118,12 @@ material_set :: (material : *Material, uniformName : string, value : $T) {
 
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 
-    <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) = value;
+    #if T == float64 {
+        <<cast(*float32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(float32) value;
+    } else {
+        <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) = value;
+    }
+
     impl_material_uniform_commit(material, parentUniform);
 }
 

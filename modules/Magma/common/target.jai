@@ -8,7 +8,7 @@
     image to a PNG file.
 
     To display anything to a target, you need to bind a renderer
-    to the target. For instance, a Camera or a PostProcess.
+    to the target. For instance, a Camera or a PostProcessRenderer.
 */
 
 Target :: struct {

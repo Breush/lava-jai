@@ -1,13 +1,12 @@
 MaterialImpl :: struct {
     descriptorSet : Vk.DescriptorSet;
     descriptorPool : Vk.DescriptorPool;
+    descriptorSetIndex : u32;
 
     UniformBlockImpl :: struct {
         bufferHolder : BufferHolder;
     }
 }
-
-MATERIAL_DESCRIPTOR_SET_INDEX :: 0;
 
 impl_material_init :: (material : *Material) {
     engine := material.shader.renderer.scene.engine;
@@ -50,7 +49,7 @@ _material_draw :: (material : *Material, commandBuffer : Vk.CommandBuffer) {
     // @note This can happen if the material does not have any uniforms (e.g. fallback).
     if material.descriptorSet == null then return;
 
-    Vk.cmd_bind_descriptor_sets(commandBuffer, .Graphics, material.shader.pipelineLayout, MATERIAL_DESCRIPTOR_SET_INDEX,
+    Vk.cmd_bind_descriptor_sets(commandBuffer, .Graphics, material.shader.pipelineLayout, material.descriptorSetIndex,
                                 1, *material.descriptorSet, 0, null);
 }
 
@@ -105,7 +104,7 @@ _init_descriptor_set :: (material : *Material) -> bool {
     descriptorSetAI.sType = .DescriptorSetAllocateInfo;
     descriptorSetAI.descriptorPool = material.descriptorPool;
     descriptorSetAI.descriptorSetCount = 1;
-    descriptorSetAI.pSetLayouts = *material.shader.descriptorSetLayout;
+    descriptorSetAI.pSetLayouts = *material.shader.descriptorSetLayouts[material.descriptorSetIndex];
 
     _CHECK(Vk.allocate_descriptor_sets(engine.device, *descriptorSetAI, *material.descriptorSet),
            "Unable to allocate descriptor sets.");

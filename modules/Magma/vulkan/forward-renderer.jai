@@ -13,20 +13,28 @@ ForwardRendererImpl :: struct {
     // @note The shader won't be registered within the renderer.
     shaderFallback : Shader;
     materialFallback : Material;
+
+    vertexInputBindingDescs : [2]Vk.VertexInputBindingDescription;
+    vertexInputAttributeDescs : [7]Vk.VertexInputAttributeDescription;
+    pushConstantRanges : [1]Vk.PushConstantRange;
+
+    FINAL_IMAGE_LAYOUT :: Vk.ImageLayout.ShaderReadOnlyOptimal;
 }
 
-impl_forward_renderer_init :: (forwardRenderer : *ForwardRenderer) {
-    forwardRenderer.imageLayout = Vk.ImageLayout.TransferSrcOptimal;
+impl_forward_renderer_init :: (renderer : *ForwardRenderer) {
+    nextLocation := _fill_vertex_input_descs(VertexInput, 0, 0, Vk.VertexInputRate.Vertex);
+    _fill_vertex_input_descs(InstanceInput, 1, nextLocation, Vk.VertexInputRate.Instance);
+
+    renderer.pushConstantRanges[0].size = size_of(EyeShaderObject);
+    renderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
 }
 
 impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
     engine := forwardRenderer.scene.engine;
-    Vk.device_wait_idle(engine.device); // @todo Anything more clever?
+    Vk.device_wait_idle(engine.device); // @todo :WaitIdle Anything more clever?
 
     material_cleanup(*forwardRenderer.materialFallback);
     shader_cleanup(*forwardRenderer.shaderFallback);
-
-    Vk.destroy_render_pass(engine.device, forwardRenderer.renderPass, null);
 
     for *extraFrameObject : forwardRenderer.extraFrameObjects {
         _image_holder_cleanup(*extraFrameObject.imageHolder);
@@ -37,14 +45,17 @@ impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
     }
 }
 
-_forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
-    engine := forwardRenderer.scene.engine;
+impl_forward_renderer_get_output_extent :: (forwardRenderer : *ForwardRenderer, outputIndex : u8) -> Chamber.uvec2 {
+    Basic.assert(outputIndex == 0);
+    return forwardRenderer.eye.extent;
+}
 
+_forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
     if !_init_render_pass(forwardRenderer) then return false;
     if !_init_extra_frame_objects(forwardRenderer) then return false;
 
     // Resources
-    shader_init(*forwardRenderer.shaderFallback, forwardRenderer, "fallback");
+    shader_init(*forwardRenderer.shaderFallback, forwardRenderer, "$/forward-renderer/materials/fallback");
     material_init(*forwardRenderer.materialFallback, *forwardRenderer.shaderFallback);
 
     return true;
@@ -57,7 +68,6 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     renderPassBeginInfo.sType = .RenderPassBeginInfo;
     renderPassBeginInfo.renderPass = forwardRenderer.renderPass;
     renderPassBeginInfo.framebuffer = forwardRenderer.extraFrameObjects[frameIndex].framebuffer;
-
     renderPassBeginInfo.renderArea.extent.width = forwardRenderer.eye.extent.width;
     renderPassBeginInfo.renderArea.extent.height = forwardRenderer.eye.extent.height;
 
@@ -107,23 +117,13 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     return true;
 }
 
-_forward_renderer_get_output_image :: (forwardRenderer : *ForwardRenderer, outputIndex : u8, frameIndex : u8) -> Vk.Image {
+_forward_renderer_get_output_image_info :: (forwardRenderer : *ForwardRenderer, outputIndex : u8, frameIndex : u8) -> ImageInfo {
     Basic.assert(outputIndex == 0);
-    return forwardRenderer.extraFrameObjects[frameIndex].imageHolder.image;
-}
-
-_forward_renderer_get_output_extent :: (forwardRenderer : *ForwardRenderer, outputIndex : u8) -> Chamber.uvec2 {
-    Basic.assert(outputIndex == 0);
-    return forwardRenderer.eye.extent;
-}
-
-_get_push_constant_range :: () -> Vk.PushConstantRange {
-    // @note These are the shared data between all other pipelines (i.e. materials)
-    // so they must all derive from that. But we might have a design issue, here.
-    pushConstantRange : Vk.PushConstantRange;
-    pushConstantRange.size = size_of(EyeShaderObject);
-    pushConstantRange.stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
-    return pushConstantRange;
+    imageInfo : ImageInfo;
+    imageInfo.image = forwardRenderer.extraFrameObjects[frameIndex].imageHolder.image;
+    imageInfo.view = forwardRenderer.extraFrameObjects[frameIndex].imageView;
+    imageInfo.layout = forwardRenderer.FINAL_IMAGE_LAYOUT;
+    return imageInfo;
 }
 
 #scope_file
@@ -133,12 +133,12 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
 
     // --- Pipeline Layout
 
-    pushConstantRange := _get_push_constant_range();
+    pushConstantRanges := _renderer_get_push_constant_ranges(forwardRenderer);
 
     pipelineLayoutCI : Vk.PipelineLayoutCreateInfo;
     pipelineLayoutCI.sType = .PipelineLayoutCreateInfo;
-    pipelineLayoutCI.pushConstantRangeCount = 1;
-    pipelineLayoutCI.pPushConstantRanges = *pushConstantRange;
+    pipelineLayoutCI.pushConstantRangeCount = cast(u32) pushConstantRanges.count;
+    pipelineLayoutCI.pPushConstantRanges = pushConstantRanges.data;
 
     _CHECK(Vk.create_pipeline_layout(engine.device, *pipelineLayoutCI, null, *forwardRenderer.pipelineLayout),
            "Unable to create pipeline layout.");
@@ -174,7 +174,7 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
     attachmentDescs[1].stencilLoadOp = Vk.AttachmentLoadOp.DontCare;
     attachmentDescs[1].stencilStoreOp = Vk.AttachmentStoreOp.DontCare;
     attachmentDescs[1].initialLayout = Vk.ImageLayout.Undefined;
-    attachmentDescs[1].finalLayout = forwardRenderer.imageLayout;
+    attachmentDescs[1].finalLayout = forwardRenderer.FINAL_IMAGE_LAYOUT;
 
     colorAttachmentRef : Vk.AttachmentReference;
     colorAttachmentRef.attachment = 1;

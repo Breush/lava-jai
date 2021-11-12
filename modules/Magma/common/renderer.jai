@@ -10,6 +10,7 @@ Renderer :: struct {
     Kind :: enum {
         Unknown :: 0;
         ForwardRenderer;
+        PostProcessRenderer;
     }
 
     scene : *Scene;
@@ -21,11 +22,6 @@ Renderer :: struct {
 
     allocator : Allocator;
     allocator_data : *void;
-}
-
-RendererOutput :: struct {
-    renderer : *Renderer;
-    index : u8;
 }
 
 destroy_renderer :: (renderer : *Renderer, destroyResources : bool) {
@@ -49,6 +45,8 @@ renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
 
     if renderer.kind == .ForwardRenderer {
         _forward_renderer_cleanup(cast(*ForwardRenderer) renderer, resetMemory);
+    } else if renderer.kind == .PostProcessRenderer {
+        _post_process_renderer_cleanup(cast(*PostProcessRenderer) renderer, resetMemory);
     } else {
         Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     }
@@ -71,8 +69,26 @@ renderer_find_shader :: (renderer : *Renderer, id : string) -> *Shader {
 
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
+    if renderer.kind == .PostProcessRenderer then return renderer_get_eye((cast(*PostProcessRenderer) renderer).rendererOutput.renderer, eyeIndex);
     Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     return null;
+}
+
+renderer_get_extent :: (renderer : *Renderer, outputIndex : u32) -> Chamber.uvec2 {
+    if renderer.kind == .ForwardRenderer then return forward_renderer_get_extent(cast(*ForwardRenderer) renderer, outputIndex);
+    if renderer.kind == .PostProcessRenderer then return post_process_renderer_get_extent(cast(*PostProcessRenderer) renderer, outputIndex);
+    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    return .{};
+}
+
+renderer_get_material_descriptor_set_index :: (renderer : *Renderer) -> u32 {
+    if renderer.kind == .ForwardRenderer {
+        return ForwardRenderer.MATERIAL_DESCRIPTOR_SET_INDEX;
+    } else if renderer.kind == .PostProcessRenderer {
+        return PostProcessRenderer.MATERIAL_DESCRIPTOR_SET_INDEX;
+    }
+    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    return 0xFFFF_FFFF;
 }
 
 renderer_get_output :: (renderer : *Renderer, outputIndex : u8 = 0) -> RendererOutput {
@@ -85,6 +101,26 @@ renderer_get_output :: (renderer : *Renderer, outputIndex : u8 = 0) -> RendererO
 renderer_register :: (renderer : *Renderer, shader : *Shader) {
     Basic.array_add(*renderer.shaders, shader);
 }
+
+// ----- Renderer output
+
+RendererOutput :: struct {
+    renderer : *Renderer;
+    index : u8;
+}
+
+renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
+    if output.renderer.kind == .ForwardRenderer {
+        return impl_forward_renderer_get_output_extent(cast(*ForwardRenderer) output.renderer, output.index);
+    } else if output.renderer.kind == .PostProcessRenderer {
+        return impl_post_process_renderer_get_output_extent(cast(*PostProcessRenderer) output.renderer, output.index);
+    }
+
+    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
+    return .{};
+}
+
+// ----- Forward
 
 /*
     A forward renderer draws meshes the simple way.
@@ -103,6 +139,8 @@ ForwardRenderer :: struct {
     using forwardRendererImpl : ForwardRendererImpl;
 
     eye : Eye;
+
+    MATERIAL_DESCRIPTOR_SET_INDEX :: 0;
 }
 
 // Allocate, init and register a new forward renderer.
@@ -127,6 +165,56 @@ forward_renderer_get_eye :: (forwardRenderer : *ForwardRenderer, eyeIndex : u32)
     return null;
 }
 
+forward_renderer_get_extent :: (forwardRenderer : *ForwardRenderer, eyeIndex : u32) -> Chamber.uvec2 {
+    if eyeIndex == 0 then return forwardRenderer.eye.extent;
+    return .{};
+}
+
+// ----- Post process
+
+/*
+    A post-process renderer takes an input (called source)
+    and tweak it using a specific "material" that implements
+    image-based post-processing.
+
+    Once you created a PostProcessRenderer with a specific source,
+    you'll have to create a shader on it and materials.
+    All materials registered will be called once
+    on a fullscreen image with "source" being the bound rendererOutput
+    at the creation of the post-process renderer.
+*/
+PostProcessRenderer :: struct {
+    using renderer : Renderer;
+    using postProcessRendererImpl : PostProcessRendererImpl;
+
+    rendererOutput : RendererOutput;
+
+    SOURCE_DESCRIPTOR_SET_INDEX :: 0;
+    MATERIAL_DESCRIPTOR_SET_INDEX :: 1;
+}
+
+// Allocate, init and register a new post process.
+create_post_process_renderer :: (scene : *Scene, rendererOutput : RendererOutput) -> *PostProcessRenderer {
+    postProcessRenderer := cast(*PostProcessRenderer) Basic.New(PostProcessRenderer);
+    postProcessRenderer.kind = Renderer.Kind.PostProcessRenderer;
+    Basic.remember_allocators(postProcessRenderer);
+    post_process_renderer_init(postProcessRenderer, scene, rendererOutput);
+    // @todo We probably don't really to register to a scene.
+    // But this is forced due to us being a renderer.
+    scene_register(scene, postProcessRenderer);
+    return postProcessRenderer;
+}
+
+post_process_renderer_init :: (postProcessRenderer : *PostProcessRenderer, scene : *Scene, rendererOutput : RendererOutput) {
+    _renderer_init(postProcessRenderer, scene);
+    postProcessRenderer.rendererOutput = rendererOutput;
+}
+
+post_process_renderer_get_extent :: (postProcessRenderer : *PostProcessRenderer, eyeIndex : u32) -> Chamber.uvec2 {
+    if eyeIndex == 0 then return renderer_output_get_extent(postProcessRenderer.rendererOutput);
+    return .{};
+}
+
 #scope_file
 
 _renderer_init :: (renderer : *Renderer, scene : *Scene) {
@@ -138,5 +226,13 @@ _forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer, resetMemory : 
 
     if resetMemory {
         <<forwardRenderer = .{};
+    }
+}
+
+_post_process_renderer_cleanup :: (postProcessRenderer : *PostProcessRenderer, resetMemory : bool) {
+    impl_post_process_renderer_cleanup(postProcessRenderer);
+
+    if resetMemory {
+        <<postProcessRenderer = .{};
     }
 }

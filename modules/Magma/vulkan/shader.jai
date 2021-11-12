@@ -1,7 +1,7 @@
 ShaderImpl :: struct {
     pipelineLayout : Vk.PipelineLayout;
     pipeline : Vk.Pipeline;
-    descriptorSetLayout : Vk.DescriptorSetLayout;
+    descriptorSetLayouts : [..]Vk.DescriptorSetLayout;
 }
 
 impl_shader_init :: (shader : *Shader) {
@@ -13,7 +13,12 @@ impl_shader_cleanup :: (shader : *Shader) {
 
     Vk.destroy_pipeline(engine.device, shader.pipeline, null);
     Vk.destroy_pipeline_layout(engine.device, shader.pipelineLayout, null);
-    Vk.destroy_descriptor_set_layout(engine.device, shader.descriptorSetLayout, null);
+
+    for descriptorSetLayout : shader.descriptorSetLayouts {
+        Vk.destroy_descriptor_set_layout(engine.device, descriptorSetLayout, null);
+    }
+
+    Basic.array_free(shader.descriptorSetLayouts);
 }
 
 #scope_file
@@ -21,50 +26,61 @@ impl_shader_cleanup :: (shader : *Shader) {
 _init_pipeline :: (shader : *Shader) -> bool {
     engine := shader.renderer.scene.engine;
 
-    shaderPath := Basic.tprint("%/shaders/materials/%.glsl", DATA_PATH, shader.id);
-    vertShaderModule := _engine_get_shader_module(engine, shaderPath, .Vertex);
-    fragShaderModule := _engine_get_shader_module(engine, shaderPath, .Fragment, true);
+    // @note Doing that first, because we need the info about the uniforms.
+    vertShaderModule := _engine_get_shader_module(engine, shader.id, .Vertex);
+    fragShaderModule := _engine_get_shader_module(engine, shader.id, .Fragment, true);
     shader.uniformsFrame = *fragShaderModule.uniformsFrame;
 
     // --- Pipeline Layout
 
-    setLayoutBindings : [..]Vk.DescriptorSetLayoutBinding;
-    defer Basic.array_free(setLayoutBindings);
-
+    setLayoutMaxIndex := -1;
     for *uniformFrame : shader.uniformsFrame {
-        if uniformFrame.kind == .BlockField then continue;
-
-        setLayoutBinding : Vk.DescriptorSetLayoutBinding;
-        setLayoutBinding.binding = cast(u32) uniformFrame.binding;
-        setLayoutBinding.descriptorCount = 1;
-        setLayoutBinding.stageFlags = cast(u32) Vk.ShaderStageFlagBits.Fragment;
-
-        if uniformFrame.kind == .Texture {
-            setLayoutBinding.descriptorType = .CombinedImageSampler;
-        } else if uniformFrame.kind == .Block {
-            setLayoutBinding.descriptorType = .UniformBuffer;
-        }
-
-        Basic.array_add(*setLayoutBindings, setLayoutBinding);
+        if uniformFrame.set > setLayoutMaxIndex then setLayoutMaxIndex = uniformFrame.set;
+    }
+    if setLayoutMaxIndex >= 0 {
+        Basic.array_resize(*shader.descriptorSetLayouts, setLayoutMaxIndex + 1);
     }
 
-    descriptorSetLayoutCI : Vk.DescriptorSetLayoutCreateInfo;
-    descriptorSetLayoutCI.sType = .DescriptorSetLayoutCreateInfo;
-    descriptorSetLayoutCI.bindingCount = cast(u32) setLayoutBindings.count;
-    descriptorSetLayoutCI.pBindings = setLayoutBindings.data;
+    for setLayoutIndex : 0..setLayoutMaxIndex {
+        setLayoutBindings : [..]Vk.DescriptorSetLayoutBinding;
+        defer Basic.array_free(setLayoutBindings);
 
-    _CHECK(Vk.create_descriptor_set_layout(engine.device, *descriptorSetLayoutCI, null, *shader.descriptorSetLayout),
-           "Unable to create descriptor set layout.");
+        for *uniformFrame : shader.uniformsFrame {
+            if uniformFrame.set != setLayoutIndex then continue;
+            if uniformFrame.kind == .BlockField then continue;
+
+            setLayoutBinding : Vk.DescriptorSetLayoutBinding;
+            setLayoutBinding.binding = cast(u32) uniformFrame.binding;
+            setLayoutBinding.descriptorCount = 1; // @todo Will probably be more than one, one day.
+            setLayoutBinding.stageFlags = cast(u32) Vk.ShaderStageFlagBits.Fragment;
+
+            if uniformFrame.kind == .Texture {
+                setLayoutBinding.descriptorType = .CombinedImageSampler;
+            } else if uniformFrame.kind == .Block {
+                setLayoutBinding.descriptorType = .UniformBuffer;
+            }
+
+            Basic.array_add(*setLayoutBindings, setLayoutBinding);
+        }
+
+        descriptorSetLayoutCI : Vk.DescriptorSetLayoutCreateInfo;
+        descriptorSetLayoutCI.sType = .DescriptorSetLayoutCreateInfo;
+        descriptorSetLayoutCI.bindingCount = cast(u32) setLayoutBindings.count;
+        descriptorSetLayoutCI.pBindings = setLayoutBindings.data;
+
+        _CHECK(Vk.create_descriptor_set_layout(engine.device, *descriptorSetLayoutCI, null, *shader.descriptorSetLayouts[setLayoutIndex]),
+               "Unable to create descriptor set layout.");
+    }
 
     // @todo Could be extracted from SPIR-V too.
-    pushConstantRange := _get_push_constant_range();
+    pushConstantRanges := _renderer_get_push_constant_ranges(shader.renderer);
 
     pipelineLayoutCI : Vk.PipelineLayoutCreateInfo;
     pipelineLayoutCI.sType = .PipelineLayoutCreateInfo;
-    pipelineLayoutCI.pushConstantRangeCount = 1;
-    pipelineLayoutCI.pPushConstantRanges = *pushConstantRange;
-    pipelineLayoutCI.setLayoutCount = 1;
-    pipelineLayoutCI.pSetLayouts = *shader.descriptorSetLayout;
+    pipelineLayoutCI.pushConstantRangeCount = cast(u32) pushConstantRanges.count;
+    pipelineLayoutCI.pPushConstantRanges = pushConstantRanges.data;
+    pipelineLayoutCI.setLayoutCount = cast(u32) shader.descriptorSetLayouts.count;
+    pipelineLayoutCI.pSetLayouts = shader.descriptorSetLayouts.data;
 
     _CHECK(Vk.create_pipeline_layout(engine.device, *pipelineLayoutCI, null, *shader.pipelineLayout),
            "Unable to create pipeline layout.");
@@ -92,18 +108,14 @@ _init_pipeline :: (shader : *Shader) -> bool {
 
     // ---
 
-    vertexInputBindingDescs : [2]Vk.VertexInputBindingDescription;
-    vertexInputAttributeDescs : [7]Vk.VertexInputAttributeDescription;
-
-    nextLocation := _fill_vertex_input_descs(VertexInput, 0, 0, Vk.VertexInputRate.Vertex);
-    _fill_vertex_input_descs(InstanceInput, 1, nextLocation, Vk.VertexInputRate.Instance);
+    vertexInputDescription := _renderer_get_vertex_input_description(shader.renderer);
 
     vertexInputStateCI : Vk.PipelineVertexInputStateCreateInfo;
     vertexInputStateCI.sType = .PipelineVertexInputStateCreateInfo;
-    vertexInputStateCI.vertexBindingDescriptionCount = vertexInputBindingDescs.count;
-    vertexInputStateCI.pVertexBindingDescriptions = *vertexInputBindingDescs[0];
-    vertexInputStateCI.vertexAttributeDescriptionCount = vertexInputAttributeDescs.count;
-    vertexInputStateCI.pVertexAttributeDescriptions = vertexInputAttributeDescs.data;
+    vertexInputStateCI.vertexBindingDescriptionCount = cast(u32) vertexInputDescription.bindings.count;
+    vertexInputStateCI.pVertexBindingDescriptions = vertexInputDescription.bindings.data;
+    vertexInputStateCI.vertexAttributeDescriptionCount = cast(u32) vertexInputDescription.attributes.count;
+    vertexInputStateCI.pVertexAttributeDescriptions = vertexInputDescription.attributes.data;
 
     inputAssemblyStateCI : Vk.PipelineInputAssemblyStateCreateInfo;
     inputAssemblyStateCI.sType = .PipelineInputAssemblyStateCreateInfo;
@@ -112,17 +124,17 @@ _init_pipeline :: (shader : *Shader) -> bool {
 
     // ---
 
-    eye := renderer_get_eye(shader.renderer, 0); // @todo Let user choose which eye.
+    extent := renderer_get_extent(shader.renderer, 0); // @todo Let user choose which output.
 
     viewport : Vk.Viewport;
-    viewport.width = cast(float32) eye.extent.width;
-    viewport.height = cast(float32) eye.extent.height;
+    viewport.width = cast(float32) extent.width;
+    viewport.height = cast(float32) extent.height;
     viewport.minDepth = 0.;
     viewport.maxDepth = 1.;
 
     scissor : Vk.Rect2D;
-    scissor.extent.width = eye.extent.width;
-    scissor.extent.height = eye.extent.height;
+    scissor.extent.width = extent.width;
+    scissor.extent.height = extent.height;
 
     viewportStateCI : Vk.PipelineViewportStateCreateInfo;
     viewportStateCI.sType = .PipelineViewportStateCreateInfo;

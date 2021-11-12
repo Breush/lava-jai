@@ -1,6 +1,7 @@
 /*
     @fixme Magma roadmap:
-    - ComposePostProcess
+    - ComposeRenderer
+    - 2D (UI) renderer
     - Raytracing
 */
 
@@ -19,7 +20,7 @@
 
 #scope_module
 
-DATA_PATH :: #run Basic.tprint("%data", #filepath);
+DOLLAR_SHADERS_PATH :: #run Basic.tprint("%data/shaders", #filepath);
 
 Basic :: #import "Basic";
 File :: #import "File";

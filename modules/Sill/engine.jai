@@ -5,12 +5,16 @@ EngineBase :: struct {
 
     windowTarget : *Magma.WindowTarget;
     renderer : *Magma.Renderer;
+    // @todo Make post processes registerable through the engine.
+    postProcessRenderer : *Magma.PostProcessRenderer;
 
     vrTarget : *Magma.VrTarget;
     vrLeftRenderer : *Magma.Renderer;
     vrRightRenderer : *Magma.Renderer;
 
     input : Input;
+
+    closingMainWindow : bool; // Set to true to close the main window.
 }
 
 Engine :: struct ($_Meta : Type) {
@@ -60,14 +64,17 @@ engine_init :: (engine : *EngineBase) {
         engine.vrLeftRenderer = Magma.create_forward_renderer(engine.scene, leftEyeExtent);
         engine.vrRightRenderer = Magma.create_forward_renderer(engine.scene, rightEyeExtent);
 
-        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrLeftRenderer), Magma.VrTarget.LEFT_EYE_BIND_INDEX);
+        // @todo Currently post-processing only the left eye, do we need two renderers or is there a trick?
+        engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.vrLeftRenderer));
+        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.postProcessRenderer),  Magma.VrTarget.LEFT_EYE_BIND_INDEX);
         Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrRightRenderer), Magma.VrTarget.RIGHT_EYE_BIND_INDEX);
 
         // @todo Companion window, probably with own renderer.
         engine.renderer = engine.vrLeftRenderer;
     } else {
         engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
-        Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.renderer));
+        engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.renderer));
+        Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.postProcessRenderer));
     }
 }
 
@@ -89,7 +96,7 @@ engine_run :: (engine : *Engine) {
     fpsElapsedTime : float64 = 0;
     fpsAverageElapsedTime : float64 = 0;
 
-    while engine.window.opened {
+    while !engine.closingMainWindow {
         currentTime := Basic.get_time();
         elapsedTime := currentTime - previousTime;
         previousTime = currentTime;
@@ -120,6 +127,8 @@ engine_run :: (engine : *Engine) {
         Magma.engine_update(engine.renderEngine);
         Magma.engine_draw(engine.renderEngine);
     }
+
+    Crater.destroy_window(engine.window);
 }
 
 #scope_file
@@ -129,12 +138,12 @@ _engine_handle_input_events :: (engine : *EngineBase) {
 
     while event.kind != Crater.Event.Kind.None {
         if event.kind == Crater.Event.Kind.WindowClosed {
-            Crater.destroy_window(engine.window);
+            engine.closingMainWindow = true;
             return;
         }
         else if event.kind == Crater.Event.Kind.KeyPressed &&
                 event.key.which == Crater.Key.Escape {
-            Crater.destroy_window(engine.window);
+            engine.closingMainWindow = true;
             return;
         }
 

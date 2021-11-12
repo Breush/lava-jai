@@ -31,6 +31,8 @@ EngineImpl :: struct {
     // Per frame state
     FRAME_INDEX_COUNT : u8 : 2;
     frameIndex : u8;
+
+    validationErrorsAreBlocking : bool;
 }
 
 QueueIndices :: struct {
@@ -47,6 +49,8 @@ ShaderModule :: struct {
 ShaderModuleMap :: Hash.Table(string, ShaderModule);
 
 impl_engine_init :: (engine : *Engine) {
+    engine.validationErrorsAreBlocking = !engine.vr.enabled;
+
     _init_instance(engine);
     _init_physical_device(engine);
 }
@@ -119,7 +123,7 @@ impl_engine_draw :: (engine : *Engine) -> bool {
     return true;
 }
 
-_engine_get_shader_module :: (engine : *Engine, shaderPath : string, kind : Chamber.ShaderKind, $parseUniforms := false) -> *ShaderModule {
+_engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chamber.ShaderKind, $parseUniforms := false) -> *ShaderModule {
     macroDefinition : string;
     if kind == .Vertex {
         macroDefinition = "VERTEX";
@@ -127,12 +131,21 @@ _engine_get_shader_module :: (engine : *Engine, shaderPath : string, kind : Cham
         macroDefinition = "FRAGMENT";
     }
 
-    shaderModuleId := Basic.tprint("%.%", shaderPath, macroDefinition);
+    shaderModuleId := Basic.tprint("%.%", shaderId, macroDefinition);
     shaderModule := Hash.table_find_pointer(engine.shaderModuleMap, shaderModuleId);
     if shaderModule != null then return shaderModule;
     shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderModuleId, .{});
 
-    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition);
+    // @note By convention, things that start with "$" are refering to the internal
+    // shaders of Magma.
+    shaderPath : string;
+    if shaderId[0] == #char "$" {
+        shaderPath = Basic.tprint("%/%.glsl\0", DOLLAR_SHADERS_PATH, Basic.advance(shaderId, 1));
+    } else {
+        shaderPath = Basic.tprint("./%.glsl\0", shaderId);
+    }
+
+    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH);
     defer Basic.array_free(spvCode);
 
     shaderModule.spv = Chamber.spirv_parse(spvCode, parseUniforms);
@@ -456,11 +469,30 @@ _debug_message_callback :: (
     ctx: Context;
     push_context ctx {
         // @todo Better logging system
-        Chamber.debug(Basic.to_string(message));
+        messageString := Basic.to_string(message);
+        linkParts := String.split(messageString, "(https://");
+        specParts := String.split(linkParts[0], " The Vulkan spec states:");
+        sentences := String.split(specParts[0], "|");
+        errorParts := String.split(sentences[0], "Object ");
+
+        Chamber.debug("===== Vulkan Debug Message =====");
+        Chamber.debug(errorParts[0]);
+        for i : 1..errorParts.count-1 {
+            Chamber.debug("  | Object ", errorParts[i]);
+        }
+        for i : 1..sentences.count-1 {
+            Chamber.debug("  |", sentences[i]);
+        }
+        if specParts.count == 2 {
+            Chamber.debug("  >", specParts[1]);
+        }
+        if linkParts.count == 2 {
+            Chamber.debug("  (https://", linkParts[1]);
+        }
 
         // @note SteamVR has inconsistent SPIRV, so we still need to continue...
         engine := cast(*Engine) userData;
-        if !(engine.options.targetFlags & .Vr) {
+        if engine.validationErrorsAreBlocking {
             Basic.assert(false);
         }
     }
@@ -502,3 +534,5 @@ _is_extension_available :: (extensionName : string, availableExtensions : []Vk.E
     }
     return false;
 }
+
+String :: #import "String";

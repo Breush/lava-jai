@@ -19,6 +19,18 @@ WindowHandle :: struct {
     }
 }
 
+min :: (a : $T, b : T) -> T #expand {
+    return ifx a <= b then a else b;
+}
+
+max :: (a : $T, b : T) -> T #expand {
+    return ifx a >= b then a else b;
+}
+
+mix :: (from : $T, to : T, factor : float32) -> T {
+    return from * (1 - factor) + to * factor;
+}
+
 debug :: (args: ..Any) {
     format := "%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+";
     if args.count == 0 || 2 * args.count > format.count then return;

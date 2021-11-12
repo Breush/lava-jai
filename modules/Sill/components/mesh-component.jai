@@ -155,7 +155,7 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
     // glbFixTransform :: #run Chamber.make_trs(make_matrix_from_columns(.{0, 0, 1}, .{1, 0, 0}, .{0, 1, 0}));
     glbFixTransform :: #insert #run () -> string {
         transform := Chamber.make_trs(make_matrix_from_columns(.{0, 1, 0}, .{0, 0, 1}, .{1, 0, 0}));
-        return Basic.sprint("Chamber.trs.{.%, .%, .%};", transform.translation, transform.rotation, transform.scaling);
+        return Basic.sprint("Chamber.trs.{.%, .%, .%};", transform.translation.std, transform.rotation, transform.scaling.std);
     }();
     iMesh.nodes[iRootNodeIndex].transform = glbFixTransform;
     iMesh.nodes[iRootNodeIndex].parent = -1;
@@ -321,9 +321,9 @@ _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, material
 
     material := glb.json["materials"][materialIndex];
 
-    iShader := Magma.renderer_find_shader(iMesh.entity.engine.renderer, "roughness-metallic");
+    iShader := Magma.renderer_find_shader(iMesh.entity.engine.renderer, "$/forward-renderer/materials/roughness-metallic");
     if iShader == null {
-        iShader = Magma.create_shader(iMesh.entity.engine.renderer, "roughness-metallic");
+        iShader = Magma.create_shader(iMesh.entity.engine.renderer, "$/forward-renderer/materials/roughness-metallic");
     }
 
     iMaterial := Magma.create_material(iShader);
@@ -346,10 +346,9 @@ _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, material
         _glb_set_texture(iMaterial, "albedoMap", pbrMetallicRoughness["baseColorTexture"], glb, cache);
         _glb_set_texture(iMaterial, "roughnessMetallicMap", pbrMetallicRoughness["metallicRoughnessTexture"], glb, cache);
 
-        // @fixme Ok, we're just cheating here, the default values should be decided within the shader.
+        // @todo Ok, we're just cheating here, the default values should be decided within the shader.
         if pbrMetallicRoughness["baseColorFactor"].type == .INVALID {
-            color := Chamber.vec4.{1, 1, 1, 1};
-            Magma.material_set(iMaterial, "albedo", color);
+            Magma.material_set(iMaterial, "albedo", Chamber.vec4.{1, 1, 1, 1});
         }
     }
 

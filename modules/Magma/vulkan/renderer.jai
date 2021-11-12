@@ -1,6 +1,7 @@
 #scope_module
 
 #load "forward-renderer.jai";
+#load "post-process-renderer.jai";
 
 /*
     About draw/render/present.
@@ -12,7 +13,6 @@
 RendererImpl :: struct {
     pipelineLayout : Vk.PipelineLayout;
     renderPass : Vk.RenderPass;
-    imageLayout : Vk.ImageLayout;
 
     lastFrameIndex := cast,trunc(u8) ~0;
     commandPool : Vk.CommandPool;
@@ -30,6 +30,17 @@ RendererImpl :: struct {
     frameObjects : [Engine.FRAME_INDEX_COUNT]FrameObject;
 }
 
+ImageInfo :: struct {
+    image : Vk.Image;
+    view : Vk.ImageView;
+    layout : Vk.ImageLayout;
+}
+
+VertexInputDescription :: struct {
+    bindings : []Vk.VertexInputBindingDescription;
+    attributes : []Vk.VertexInputAttributeDescription;
+}
+
 impl_renderer_cleanup :: (renderer : *Renderer) {
     engine := renderer.scene.engine;
 
@@ -41,6 +52,7 @@ impl_renderer_cleanup :: (renderer : *Renderer) {
     Vk.destroy_command_pool(engine.device, renderer.commandPool, null);
 
     Vk.destroy_pipeline_layout(engine.device, renderer.pipelineLayout, null);
+    Vk.destroy_render_pass(engine.device, renderer.renderPass, null);
 }
 
 _renderer_post_init :: (renderer : *Renderer) -> bool {
@@ -79,6 +91,8 @@ _renderer_post_init :: (renderer : *Renderer) -> bool {
 
     if renderer.kind == .ForwardRenderer {
         return _forward_renderer_post_init(cast(*ForwardRenderer) renderer);
+    } else if renderer.kind == .PostProcessRenderer {
+        return _post_process_renderer_post_init(cast(*PostProcessRenderer) renderer);
     }
 
     Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
@@ -107,6 +121,8 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
 
     if renderer.kind == .ForwardRenderer {
         _forward_renderer_render(cast(*ForwardRenderer) renderer, frameIndex);
+    } else if renderer.kind == .PostProcessRenderer {
+        _post_process_renderer_render(cast(*PostProcessRenderer) renderer, frameIndex);
     } else {
         Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
     }
@@ -134,62 +150,73 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
     return true;
 }
 
+_renderer_get_push_constant_ranges :: (renderer : *Renderer) -> []Vk.PushConstantRange {
+    if (renderer.kind == .ForwardRenderer) {
+        return (cast(*ForwardRenderer) renderer).pushConstantRanges;
+    }
+    return .[];
+}
+
+_renderer_get_vertex_input_description :: (renderer : *Renderer) -> VertexInputDescription {
+    if (renderer.kind == .ForwardRenderer) {
+        vertexInputDescription : VertexInputDescription;
+        vertexInputDescription.bindings = (cast(*ForwardRenderer) renderer).vertexInputBindingDescs;
+        vertexInputDescription.attributes = (cast(*ForwardRenderer) renderer).vertexInputAttributeDescs;
+        return vertexInputDescription;
+    }
+    return .{};
+}
+
 _renderer_output_get_render_semaphore :: (output : RendererOutput, frameIndex : u8) -> Vk.Semaphore, u64 {
     frameObject := *output.renderer.frameObjects[frameIndex];
     return frameObject.renderSemaphore, frameObject.renderSemaphoreFinishedValue;
 }
 
-_renderer_output_get_image :: (output : RendererOutput, frameIndex : u8) -> Vk.Image {
+_renderer_output_get_image_info :: (output : RendererOutput, frameIndex : u8) -> ImageInfo {
     if output.renderer.kind == .ForwardRenderer {
-        return _forward_renderer_get_output_image(cast(*ForwardRenderer) output.renderer, output.index, frameIndex);
+        return _forward_renderer_get_output_image_info(cast(*ForwardRenderer) output.renderer, output.index, frameIndex);
+    } else if output.renderer.kind == .PostProcessRenderer {
+        return _post_process_renderer_get_output_image_info(cast(*PostProcessRenderer) output.renderer, output.index, frameIndex);
     }
 
     Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
-    return null;
-}
-
-_renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
-    if output.renderer.kind == .ForwardRenderer {
-        return _forward_renderer_get_output_extent(cast(*ForwardRenderer) output.renderer, output.index);
-    }
-
-    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
-    return .{};
+    imageInfo : ImageInfo;
+    return imageInfo;
 }
 
 _fill_vertex_input_descs :: ($T : Type, binding : u32, locationStart : u32, inputRate : Vk.VertexInputRate) -> u32 #expand {
     typeInfo := type_info(T);
 
-    `vertexInputBindingDescs[binding].binding = binding;
-    `vertexInputBindingDescs[binding].stride = cast(u32) typeInfo.runtime_size;
-    `vertexInputBindingDescs[binding].inputRate = inputRate;
+    `renderer.vertexInputBindingDescs[binding].binding = binding;
+    `renderer.vertexInputBindingDescs[binding].stride = cast(u32) typeInfo.runtime_size;
+    `renderer.vertexInputBindingDescs[binding].inputRate = inputRate;
 
     location := locationStart;
     for *member : typeInfo.members {
         if member.type.runtime_size == 8 { // vec2
-        `vertexInputAttributeDescs[location].binding = binding;
-        `vertexInputAttributeDescs[location].location = location;
-        `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
-            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32Sfloat;
+            `renderer.vertexInputAttributeDescs[location].binding = binding;
+            `renderer.vertexInputAttributeDescs[location].location = location;
+            `renderer.vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
+            `renderer.vertexInputAttributeDescs[location].format = Vk.Format.R32G32Sfloat;
             location += 1;
         } else if member.type.runtime_size == 12 { // vec3
-        `vertexInputAttributeDescs[location].binding = binding;
-        `vertexInputAttributeDescs[location].location = location;
-        `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
-            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32Sfloat;
+            `renderer.vertexInputAttributeDescs[location].binding = binding;
+            `renderer.vertexInputAttributeDescs[location].location = location;
+            `renderer.vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
+            `renderer.vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32Sfloat;
             location += 1;
         } else if member.type.runtime_size == 16 { // vec4
-            `vertexInputAttributeDescs[location].binding = binding;
-            `vertexInputAttributeDescs[location].location = location;
-            `vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
-            `vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32A32Sfloat;
+            `renderer.vertexInputAttributeDescs[location].binding = binding;
+            `renderer.vertexInputAttributeDescs[location].location = location;
+            `renderer.vertexInputAttributeDescs[location].offset = cast(u32) member.offset_in_bytes;
+            `renderer.vertexInputAttributeDescs[location].format = Vk.Format.R32G32B32A32Sfloat;
             location += 1;
         } else if member.type.runtime_size == 48 { // mat3x4
             for i : 0 .. 2 {
-                `vertexInputAttributeDescs[location + i].binding = binding;
-                `vertexInputAttributeDescs[location + i].location = cast(u32) (location + i);
-                `vertexInputAttributeDescs[location + i].offset = cast(u32) (member.offset_in_bytes + i * 16);
-                `vertexInputAttributeDescs[location + i].format = Vk.Format.R32G32B32A32Sfloat;
+                `renderer.vertexInputAttributeDescs[location + i].binding = binding;
+                `renderer.vertexInputAttributeDescs[location + i].location = cast(u32) (location + i);
+                `renderer.vertexInputAttributeDescs[location + i].offset = cast(u32) (member.offset_in_bytes + i * 16);
+                `renderer.vertexInputAttributeDescs[location + i].format = Vk.Format.R32G32B32A32Sfloat;
             }
             location += 3;
         } else {

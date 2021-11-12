@@ -1,5 +1,5 @@
-#include "./eye.set"
-#include "./mesh.set"
+#include "../eye.set"
+#include "../mesh.set"
 
 layout(location = 0) out vec4 outPosition; // w component is eye-depth
 layout(location = 1) out vec2 outUv;

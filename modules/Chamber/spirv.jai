@@ -38,11 +38,12 @@ ShaderKind :: enum {
     Fragment;
 }
 
-spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string) -> [..]u8 {
+// dollarPath is the path to use if any included shader files refer to "$/something.glsl"
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string) -> [..]u8 {
     spvCode : [..]u8;
 
     glslFileContent, readOk := File.read_entire_file(glslFile);
-    _CHECK(readOk, spvCode, "Unable to read shader file.");
+    _CHECK(readOk, spvCode, Basic.tprint("Unable to read shader file: %", glslFile));
     defer Basic.free(glslFileContent);
 
     shadercShaderKind : Shaderc.ShaderKind;
@@ -53,6 +54,7 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     }
 
     userData : ShadercUserData;
+    userData.dollarPath = dollarPath;
     compiler := Shaderc.compiler_initialize();
     compileOptions := Shaderc.compile_options_initialize();
     Shaderc.compile_options_set_source_language(compileOptions, .Glsl);
@@ -293,6 +295,7 @@ ShadercUserData :: struct {
     // just store their content once and for all.
     includeResults : [16]Shaderc.IncludeResult;
     includeResultsCount : u32;
+    dollarPath : string;
 }
 
 // @todo @speed Looks like shaderc is re-asking for the same files
@@ -303,11 +306,19 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
     ctx : Context;
     includeResult : *Shaderc.IncludeResult;
     push_context ctx {
-        _, requestingPath := Compiler.get_basename_and_path(Basic.to_string(requestingSource));
-        shaderPath := Basic.sprint("%/%", requestingPath, Basic.to_string(requestedSource));
+        userData := cast(*ShadercUserData) _userData;
+        requestedSourceString := Basic.to_string(requestedSource);
+        requestingSourceString := Basic.to_string(requestingSource);
+        _, requestingPath := Compiler.get_basename_and_path(requestingSourceString);
+
+        shaderPath : string;
+        if requestedSourceString[0] == #char "$" {
+            shaderPath = Basic.sprint("%/%", userData.dollarPath, Basic.advance(requestedSourceString, 1));
+        } else {
+            shaderPath = Basic.sprint("%/%", requestingPath, requestedSourceString);
+        }
         shaderCode, readOk := File.read_entire_file(shaderPath);
 
-        userData := cast(*ShadercUserData) _userData;
         includeResult = *userData.includeResults[userData.includeResultsCount];
         userData.includeResultsCount += 1;
 
@@ -315,7 +326,7 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
         includeResult.sourceNameLength = xx shaderPath.count;
         includeResult.content = shaderCode.data;
         includeResult.contentLength = xx shaderCode.count;
-        _CHECK(readOk, null, "Unable to read shader file.");
+        _CHECK(readOk, null, Basic.tprint("Unable to read shader file: % from %", requestedSourceString, Basic.to_string(requestingSource)));
     }
     return includeResult;
 }
