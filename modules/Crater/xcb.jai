@@ -287,7 +287,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         if (utf32 > 31 && utf32 != 127) {
             event : Event;
             event.kind = Event.Kind.TextEntered;
-            Basic.write_relative_pointer(u8, *event.text.str.data, *event.text.utf8);
+            event.text.str.data = *event.text.utf8[0]; // Relative pointer
             event.text.str.count = cast(s8) utf8ByteCount; // @fixme Why count changes type? Is this a compiler issue?
             event.text.utf8 = utf8;
             event.text.utf32 = utf32;
