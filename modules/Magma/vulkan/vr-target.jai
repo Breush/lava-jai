@@ -79,99 +79,43 @@ _vr_target_draw :: (vrTarget : *VrTarget, frameIndex : u8) -> bool {
 #scope_file
 
 _present :: (vrTarget : *VrTarget, frameIndex : u8) -> bool {
-    vr := *vrTarget.engine.vr;
-
-    if !vrTarget.sessionRunning then return false;
-
-    frameWI : Xr.FrameWaitInfo;
-    frameWI.type = .TypeFrameWaitInfo;
-    frameState : Xr.FrameState;
-    frameState.type = .TypeFrameState;
-    _CHECK(Xr.wait_frame(vrTarget.session, *frameWI, *frameState),
-           "Unable to wait for OpenXR frame.");
-
-    frameBI : Xr.FrameBeginInfo;
-    frameBI.type = .TypeFrameBeginInfo;
-    _CHECK(Xr.begin_frame(vrTarget.session, *frameBI),
-           "Unable to begin OpenXR frame.");
+    if !vr_target_pre_render(vrTarget) then return false;
 
     compositionLayer : Xr.CompositionLayerProjection;
     compositionLayer.type = .TypeCompositionLayerProjection;
     compositionLayers : [1]*Xr.CompositionLayerBaseHeader;
     compositionLayerViews : [2]Xr.CompositionLayerProjectionView;
 
-    hasRendered := false;
-    if frameState.shouldRender {
-        if _render(vrTarget, frameIndex, *frameState, compositionLayerViews) {
-            hasRendered = true;
-            compositionLayer.space = vrTarget.referenceSpace;
+    compositionLayersArrayView : []*Xr.CompositionLayerBaseHeader = compositionLayers;
+    compositionLayersArrayView.count = 0;
+
+    if vrTarget.frameState.shouldRender {
+        if _render(vrTarget, frameIndex, compositionLayerViews) {
+            compositionLayer.space = vrTarget.stageReferenceSpace;
             compositionLayer.viewCount = compositionLayerViews.count;
             compositionLayer.views = compositionLayerViews.data;
             compositionLayers[0] = cast(*Xr.CompositionLayerBaseHeader) *compositionLayer;
+            compositionLayersArrayView.count = 1;
         }
     }
 
-    frameEI : Xr.FrameEndInfo;
-    frameEI.type = .TypeFrameEndInfo;
-    frameEI.displayTime = frameState.predictedDisplayTime;
-    frameEI.environmentBlendMode = Xr.EnvironmentBlendMode.Opaque;
-    if hasRendered {
-        frameEI.layerCount = compositionLayers.count;
-        frameEI.layers = compositionLayers.data;
-    }
-
-    _CHECK(Xr.end_frame(vrTarget.session, *frameEI),
-           "Unable to end OpenXR frame.");
-
-    return true;
+    return vr_target_post_render(vrTarget, compositionLayersArrayView);
 }
 
-_render :: (vrTarget : *VrTarget, frameIndex : u8, frameState : *Xr.FrameState, compositionLayerViews : []Xr.CompositionLayerProjectionView) -> bool {
+_render :: (vrTarget : *VrTarget, frameIndex : u8, compositionLayerViews : []Xr.CompositionLayerProjectionView) -> bool {
     vr := *vrTarget.engine.vr;
 
     frameObject := vrTarget.frameObjects[frameIndex];
     Vk.wait_for_fences(vrTarget.engine.device, 1, *frameObject.inFlightFence, Vk.TRUE, ~0);
     Vk.reset_fences(vrTarget.engine.device, 1, *frameObject.inFlightFence);
 
-    // Views...
-    viewLI : Xr.ViewLocateInfo;
-    viewLI.type = .TypeViewLocateInfo;
-    viewLI.viewConfigurationType = .PrimaryStereo;
-    viewLI.displayTime = frameState.predictedDisplayTime;
-    viewLI.space = vrTarget.referenceSpace;
-
-    viewState : Xr.ViewState;
-    viewState.type = .TypeViewState;
-    viewCount : u32;
-
-    _CHECK(Xr.locate_views(vrTarget.session, *viewLI, *viewState, cast(u32) vrTarget.views.count, *viewCount, vrTarget.views.data),
-            "Unable to locate OpenXR views.");
-
-    for *view, viewIndex : vrTarget.views {
-        eye := renderer_get_eye(vrTarget.rendererOutputs[viewIndex].renderer, 0);
-
-        // Going from right-handed Y up, -Z forward coordinate system
-        // to ours, right-handed Z up, X forward.
-        orientation : Chamber.quat = ---;
-        orientation.x = -view.pose.orientation.z;
-        orientation.y = -view.pose.orientation.x;
-        orientation.z = view.pose.orientation.y;
-        orientation.w = view.pose.orientation.w;
-
-        matrix := make_rotation_matrix4(orientation);
-        matrix.coef[0][3] = -view.pose.position.z;
-        matrix.coef[1][3] = -view.pose.position.x;
-        matrix.coef[2][3] = view.pose.position.y;
-
-        eye.viewMatrix = Chamber.inverse_and_prepare_for_projection(matrix);
-        Chamber.infinite_perspective_projection(*eye.projectionMatrix, view.fov.angleLeft, view.fov.angleRight, view.fov.angleUp, view.fov.angleDown, 0.1);
-        eye_commit(eye);
-    }
+    vr_target_sync(vrTarget);
 
     if !_renderer_render(vrTarget.rendererOutputs[0].renderer, frameIndex) then return false;
     if !_renderer_render(vrTarget.rendererOutputs[1].renderer, frameIndex) then return false;
 
-    // Our rendering.
+    // ----- Rendering
+
     commandBuffer := frameObject.commandBuffer;
     commandBufferBeginInfo : Vk.CommandBufferBeginInfo;
     commandBufferBeginInfo.sType = .CommandBufferBeginInfo;
@@ -301,9 +245,8 @@ _init_swapchain :: (vrTarget : *VrTarget) -> bool {
     defer Basic.array_free(swapchainFormats);
 
     for *swapchainInfo, viewIndex : vrTarget.swapchainInfos {
-        // @todo Make that user configurable?
-        swapchainInfo.extent.width = vrTarget.configurationViews[viewIndex].recommendedImageRectWidth;
-        swapchainInfo.extent.height = vrTarget.configurationViews[viewIndex].recommendedImageRectHeight;
+        swapchainInfo.extent.width = vr.configurationViews[viewIndex].recommendedImageRectWidth;
+        swapchainInfo.extent.height = vr.configurationViews[viewIndex].recommendedImageRectHeight;
 
         swapchainCI : Xr.SwapchainCreateInfo;
         swapchainCI.type = .TypeSwapchainCreateInfo;

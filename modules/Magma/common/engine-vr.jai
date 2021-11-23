@@ -20,6 +20,18 @@ Vr :: struct {
 
     vulkanInstanceExtensions : *u8;
     vulkanDeviceExtensions : *u8;
+
+    configurationViews : [2]Xr.ViewConfigurationView;
+    actionSet : Xr.ActionSet;
+
+    handInfos : [2]struct {
+        name : string;
+        path : Xr.Path;
+        clickPath : Xr.Path;
+        gripPosePath : Xr.Path;
+
+        poseAction : Xr.Action;
+    };
 }
 
 engine_vr_init :: (engine : *Engine) -> bool {
@@ -85,6 +97,22 @@ engine_vr_init :: (engine : *Engine) -> bool {
     _CHECK(Xr.get_system(vr.instance, *systemGI, *vr.systemId),
            "Unable to get OpenXR system.");
 
+    // Views
+    viewConfigurations : [..]Xr.ViewConfigurationType;
+    defer Basic.array_free(viewConfigurations);
+    Xr.array_fill(*viewConfigurations, Xr.enumerate_view_configurations, vr.instance, vr.systemId);
+    _CHECK(Basic.array_find(viewConfigurations, .PrimaryStereo),
+           "Unable to find a valid OpenXR view configuration.");
+
+    viewConfigurationProperties : Xr.ViewConfigurationProperties;
+    viewConfigurationProperties.type = .TypeViewConfigurationProperties;
+    Xr.get_view_configuration_properties(vr.instance, vr.systemId, .PrimaryStereo, *viewConfigurationProperties);
+
+    Xr.array_fill_stype(vr.configurationViews, Xr.enumerate_view_configuration_views, vr.instance, vr.systemId, viewConfigurationProperties.viewConfigurationType, .TypeViewConfigurationView);
+
+    // Actions
+    _init_actions(vr);
+
     // Debug report callback
     if vr.debugUtilsEnabled {
         Xr.load_instance_proc(vr.instance, *Xr.create_debug_utils_messenger_ext, "xrCreateDebugUtilsMessengerEXT");
@@ -128,6 +156,13 @@ engine_vr_cleanup :: (engine : *Engine) {
     Chamber.debug("Warning: Hard quitting with SegFault because of SteamVR hanging otherwise...");
     <<(cast(*u8)0) = 1;
     Xr.destroy_instance(vr.instance);
+}
+
+vr_recommended_eye_extent :: (vr : *Vr, eyeKind : Vr.EyeKind) -> Chamber.uvec2 {
+    extent : Chamber.uvec2;
+    extent.width = vr.configurationViews[eyeKind].recommendedImageRectWidth;
+    extent.height = vr.configurationViews[eyeKind].recommendedImageRectHeight;
+    return extent;
 }
 
 // The returned array should be freed.
@@ -214,6 +249,62 @@ _is_extension_available :: (extensionName : string, availableExtensions : []Xr.E
         }
     }
     return false;
+}
+
+_init_actions :: (vr : *Vr) -> bool {
+    actionSetCI : Xr.ActionSetCreateInfo;
+    actionSetCI.type = .TypeActionSetCreateInfo;
+    memcpy(*actionSetCI.actionSetName[0], "lava.magma.gameplay".data, "lava.magma.gameplay".count);
+    memcpy(*actionSetCI.localizedActionSetName[0], "Gameplay".data, "Gameplay".count);
+    _CHECK(Xr.create_action_set(vr.instance, *actionSetCI, *vr.actionSet),
+           "Unable to create OpenXR action set.");
+
+    vr.handInfos[0].name = "left";
+    vr.handInfos[1].name = "right";
+
+    Xr.string_to_path(vr.instance, "/user/hand/left", *vr.handInfos[0].path);
+    Xr.string_to_path(vr.instance, "/user/hand/right", *vr.handInfos[1].path);
+
+    Xr.string_to_path(vr.instance, "/user/hand/left/input/select/click", *vr.handInfos[0].clickPath);
+    Xr.string_to_path(vr.instance, "/user/hand/right/input/select/click", *vr.handInfos[1].clickPath);
+
+    Xr.string_to_path(vr.instance, "/user/hand/left/input/grip/pose", *vr.handInfos[0].gripPosePath);
+    Xr.string_to_path(vr.instance, "/user/hand/right/input/grip/pose", *vr.handInfos[1].gripPosePath);
+
+    for *handInfo : vr.handInfos {
+        actionCI : Xr.ActionCreateInfo;
+        actionCI.type = .TypeActionCreateInfo;
+        actionCI.actionType = .PoseInput;
+        actionCI.countSubactionPaths = 1;
+        actionCI.subactionPaths = *handInfo.path;
+        memcpy(*actionCI.actionName[0], "hand.pose.".data, "hand.pose.".count);
+        memcpy(*actionCI.actionName["hand.pose.".count], handInfo.name.data, handInfo.name.count);
+        memcpy(*actionCI.localizedActionName[0], "Hand pose ".data, "Hand pose ".count);
+        memcpy(*actionCI.localizedActionName["Hand pose".count], handInfo.name.data, handInfo.name.count);
+        _CHECK(Xr.create_action(vr.actionSet, *actionCI, *handInfo.poseAction),
+               "Unable to create OpenXR 'hand.pose' action.");
+    }
+
+    interactionProfilePath : Xr.Path;
+    _CHECK(Xr.string_to_path(vr.instance, "/interaction_profiles/khr/simple_controller", *interactionProfilePath),
+           "Unable to get OpenXR interaction profile.");
+
+    actionSuggestedBindings : [2]Xr.ActionSuggestedBinding;
+    actionSuggestedBindings[0].action = vr.handInfos[0].poseAction;
+    actionSuggestedBindings[0].binding = vr.handInfos[0].gripPosePath;
+    actionSuggestedBindings[1].action = vr.handInfos[1].poseAction;
+    actionSuggestedBindings[1].binding = vr.handInfos[1].gripPosePath;
+
+    interactionProfileSuggestedBindings : Xr.InteractionProfileSuggestedBinding;
+    interactionProfileSuggestedBindings.type = .TypeInteractionProfileSuggestedBinding;
+    interactionProfileSuggestedBindings.interactionProfile = interactionProfilePath;
+    interactionProfileSuggestedBindings.countSuggestedBindings = actionSuggestedBindings.count;
+    interactionProfileSuggestedBindings.suggestedBindings = actionSuggestedBindings.data;
+
+    _CHECK(Xr.suggest_interaction_profile_bindings(vr.instance, *interactionProfileSuggestedBindings),
+           "Unable to suggest OpenXR interaction profile bindings.");
+
+    return true;
 }
 
 String :: #import "String";

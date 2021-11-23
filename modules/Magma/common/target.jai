@@ -131,11 +131,27 @@ VrTarget :: struct {
     rendererOutputs : [2]RendererOutput;
 
     sessionRunning : bool;
+    sessionFocused : bool;
     session : Xr.Session;
-    configurationViews : [2]Xr.ViewConfigurationView;
     views : [2]Xr.View;
     eventDataBuffer : Xr.EventDataBuffer;
-    referenceSpace : Xr.Space;
+    stageReferenceSpace : Xr.Space;
+    viewReferenceSpace : Xr.Space;
+    frameState : Xr.FrameState;
+
+    headInfo : struct {
+        spaceLocation : Xr.SpaceLocation;
+        transform : Chamber.trf;
+    };
+
+    handInfos : [2]struct {
+        poseSpace : Xr.Space;
+        poseActionState : Xr.ActionStatePose;
+        poseActionStateGI : Xr.ActionStateGetInfo;
+        poseSpaceLocation : Xr.SpaceLocation;
+
+        transform : Chamber.trf;
+    };
 
     using vrTargetImpl : VrTargetImpl;
 }
@@ -196,7 +212,10 @@ vr_target_update :: (vrTarget : *VrTarget) -> bool {
                         "Unable to begin OpenXR session.");
 
                     vrTarget.sessionRunning = true;
+                } else if sessionState == .Focused {
+                    vrTarget.sessionFocused = true;
                 }
+                // @todo Check for IDLE too, in order to not render
             }
         } else if result == .EventUnavailable {
             // Nothing to do
@@ -209,15 +228,107 @@ vr_target_update :: (vrTarget : *VrTarget) -> bool {
     return true;
 }
 
-vr_target_bind :: (vrTarget : *VrTarget, rendererOutput : RendererOutput, bindIndex : u8) {
-    vrTarget.rendererOutputs[bindIndex] = rendererOutput;
+vr_target_pre_render :: (vrTarget : *VrTarget) -> bool {
+    if !vrTarget.sessionRunning then return false;
+
+    frameWI : Xr.FrameWaitInfo;
+    frameWI.type = .TypeFrameWaitInfo;
+    _CHECK(Xr.wait_frame(vrTarget.session, *frameWI, *vrTarget.frameState),
+           "Unable to wait for OpenXR frame.");
+
+    frameBI : Xr.FrameBeginInfo;
+    frameBI.type = .TypeFrameBeginInfo;
+    _CHECK(Xr.begin_frame(vrTarget.session, *frameBI),
+           "Unable to begin OpenXR frame.");
+
+    return true;
 }
 
-vr_target_recommended_eye_extent :: (vrTarget : *VrTarget, eyeKind : Vr.EyeKind) -> Chamber.uvec2 {
-    extent : Chamber.uvec2;
-    extent.width = vrTarget.configurationViews[eyeKind].recommendedImageRectWidth;
-    extent.height = vrTarget.configurationViews[eyeKind].recommendedImageRectHeight;
-    return extent;
+vr_target_post_render :: (vrTarget : *VrTarget, compositionLayers : []*Xr.CompositionLayerBaseHeader) -> bool {
+    frameEI : Xr.FrameEndInfo;
+    frameEI.type = .TypeFrameEndInfo;
+    frameEI.displayTime = vrTarget.frameState.predictedDisplayTime;
+    frameEI.environmentBlendMode = Xr.EnvironmentBlendMode.Opaque;
+    frameEI.layerCount = cast(u32) compositionLayers.count;
+    frameEI.layers = compositionLayers.data;
+
+    _CHECK(Xr.end_frame(vrTarget.session, *frameEI),
+           "Unable to end OpenXR frame.");
+
+    return true;
+}
+
+vr_target_sync :: (vrTarget : *VrTarget) -> bool {
+    vr := *vrTarget.engine.vr;
+
+    if vrTarget.sessionFocused {
+        activeActionSet : Xr.ActiveActionSet;
+        activeActionSet.actionSet = vr.actionSet;
+
+        actionsSI : Xr.ActionsSyncInfo;
+        actionsSI.type = .TypeActionsSyncInfo;
+        actionsSI.countActiveActionSets = 1;
+        actionsSI.activeActionSets = *activeActionSet;
+
+        _CHECK(Xr.sync_actions(vrTarget.session, *actionsSI),
+               "Unable to sync OpenXR actions.");
+
+        _CHECK(Xr.locate_space(vrTarget.viewReferenceSpace, vrTarget.stageReferenceSpace, vrTarget.frameState.predictedDisplayTime, *vrTarget.headInfo.spaceLocation),
+               "Unable to locate OpenXR space for hand.");
+        _space_location_to_trf(vrTarget.headInfo.spaceLocation, *vrTarget.headInfo.transform);
+
+        for *handInfo : vrTarget.handInfos {
+            _CHECK(Xr.get_action_state_pose(vrTarget.session, *handInfo.poseActionStateGI, *handInfo.poseActionState),
+                   "Unable to get OpenXR action state pose.");
+
+            if handInfo.poseActionState.isActive {
+                _CHECK(Xr.locate_space(handInfo.poseSpace, vrTarget.stageReferenceSpace, vrTarget.frameState.predictedDisplayTime, *handInfo.poseSpaceLocation),
+                       "Unable to locate OpenXR space for hand.");
+                _space_location_to_trf(handInfo.poseSpaceLocation, *handInfo.transform);
+            }
+        }
+    }
+
+    // Views
+    viewLI : Xr.ViewLocateInfo;
+    viewLI.type = .TypeViewLocateInfo;
+    viewLI.viewConfigurationType = .PrimaryStereo;
+    viewLI.displayTime = vrTarget.frameState.predictedDisplayTime;
+    viewLI.space = vrTarget.stageReferenceSpace;
+
+    viewState : Xr.ViewState;
+    viewState.type = .TypeViewState;
+    viewCount : u32;
+
+    _CHECK(Xr.locate_views(vrTarget.session, *viewLI, *viewState, cast(u32) vrTarget.views.count, *viewCount, vrTarget.views.data),
+            "Unable to locate OpenXR views.");
+
+    for *view, viewIndex : vrTarget.views {
+        eye := renderer_get_eye(vrTarget.rendererOutputs[viewIndex].renderer, 0);
+
+        // Going from right-handed Y up, -Z forward coordinate system
+        // to ours, right-handed Z up, X forward.
+        orientation : Chamber.quat = ---;
+        orientation.x = -view.pose.orientation.z;
+        orientation.y = -view.pose.orientation.x;
+        orientation.z = view.pose.orientation.y;
+        orientation.w = view.pose.orientation.w;
+
+        matrix := make_rotation_matrix4(orientation);
+        matrix.coef[0][3] = -view.pose.position.z;
+        matrix.coef[1][3] = -view.pose.position.x;
+        matrix.coef[2][3] = view.pose.position.y;
+
+        eye.viewMatrix = Chamber.inverse_and_prepare_for_projection(matrix);
+        Chamber.infinite_perspective_projection(*eye.projectionMatrix, view.fov.angleLeft, view.fov.angleRight, view.fov.angleUp, view.fov.angleDown, 0.1);
+        eye_commit(eye);
+    }
+
+    return true;
+}
+
+vr_target_bind :: (vrTarget : *VrTarget, rendererOutput : RendererOutput, bindIndex : u8) {
+    vrTarget.rendererOutputs[bindIndex] = rendererOutput;
 }
 
 #scope_file
@@ -242,28 +353,52 @@ _init_vr :: (vrTarget : *VrTarget) -> bool {
            "Unable to create OpenXR session.");
 
     // Eyes (named views here)
-    viewConfigurations : [..]Xr.ViewConfigurationType;
-    defer Basic.array_free(viewConfigurations);
-    Xr.array_fill(*viewConfigurations, Xr.enumerate_view_configurations, vr.instance, vr.systemId);
-    _CHECK(Basic.array_find(viewConfigurations, .PrimaryStereo),
-           "Unable to find a valid OpenXR view configuration.");
-
-    viewConfigurationProperties : Xr.ViewConfigurationProperties;
-    viewConfigurationProperties.type = .TypeViewConfigurationProperties;
-    Xr.get_view_configuration_properties(vr.instance, vr.systemId, .PrimaryStereo, *viewConfigurationProperties);
-
-    Xr.array_fill_stype(vrTarget.configurationViews, Xr.enumerate_view_configuration_views, vr.instance, vr.systemId, viewConfigurationProperties.viewConfigurationType, .TypeViewConfigurationView);
     for *view : vrTarget.views {
         view.type = .TypeView;
     }
 
-    // Space
+    // Spaces
     referenceSpaceCI : Xr.ReferenceSpaceCreateInfo;
     referenceSpaceCI.type = .TypeReferenceSpaceCreateInfo;
     referenceSpaceCI.poseInReferenceSpace.orientation.w = 1; // Identity
     referenceSpaceCI.referenceSpaceType = .Stage;
-    _CHECK(Xr.create_reference_space(vrTarget.session, *referenceSpaceCI, *vrTarget.referenceSpace),
-           "Unable to create OpenXR reference space.");
+    _CHECK(Xr.create_reference_space(vrTarget.session, *referenceSpaceCI, *vrTarget.stageReferenceSpace),
+           "Unable to create OpenXR stage reference space.");
+
+    referenceSpaceCI.referenceSpaceType = .View;
+    _CHECK(Xr.create_reference_space(vrTarget.session, *referenceSpaceCI, *vrTarget.viewReferenceSpace),
+           "Unable to create OpenXR view reference space.");
+
+    // Actions
+    vrTarget.headInfo.spaceLocation.type = .TypeSpaceLocation;
+
+    for *handInfo, handIndex : vrTarget.handInfos {
+        handInfo.poseSpaceLocation.type = .TypeSpaceLocation;
+        handInfo.poseActionState.type = .TypeActionStatePose;
+        handInfo.poseActionStateGI.type = .TypeActionStateGetInfo;
+        handInfo.poseActionStateGI.action = vr.handInfos[handIndex].poseAction;
+        handInfo.poseActionStateGI.subactionPath = vr.handInfos[handIndex].path;
+
+        // @note We need a space for each pose
+        actionSpaceCI : Xr.ActionSpaceCreateInfo;
+        actionSpaceCI.type = .TypeActionSpaceCreateInfo;
+        actionSpaceCI.action = vr.handInfos[handIndex].poseAction;
+        actionSpaceCI.poseInActionSpace.orientation.w = 1; // Identity
+        actionSpaceCI.subactionPath = vr.handInfos[handIndex].path;
+
+        _CHECK(Xr.create_action_space(vrTarget.session, *actionSpaceCI, *handInfo.poseSpace),
+               "Unable to create OpenXR hand pose space.");
+    }
+
+    sessionActionSetsAI : Xr.SessionActionSetsAttachInfo;
+    sessionActionSetsAI.type = .TypeSessionActionSetsAttachInfo;
+    sessionActionSetsAI.countActionSets = 1;
+    sessionActionSetsAI.actionSets = *vr.actionSet;
+    _CHECK(Xr.attach_session_action_sets(vrTarget.session, *sessionActionSetsAI),
+           "Unable to attach OpenXR session action sets.");
+
+    // Extra
+    vrTarget.frameState.type = .TypeFrameState;
 
     return true;
 }
@@ -271,7 +406,8 @@ _init_vr :: (vrTarget : *VrTarget) -> bool {
 _cleanup_vr :: (vrTarget : *VrTarget) -> bool {
     vr := *vrTarget.engine.vr;
 
-    Xr.destroy_space(vrTarget.referenceSpace);
+    Xr.destroy_space(vrTarget.viewReferenceSpace);
+    Xr.destroy_space(vrTarget.stageReferenceSpace);
 
     // Stopping session
     // @todo Could be nice to expose this functionnality to the end user.
@@ -300,4 +436,14 @@ _cleanup_vr :: (vrTarget : *VrTarget) -> bool {
     Xr.destroy_session(vrTarget.session);
 
     return true;
+}
+
+_space_location_to_trf :: (spaceLocation : Xr.SpaceLocation, transform : *Chamber.trf) {
+    transform.translation.x = -spaceLocation.pose.position.z;
+    transform.translation.y = -spaceLocation.pose.position.x;
+    transform.translation.z = spaceLocation.pose.position.y;
+    transform.rotation.x = -spaceLocation.pose.orientation.z;
+    transform.rotation.y = -spaceLocation.pose.orientation.x;
+    transform.rotation.z = spaceLocation.pose.orientation.y;
+    transform.rotation.w = spaceLocation.pose.orientation.w;
 }

@@ -59,8 +59,8 @@ engine_init :: (engine : *EngineBase) {
     if (engine.renderEngine.vr.enabled) {
         engine.vrTarget = Magma.create_vr_target(engine.renderEngine);
 
-        leftEyeExtent := Magma.vr_target_recommended_eye_extent(engine.vrTarget, .Left);
-        rightEyeExtent := Magma.vr_target_recommended_eye_extent(engine.vrTarget, .Right);
+        leftEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Left);
+        rightEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Right);
         engine.vrLeftRenderer = Magma.create_forward_renderer(engine.scene, leftEyeExtent);
         engine.vrRightRenderer = Magma.create_forward_renderer(engine.scene, rightEyeExtent);
 

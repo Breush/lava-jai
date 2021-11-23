@@ -34,8 +34,8 @@ main :: () {
     // VR eyes usually have the same extent, but we ask for both anyway.
     // Nothing prevents us to render to a different extent, image will be
     // stretched to fill the recommended extent.
-    leftEyeExtent := Magma.vr_target_recommended_eye_extent(vrTarget, .Left);
-    rightEyeExtent := Magma.vr_target_recommended_eye_extent(vrTarget, .Right);
+    leftEyeExtent := Magma.vr_recommended_eye_extent(*engine.vr, .Left);
+    rightEyeExtent := Magma.vr_recommended_eye_extent(*engine.vr, .Right);
     if leftEyeExtent.width == 0 {
         leftEyeExtent.width = window.videoMode.width;
         leftEyeExtent.height = window.videoMode.height;
