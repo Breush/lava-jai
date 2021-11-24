@@ -7,6 +7,12 @@ Input :: struct {
         previousActiveness : u8;
         activeness : u8; // How many buttons/keys are currently down.
         keys : [..]Crater.Key; // @todo These are "OR". But we will need to express "AND" somehow.
+        triggers : [..]Trigger;
+
+        Trigger :: struct {
+            kind : VrTriggerKind;
+            lastChangeTime : s64;
+        };
     };
 
     Axis :: struct {
@@ -21,11 +27,23 @@ Input :: struct {
         // MouseWheelX; @todo Not yet implemented
         MouseWheelY; // Classical mouse wheel
     }
+
+    VrTriggerKind :: enum {
+        LeftHandSelect;
+        RightHandSelect;
+    }
 }
 
 input_action_bind :: (input : *Input, actionName : string, key : Crater.Key) {
     action := Chamber.table_find_or_add(*input.actions, actionName);
     Basic.array_add_if_unique(*action.keys, key);
+}
+
+input_action_bind :: (input : *Input, actionName : string, triggerKind : Input.VrTriggerKind) {
+    action := Chamber.table_find_or_add(*input.actions, actionName);
+    trigger : Input.Action.Trigger;
+    trigger.kind = triggerKind;
+    Basic.array_add(*action.triggers, trigger); // @todo operator== overload does not work for some reason, so no unique check.
 }
 
 input_action_active :: (input : *Input, actionName : string) -> bool {
@@ -115,6 +133,41 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
             for kind : axis.kinds {
                 if kind == .MouseWheelY {
                     axis.value += event.mouseWheel.dy;
+                }
+            }
+        }
+    }
+}
+
+_input_handle_vr_events :: (input : *Input, vrTarget : *Magma.VrTarget) {
+    // @fixme There might be a latent bug here.
+    // As VR updates are done during render(), a very fast "select" might
+    // change selectActionState.lastChangeTime but have the same currentState
+    // as before. Therefore, dropping the activeness to an non-reparable status.
+
+    for *action : input.actions {
+        for *trigger : action.triggers {
+            if trigger.kind == .LeftHandSelect {
+                selectActionState := *vrTarget.handInfos[0].selectActionState;
+                if selectActionState.lastChangeTime > 0 &&
+                   trigger.lastChangeTime != selectActionState.lastChangeTime {
+                    trigger.lastChangeTime = selectActionState.lastChangeTime;
+                    if selectActionState.currentState == 1. {
+                        action.activeness += 1;
+                    } else {
+                        action.activeness -= 1;
+                    }
+                }
+            } else if trigger.kind == .RightHandSelect {
+                selectActionState := *vrTarget.handInfos[1].selectActionState;
+                if selectActionState.lastChangeTime > 0 &&
+                   trigger.lastChangeTime != selectActionState.lastChangeTime {
+                    trigger.lastChangeTime = selectActionState.lastChangeTime;
+                    if selectActionState.currentState == 1. {
+                        action.activeness += 1;
+                    } else {
+                        action.activeness -= 1;
+                    }
                 }
             }
         }

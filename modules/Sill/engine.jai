@@ -151,4 +151,9 @@ _engine_handle_input_events :: (engine : *EngineBase) {
 
         event = Crater.window_poll_event(engine.window);
     }
+
+    // VR events
+    if (engine.renderEngine.vr.enabled) {
+        _input_handle_vr_events(*engine.input, engine.vrTarget);
+    }
 }

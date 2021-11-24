@@ -27,10 +27,11 @@ Vr :: struct {
     handInfos : [2]struct {
         name : string;
         path : Xr.Path;
-        clickPath : Xr.Path;
+        selectPath : Xr.Path;
         gripPosePath : Xr.Path;
 
         poseAction : Xr.Action;
+        selectAction : Xr.Action;
     };
 }
 
@@ -229,6 +230,10 @@ _debug_messenger_callback :: (messageSeverity : Xr.DebugUtilsMessageSeverityFlag
     push_context ctx {
         // @todo Have one channel for messages.
         Chamber.debug("[OpenXR]: ", Basic.to_string(callbackData.functionName), " ", Basic.to_string(callbackData.message));
+
+        if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT != 0 {
+            Basic.assert(false);
+        }
     }
     return Xr.TRUE;
 }
@@ -265,8 +270,8 @@ _init_actions :: (vr : *Vr) -> bool {
     Xr.string_to_path(vr.instance, "/user/hand/left", *vr.handInfos[0].path);
     Xr.string_to_path(vr.instance, "/user/hand/right", *vr.handInfos[1].path);
 
-    Xr.string_to_path(vr.instance, "/user/hand/left/input/select/click", *vr.handInfos[0].clickPath);
-    Xr.string_to_path(vr.instance, "/user/hand/right/input/select/click", *vr.handInfos[1].clickPath);
+    Xr.string_to_path(vr.instance, "/user/hand/left/input/select/click", *vr.handInfos[0].selectPath);
+    Xr.string_to_path(vr.instance, "/user/hand/right/input/select/click", *vr.handInfos[1].selectPath);
 
     Xr.string_to_path(vr.instance, "/user/hand/left/input/grip/pose", *vr.handInfos[0].gripPosePath);
     Xr.string_to_path(vr.instance, "/user/hand/right/input/grip/pose", *vr.handInfos[1].gripPosePath);
@@ -277,23 +282,31 @@ _init_actions :: (vr : *Vr) -> bool {
         actionCI.actionType = .PoseInput;
         actionCI.countSubactionPaths = 1;
         actionCI.subactionPaths = *handInfo.path;
-        memcpy(*actionCI.actionName[0], "hand.pose.".data, "hand.pose.".count);
-        memcpy(*actionCI.actionName["hand.pose.".count], handInfo.name.data, handInfo.name.count);
-        memcpy(*actionCI.localizedActionName[0], "Hand pose ".data, "Hand pose ".count);
-        memcpy(*actionCI.localizedActionName["Hand pose".count], handInfo.name.data, handInfo.name.count);
+        _set(*actionCI.actionName[0], Basic.tprint("hand.pose.%", handInfo.name));
+        _set(*actionCI.localizedActionName[0], Basic.tprint("Hand pose (%)", handInfo.name));
         _CHECK(Xr.create_action(vr.actionSet, *actionCI, *handInfo.poseAction),
                "Unable to create OpenXR 'hand.pose' action.");
+
+        actionCI.actionType = .FloatInput;
+        _set(*actionCI.actionName[0], Basic.tprint("hand.select.%", handInfo.name));
+        _set(*actionCI.localizedActionName[0], Basic.tprint("Hand select (%)", handInfo.name));
+        _CHECK(Xr.create_action(vr.actionSet, *actionCI, *handInfo.selectAction),
+               "Unable to create OpenXR 'hand.select' action.");
     }
 
     interactionProfilePath : Xr.Path;
     _CHECK(Xr.string_to_path(vr.instance, "/interaction_profiles/khr/simple_controller", *interactionProfilePath),
            "Unable to get OpenXR interaction profile.");
 
-    actionSuggestedBindings : [2]Xr.ActionSuggestedBinding;
-    actionSuggestedBindings[0].action = vr.handInfos[0].poseAction;
-    actionSuggestedBindings[0].binding = vr.handInfos[0].gripPosePath;
-    actionSuggestedBindings[1].action = vr.handInfos[1].poseAction;
-    actionSuggestedBindings[1].binding = vr.handInfos[1].gripPosePath;
+    actionSuggestedBindings : [4]Xr.ActionSuggestedBinding;
+    bindingIndex := 0;
+    for handInfo : vr.handInfos {
+        actionSuggestedBindings[bindingIndex].action = handInfo.poseAction;
+        actionSuggestedBindings[bindingIndex].binding = handInfo.gripPosePath;
+        actionSuggestedBindings[bindingIndex + 1].action = handInfo.selectAction;
+        actionSuggestedBindings[bindingIndex + 1].binding = handInfo.selectPath;
+        bindingIndex += 2;
+    }
 
     interactionProfileSuggestedBindings : Xr.InteractionProfileSuggestedBinding;
     interactionProfileSuggestedBindings.type = .TypeInteractionProfileSuggestedBinding;
@@ -305,6 +318,10 @@ _init_actions :: (vr : *Vr) -> bool {
            "Unable to suggest OpenXR interaction profile bindings.");
 
     return true;
+}
+
+_set :: (dest : *u8, src : string) {
+    memcpy(dest, src.data, src.count);
 }
 
 String :: #import "String";

@@ -145,12 +145,14 @@ VrTarget :: struct {
     };
 
     handInfos : [2]struct {
+        transform : Chamber.trf;
         poseSpace : Xr.Space;
         poseActionState : Xr.ActionStatePose;
         poseActionStateGI : Xr.ActionStateGetInfo;
         poseSpaceLocation : Xr.SpaceLocation;
 
-        transform : Chamber.trf;
+        selectActionState : Xr.ActionStateFloat;
+        selectActionStateGI : Xr.ActionStateGetInfo;
     };
 
     using vrTargetImpl : VrTargetImpl;
@@ -286,6 +288,9 @@ vr_target_sync :: (vrTarget : *VrTarget) -> bool {
                        "Unable to locate OpenXR space for hand.");
                 _space_location_to_trf(handInfo.poseSpaceLocation, *handInfo.transform);
             }
+
+            _CHECK(Xr.get_action_state_float(vrTarget.session, *handInfo.selectActionStateGI, *handInfo.selectActionState),
+                   "Unable to get OpenXR action state select.");
         }
     }
 
@@ -378,6 +383,10 @@ _init_vr :: (vrTarget : *VrTarget) -> bool {
         handInfo.poseActionStateGI.type = .TypeActionStateGetInfo;
         handInfo.poseActionStateGI.action = vr.handInfos[handIndex].poseAction;
         handInfo.poseActionStateGI.subactionPath = vr.handInfos[handIndex].path;
+        handInfo.selectActionState.type = .TypeActionStateFloat;
+        handInfo.selectActionStateGI.type = .TypeActionStateGetInfo;
+        handInfo.selectActionStateGI.action = vr.handInfos[handIndex].selectAction;
+        handInfo.selectActionStateGI.subactionPath = vr.handInfos[handIndex].path;
 
         // @note We need a space for each pose
         actionSpaceCI : Xr.ActionSpaceCreateInfo;
