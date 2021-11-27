@@ -47,13 +47,20 @@ MetaEntity :: struct {
     structName : string;    // "MyCustomEntity" Expected PascalCase is user source code.
     idCamelCase : string;   // "myCustom"
     idSnakeCase : string;   // "my_custom"
-    components : [..]Component;
+    structMembers : [..]StructMember;
 
     // This entity has multiple components defined as "some : SomeComponent;"
-    Component :: struct {
-        structName : string;    // "SomeComponent"
-        id : string;            // "some"
+    // @note During compilation, we're not sure whether this is a component or not.
+    // This will finally be determined during _check_dependencies.
+    StructMember :: struct {
+        isComponent : bool;
+        location : Source_Code_Location;
+        typeName : string;    // "SomeComponent"
+        fieldName : string;   // "some"
+
+        // Fields below became valid when isComponent is known to be true.
         // SomeComponent's dependencies ids are mapped to MyCustomEntity's components ids.
+        id : string;   // "some", same as fieldName
         dependencies : [..]struct {
             id : string;
             targetComponentId : string;
@@ -65,7 +72,10 @@ MetaComponent :: struct {
     structName : string;                    // MyCustomComponent
     dependencies : [..]Dependency;
 
+    // During compile, we don't know for sure whether this is a real dependency to an other component.
+    // This becomes sure only during _check_dependencies.
     Dependency :: struct {
+        isComponent : bool;
         structName : string;
         id : string;
     }
@@ -169,39 +179,21 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
         _, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
         if typeIdentifier == "" then continue;
 
-        // Ensuring that all components have their dependencies resolved.
-        metaComponent := _find_meta_component(typeIdentifier);
-        if metaComponent == null then continue;
+        // @note We don't know for sure that this is a component for now,
+        // as the type might not exist.
+        structMember : MetaEntity.StructMember;
+        structMember.typeName = typeIdentifier;
+        structMember.fieldName = memberCodeDeclaration.name;
+        structMember.location = Compiler.make_location(memberCodeDeclaration.type_inst);
 
-        // @note We know this is a component because we found a matching
-        // meta-component.
-        component : MetaEntity.Component;
-        component.id = memberCodeDeclaration.name;
-        component.structName = typeIdentifier;
-
-        for dependency : metaComponent.dependencies {
-            entityDependeeComponent := _find_meta_entity_component(metaEntity, dependency.structName);
-            if entityDependeeComponent == null {
-                message := Basic.sprint("[SillMeta] Component % of entity % cannot resolve its dependency to %.",
-                                        component.structName, metaEntity.structName, dependency.structName);
-                Compiler.compiler_report(message, Compiler.make_location(memberCodeDeclaration.type_inst));
-                continue;
-            }
-
-            Basic.array_add(*component.dependencies, .{});
-            otherDependency := Basic.peek_pointer(component.dependencies);
-            otherDependency.id = dependency.id;
-            otherDependency.targetComponentId = entityDependeeComponent.id;
-        }
-
-        Basic.array_add(*metaEntity.components, component);
+        Basic.array_add(*metaEntity.structMembers, structMember);
     }
 }
 
-_find_meta_entity_component :: (metaEntity : *MetaEntity, name : string) -> *MetaEntity.Component {
-    for *component : metaEntity.components {
-        if component.structName == name {
-            return component;
+_find_meta_entity_struct_member :: (metaEntity : *MetaEntity, typeName : string) -> *MetaEntity.StructMember {
+    for *structMember : metaEntity.structMembers {
+        if structMember.typeName == typeName {
+            return structMember;
         }
     }
     return null;
@@ -215,22 +207,18 @@ _add_meta_component :: (name : string, members : []*Compiler.Code_Scope_Entry) {
         if member.kind != .DECLARATION then continue;
 
         memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
-        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING != 0 ||
-           memberCodeDeclaration.flags & .IS_IMPORTED != 0 {
+        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING ||
+           memberCodeDeclaration.flags & .IS_IMPORTED {
             continue;
         }
+
+        // @note Ignoring non-pointers members as component's dependencies
+        // must be expressed as pointers to a struct.
+        if memberCodeDeclaration.type_inst == null then continue;
+        if memberCodeDeclaration.type_inst.pointer_to == null then continue;
 
         _, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
         if typeIdentifier == "" then continue;
-
-        // @note No better way to find that this is really a component,
-        // because the dependency is of pointer type. So, things might
-        // not be resolved at this time.
-        // @todo Store everything needed, and wait for everything to be ready
-        // before computing MetaEntity dependencies?
-        if !String.ends_with(typeIdentifier, "Component") {
-            continue;
-        }
 
         dependency : MetaComponent.Dependency;
         dependency.structName = typeIdentifier;
@@ -248,10 +236,55 @@ _find_meta_component :: (name : string) -> *MetaComponent {
     return null;
 }
 
+_check_dependencies :: () {
+    // Checking component's dependencies to other components are effectively components.
+    for *metaComponent : metaComponentList {
+        for *dependency : metaComponent.dependencies {
+            dependency.isComponent = (_find_meta_component(dependency.structName) != null);
+        }
+    }
+
+    // Checking that entities's components have all their dependencies resolved.
+    // This is done at the end of the compilation, to be sure that everything has been
+    // tagged within meta-structures.
+    for *metaEntity : metaEntityList {
+        for *structMember : metaEntity.structMembers {
+            metaComponent := _find_meta_component(structMember.typeName);
+            if !metaComponent then continue;
+            structMember.isComponent = true; // We found a meta-component, yeah!
+            structMember.id = structMember.fieldName; // Just for simplicity of saying "component.id" later on.
+        }
+
+        for *component : metaEntity.structMembers {
+            if !component.isComponent then continue;
+
+            metaComponent := _find_meta_component(component.typeName);
+            for dependency : metaComponent.dependencies {
+                if !dependency.isComponent then continue;
+
+                entityDependeeComponent := _find_meta_entity_struct_member(metaEntity, dependency.structName);
+                if (entityDependeeComponent == null) || !entityDependeeComponent.isComponent {
+                    message := Basic.sprint("[SillMeta] Component % of entity % cannot resolve its dependency to %.",
+                                            component.typeName, metaEntity.structName, dependency.structName);
+                    Compiler.compiler_report(message, component.location);
+                    continue;
+                }
+
+                Basic.array_add(*component.dependencies, .{});
+                otherDependency := Basic.peek_pointer(component.dependencies);
+                otherDependency.id = dependency.id;
+                otherDependency.targetComponentId = entityDependeeComponent.id;
+            }
+        }
+    }
+}
+
 _generate :: (workspace : s64) {
     if _generated then return;
     if metaEntityList.count == 0 then return;
     _generated = true;
+
+    _check_dependencies();
 
     // Building Entities string
     builder : Basic.String_Builder;
@@ -283,7 +316,8 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
         Basic.append(*builder, "        entity.engine = engine;\n");
-        for component : metaEntity.components {
+        for component : metaEntity.structMembers {
+            if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component.id);
             for componentDependency : component.dependencies {
                 Basic.print_to_builder(*builder, "        entity.%.% = *entity.%;\n", component.id, componentDependency.id,  componentDependency.targetComponentId);
@@ -295,7 +329,8 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
-        for component : metaEntity.components {
+        for component : metaEntity.structMembers {
+            if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
@@ -303,7 +338,8 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.structName);
-        for component : metaEntity.components {
+        for component : metaEntity.structMembers {
+            if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
