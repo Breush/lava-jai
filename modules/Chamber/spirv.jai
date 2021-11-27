@@ -39,7 +39,7 @@ ShaderKind :: enum {
 }
 
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
-spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string) -> [..]u8 {
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string) -> []u8 {
     spvCode : [..]u8;
 
     glslFileContent, readOk := File.read_entire_file(glslFile);
@@ -55,6 +55,12 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
 
     userData : ShadercUserData;
     userData.dollarPath = dollarPath;
+
+    // :ContextBug We need to reference the first
+    // field of the context, otherwise this does not work (for some unknown reason).
+    // This is the workaround provided by Jon.
+    #assert(type_info(Context_Base).members[0].name == "thread_index");
+    userData.ctx = xx *context.thread_index;
     compiler := Shaderc.compiler_initialize();
     compileOptions := Shaderc.compile_options_initialize();
     Shaderc.compile_options_set_source_language(compileOptions, .Glsl);
@@ -296,6 +302,7 @@ ShadercUserData :: struct {
     includeResults : [16]Shaderc.IncludeResult;
     includeResultsCount : u32;
     dollarPath : string;
+    ctx : *Context;
 }
 
 // @todo @speed Looks like shaderc is re-asking for the same files
@@ -303,10 +310,13 @@ ShadercUserData :: struct {
 // and feed shaderc accordingly. (Need to reduce paths too.)
 _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
                       requestingSource : *u8, includeDepth : u64) -> *Shaderc.IncludeResult #c_call {
-    ctx : Context;
+    userData := cast(*ShadercUserData) _userData;
     includeResult : *Shaderc.IncludeResult;
+
+    // :ContextBug We need to recreate a variable here,
+    // otherwise the wrong context will be popped.
+    ctx := << userData.ctx;
     push_context ctx {
-        userData := cast(*ShadercUserData) _userData;
         requestedSourceString := Basic.to_string(requestedSource);
         requestingSourceString := Basic.to_string(requestingSource);
         _, requestingPath := Compiler.get_basename_and_path(requestingSourceString);

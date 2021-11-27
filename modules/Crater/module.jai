@@ -120,8 +120,8 @@ window_cleanup :: (window : *Window, resetMemory := true) {
 destroy_window :: (window : *Window) {
     window_cleanup(window, false);
 
-    if window.allocator != null {
-        Basic.free(window, window.allocator, window.allocator_data);
+    if window.allocator.proc != null {
+        Basic.free(window, window.allocator);
     }
 }
 

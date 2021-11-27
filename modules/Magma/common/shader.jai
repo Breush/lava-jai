@@ -12,7 +12,6 @@ Shader :: struct {
     using shaderImpl : ShaderImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 // Allocate, init and register a new shader.
@@ -33,8 +32,8 @@ destroy_shader :: (shader : *Shader, destroyResources : bool) {
 
     shader_cleanup(shader, resetMemory = false);
 
-    if shader.allocator != null {
-        Basic.free(shader, shader.allocator, shader.allocator_data);
+    if shader.allocator.proc != null {
+        Basic.free(shader, shader.allocator);
     }
 }
 

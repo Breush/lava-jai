@@ -24,7 +24,6 @@ Engine :: struct ($_Meta : Type) {
     using base : EngineBase;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 create_engine :: ($_Meta : Type) -> *Engine(_Meta) {
@@ -39,13 +38,15 @@ destroy_engine :: (engine : *Engine) {
 
     engine_cleanup(engine, resetMemory = false);
 
-    if engine.allocator != null {
-        Basic.free(engine, engine.allocator, engine.allocator_data);
+    if engine.allocator.proc != null {
+        Basic.free(engine, engine.allocator);
     }
 }
 
 // @todo Enable VR on option, currently doing so as long as available.
 engine_init :: (engine : *EngineBase) {
+    Basic.log("Engine init.", flags=.VERBOSE_ONLY);
+
     // Windowing
     engine.window = Crater.create_window(.{width=1600, height=900}, "sill");
 

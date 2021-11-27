@@ -7,7 +7,6 @@ Scene :: struct {
     renderers : [..]*Renderer;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 // Allocate, init and register a new scene.
@@ -34,8 +33,8 @@ destroy_scene :: (scene : *Scene, destroyResources : bool) {
     // @todo :AutoUnregister There should be some scene_unregister() call
     // that is optionally called.
 
-    if scene.allocator != null {
-        Basic.free(scene, scene.allocator, scene.allocator_data);
+    if scene.allocator.proc != null {
+        Basic.free(scene, scene.allocator);
     }
 }
 

@@ -31,8 +31,6 @@ EngineImpl :: struct {
     // Per frame state
     FRAME_INDEX_COUNT : u8 : 2;
     frameIndex : u8;
-
-    validationErrorsAreBlocking : bool;
 }
 
 QueueIndices :: struct {
@@ -49,8 +47,6 @@ ShaderModule :: struct {
 ShaderModuleMap :: Hash.Table(string, ShaderModule);
 
 impl_engine_init :: (engine : *Engine) {
-    engine.validationErrorsAreBlocking = !engine.vr.enabled;
-
     _init_instance(engine);
     _init_physical_device(engine);
 }
@@ -186,9 +182,9 @@ _init_instance :: (engine : *Engine) -> bool {
     // Validation layers
     validationLayersEnabled := false;
     if !_is_layer_available("VK_LAYER_KHRONOS_validation", availableLayers) {
-        Chamber.debug("Instance layer VK_LAYER_KHRONOS_validation is not available. Disabling validation layers.\n");
+        Basic.log("Instance layer VK_LAYER_KHRONOS_validation is not available. Disabling validation layers.", flags=.WARNING);
     } else if  !_is_extension_available(Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, availableExtensions) {
-        Chamber.debug("Instance extension ", Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, " is not available. Disabling validation layers.\n");
+        Basic.log("Instance extension ", Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, " is not available. Disabling validation layers.", flags=.WARNING);
     } else {
         Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_validation");
         Basic.array_add(*enabledExtensions, Vk.EXT_DEBUG_REPORT_EXTENSION_NAME);
@@ -218,14 +214,14 @@ _init_instance :: (engine : *Engine) -> bool {
     }
 
     // For debugging
-    // Chamber.debug("Available instance extensions:");
-    // for extension : availableExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
-    // }
-    // Chamber.debug("Activated instance extensions:");
-    // for extension : enabledExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension));
-    // }
+    Basic.log("Vulkan available instance extensions:", flags=.VERY_VERBOSE_ONLY);
+    for extension : availableExtensions {
+        Basic.log("  - %", Basic.to_string(extension.extensionName), flags=.VERY_VERBOSE_ONLY);
+    }
+    Basic.log("Vulkan enabled instance extensions:", flags=.VERBOSE_ONLY);
+    for extension : enabledExtensions {
+        Basic.log("  - %", Basic.to_string(extension), flags=.VERBOSE_ONLY);
+    }
 
     // Instance
     instanceCI : Vk.InstanceCreateInfo;
@@ -248,7 +244,10 @@ _init_instance :: (engine : *Engine) -> bool {
         debugReportCI.sType = .DebugReportCallbackCreateInfoExt;
         debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning /* | Vk.DebugReportFlagBitsEXT.PerformanceWarning */;
         debugReportCI.pfnCallback = cast(*void) _debug_message_callback;
-        debugReportCI.pUserData = engine;
+
+        // :ContextBug
+        #assert(type_info(Context_Base).members[0].name == "thread_index");
+        debugReportCI.pUserData = *context.thread_index;
 
         _CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
                "Unable to create debug report callback.");
@@ -267,14 +266,15 @@ _init_physical_device :: (engine : *Engine) -> bool {
         requiredPhysicalDevice = _vr_vulkan_required_physical_device(engine);
     }
 
-    // Chamber.debug("Found ", physicalDevices.count, " physical devices.\n");
+    Basic.log("Found % Vulkan physical devices:", physicalDevices.count, flags=.VERBOSE_ONLY);
+    for physicalDevice : physicalDevices {
+        physicalDeviceProperties : Vk.PhysicalDeviceProperties;
+        Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
+        Basic.log("  - %", Basic.to_string(physicalDeviceProperties.deviceName), flags=.VERBOSE_ONLY);
+    }
+
     engine.physicalDevice = null;
     for physicalDevice : physicalDevices {
-        // For debug
-        // physicalDeviceProperties : Vk.PhysicalDeviceProperties;
-        // Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
-        // Chamber.debug("-> ", Basic.to_string(physicalDeviceProperties.deviceName), "\n");
-
         validPhysicalDevice : bool;
         if requiredPhysicalDevice != null {
             validPhysicalDevice = (physicalDevice == requiredPhysicalDevice);
@@ -343,16 +343,17 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     }
 
     // For debugging
-    // availableExtensions : [..]Vk.ExtensionProperties;
-    // Vk.array_fill(*availableExtensions, Vk.enumerate_device_extension_properties, engine.physicalDevice, null);
-    // Chamber.debug("Available device extensions:");
-    // for extension : availableExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
-    // }
-    // Chamber.debug("Activated device extensions:");
-    // for extension : enabledExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension));
-    // }
+    availableExtensions : [..]Vk.ExtensionProperties;
+    defer Basic.array_free(availableExtensions);
+    Vk.array_fill(*availableExtensions, Vk.enumerate_device_extension_properties, engine.physicalDevice, null);
+    Basic.log("Vulkan available device extensions:", flags=.VERY_VERBOSE_ONLY);
+    for extension : availableExtensions {
+        Basic.log("  - %", Basic.to_string(extension.extensionName), flags=.VERY_VERBOSE_ONLY);
+    }
+    Basic.log("Vulkan enabled device extensions:", flags=.VERBOSE_ONLY);
+    for extension : enabledExtensions {
+        Basic.log("  - %", Basic.to_string(extension), flags=.VERBOSE_ONLY);
+    }
 
     deviceCI : Vk.DeviceCreateInfo;
     deviceCI.sType = .DeviceCreateInfo;
@@ -457,7 +458,7 @@ _is_valid_queue_index_for_surface :: (queueIndex : u32, physicalDevice : Vk.Phys
 }
 
 _debug_message_callback :: (
-    flags : Vk.DebugReportFlagsEXT,
+    reportFlags : Vk.DebugReportFlagsEXT,
     objectType : Vk.DebugReportObjectTypeEXT,
     object : u64,
     location : u64,
@@ -466,35 +467,52 @@ _debug_message_callback :: (
     message : *u8,
     userData : *void
 ) -> Vk.Bool32 #c_call {
-    ctx: Context;
+    // :ContextBug
+    ctx := <<cast(*Context) userData;
     push_context ctx {
-        // @todo Better logging system
+        flags : Log_Flags;
+        if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
+            flags |= .VERBOSE_ONLY;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
+            flags |= .CONTENT;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning ||
+                  reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
+            flags |= .WARNING;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
+            flags |= .ERROR;
+        }
+
+        Chamber.loggerPushNonFatalOnError();
+
         messageString := Basic.to_string(message);
         linkParts := String.split(messageString, "(https://");
         specParts := String.split(linkParts[0], " The Vulkan spec states:");
         sentences := String.split(specParts[0], "|");
         errorParts := String.split(sentences[0], "Object ");
 
-        Chamber.debug("===== Vulkan Debug Message =====");
-        Chamber.debug(errorParts[0]);
+        Basic.log("===== Vulkan Debug Message =====", flags=flags);
+        Basic.log(errorParts[0], flags=flags);
         for i : 1..errorParts.count-1 {
-            Chamber.debug("  | Object ", errorParts[i]);
+            Basic.log("  | Object %", errorParts[i], flags=flags);
         }
         for i : 1..sentences.count-1 {
-            Chamber.debug("  |", sentences[i]);
+            Basic.log("  |%", sentences[i], flags=flags);
         }
         if specParts.count == 2 {
-            Chamber.debug("  >", specParts[1]);
+            Basic.log("  >%", specParts[1], flags=flags);
         }
         if linkParts.count == 2 {
-            Chamber.debug("  (https://", linkParts[1]);
+            Basic.log("  (https://%", linkParts[1], flags=flags);
         }
 
+        Chamber.loggerPopNonFatalOnError();
+        Basic.log("================================", flags=flags);
+
         // @note SteamVR has inconsistent SPIRV, so we still need to continue...
-        engine := cast(*Engine) userData;
-        if engine.validationErrorsAreBlocking {
-            Basic.assert(false);
-        }
+        // engine := cast(*Engine) userData;
+        // if engine.validationErrorsAreBlocking { // @fixme
+        //     Basic.assert(false);
+        // }
     }
     return Vk.FALSE;
 }

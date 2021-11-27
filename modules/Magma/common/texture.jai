@@ -4,7 +4,6 @@ Texture :: struct {
     using textureImpl : TextureImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 // Allocate, init and register a new texture.
@@ -19,8 +18,8 @@ create_texture :: (engine : *Engine) -> *Texture {
 destroy_texture :: (texture : *Texture) {
     texture_cleanup(texture, resetMemory = false);
 
-    if texture.allocator != null {
-        Basic.free(texture, texture.allocator, texture.allocator_data);
+    if texture.allocator.proc != null {
+        Basic.free(texture, texture.allocator);
     }
 }
 

@@ -278,7 +278,7 @@ _glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, cache : *
         if indicesComponentType == 5123 {
             indices = glb_get_accessor(glb, indicesAccessorIndex, u16);
         } else {
-            Chamber.debug("Unsupported GLB indices component type.");
+            Basic.log("Unsupported GLB indices component type.", flags=.ERROR);
             continue;
         }
 

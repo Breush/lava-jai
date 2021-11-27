@@ -25,7 +25,6 @@ Mesh :: struct {
     using meshImpl : MeshImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 VertexInput :: struct {
@@ -51,8 +50,8 @@ create_mesh :: (scene : *Scene) -> *Mesh {
 destroy_mesh :: (mesh : *Mesh) {
     mesh_cleanup(mesh, resetMemory = false);
 
-    if mesh.allocator != null {
-        Basic.free(mesh, mesh.allocator, mesh.allocator_data);
+    if mesh.allocator.proc != null {
+        Basic.free(mesh, mesh.allocator);
     }
 }
 

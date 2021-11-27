@@ -3,6 +3,7 @@
 #load "holders.jai";
 
 _CHECK :: Chamber._CHECK;
+_CHECK_NON_FATAL :: Chamber._CHECK_NON_FATAL;
 
 _wait_timeline_semaphore :: (device : Vk.Device, semaphore : Vk.Semaphore, value : u64) {
     semaphoreWI : Vk.SemaphoreWaitInfo ;

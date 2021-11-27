@@ -6,7 +6,6 @@ Material :: struct {
     using materialImpl : MaterialImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 
     uniforms : Table(string, Uniform);
 
@@ -46,8 +45,8 @@ create_material :: (shader : *Shader) -> *Material {
 destroy_material :: (material : *Material) {
     material_cleanup(material, resetMemory = false);
 
-    if material.allocator != null {
-        Basic.free(material, material.allocator, material.allocator_data);
+    if material.allocator.proc != null {
+        Basic.free(material, material.allocator);
     }
 }
 

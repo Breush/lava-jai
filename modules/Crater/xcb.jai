@@ -81,7 +81,7 @@ impl_window_process_events :: (window : *Window) {
         if event == null then break;
 
         _window_event_process(window, event);
-        context.default_allocator(Allocator_Mode.FREE, 0, 0, event, null);
+        context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, event, null);
     }
 
     if window.pointerAutoCentered && !window.pointerCurrentlyCentered {
@@ -102,8 +102,8 @@ impl_window_close :: (window : *Window) {
 
     // Using default_allocator because these were allocated
     // in C code, so we don't want to call any other allocators.
-    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
-    context.default_allocator(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
+    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
+    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
 }
 
 impl_window_update_pointer_auto_centered :: (window : *Window) {

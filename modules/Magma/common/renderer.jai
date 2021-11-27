@@ -21,7 +21,6 @@ Renderer :: struct {
     using rendererImpl : RendererImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 destroy_renderer :: (renderer : *Renderer, destroyResources : bool) {
@@ -33,8 +32,8 @@ destroy_renderer :: (renderer : *Renderer, destroyResources : bool) {
 
     renderer_cleanup(renderer, resetMemory = false);
 
-    if renderer.allocator != null {
-        Basic.free(renderer, renderer.allocator, renderer.allocator_data);
+    if renderer.allocator.proc != null {
+        Basic.free(renderer, renderer.allocator);
     }
 }
 

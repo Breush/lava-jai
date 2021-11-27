@@ -221,8 +221,7 @@ _fill_vertex_input_descs :: ($T : Type, binding : u32, locationStart : u32, inpu
             location += 3;
         } else {
             memberTypeInfo := cast(*Type_Info_Struct) member.type;
-            Chamber.debug("Unknown format for ", typeInfo.name, ".", member.name, " (", memberTypeInfo.name, ").\n");
-            Basic.assert(false);
+            Basic.log("Unknown format for %.% (%).", typeInfo.name, member.name, memberTypeInfo.name, flags=.ERROR);
         }
     }
 

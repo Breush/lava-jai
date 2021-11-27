@@ -33,7 +33,6 @@ Target :: struct {
     options : Options;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 destroy_target :: (target : *Target) {
@@ -44,8 +43,8 @@ destroy_target :: (target : *Target) {
         vr_target_cleanup(cast(*VrTarget) target, resetMemory = false);
     }
 
-    if target.allocator != null {
-        Basic.free(target, target.allocator, target.allocator_data);
+    if target.allocator.proc != null {
+        Basic.free(target, target.allocator);
     }
 }
 

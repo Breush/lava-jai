@@ -59,19 +59,24 @@ engine_vr_init :: (engine : *Engine) -> bool {
     impl_engine_vr_fill_extensions(*enabledExtensions);
 
     // For debug
-    // Chamber.debug("OpenXR available extensions:");
-    // for extension : availableExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
-    // }
-    // Chamber.debug("OpenXR available extensions:");
-    // for extension : availableExtensions {
-    //     Chamber.debug("    - ", Basic.to_string(extension.extensionName));
-    // }
+    Basic.log("OpenXR available extensions:", flags=.VERY_VERBOSE_ONLY);
+    for extension : availableExtensions {
+        Basic.log("  - %", Basic.to_string(extension.extensionName), flags=.VERY_VERBOSE_ONLY);
+    }
+    Basic.log("OpenXR enabled extensions:", flags=.VERBOSE_ONLY);
+    for extensionName : enabledExtensions {
+        Basic.log("  - %", Basic.to_string(extensionName), flags=.VERBOSE_ONLY);
+    }
 
-    // Chamber.debug("OpenXR available API layers:");
-    // for apiLayer : availableApiLayers {
-    //     Chamber.debug("    - ", Basic.to_string(apiLayer.layerName));
-    // }
+    Basic.log("OpenXR available API layers:", flags=.VERY_VERBOSE_ONLY);
+    for apiLayer : availableApiLayers {
+        Basic.log("  - %", Basic.to_string(apiLayer.layerName), flags=.VERY_VERBOSE_ONLY);
+    }
+
+    Basic.log("OpenXR enabled API layers:", flags=.VERBOSE_ONLY);
+    for apiLayerName : enabledApiLayers {
+        Basic.log("  - %", Basic.to_string(apiLayerName), flags=.VERBOSE_ONLY);
+    }
 
     instanceCI : Xr.InstanceCreateInfo;
     instanceCI.type = .TypeInstanceCreateInfo;
@@ -83,8 +88,8 @@ engine_vr_init :: (engine : *Engine) -> bool {
     memcpy(*instanceCI.applicationInfo.applicationName[0], "lava".data, "lava".count);
     memcpy(*instanceCI.applicationInfo.engineName[0], "magma".data, "magma".count);
 
-    _CHECK(Xr.create_instance(*instanceCI, *vr.instance),
-           "Unable to create OpenXR instance.");
+    _CHECK_NON_FATAL(Xr.create_instance(*instanceCI, *vr.instance),
+                     "Unable to create OpenXR instance.");
 
     Xr.load_instance_proc(vr.instance, *Xr.get_vulkan_instance_extensions_khr, "xrGetVulkanInstanceExtensionsKHR");
     Xr.load_instance_proc(vr.instance, *Xr.get_vulkan_device_extensions_khr, "xrGetVulkanDeviceExtensionsKHR");
@@ -131,6 +136,10 @@ engine_vr_init :: (engine : *Engine) -> bool {
                                         Xr.DEBUG_UTILS_MESSAGE_TYPE_CONFORMANCE_BIT_EXT;
         debugMessengerCI.userCallback = _debug_messenger_callback;
 
+        // :ContextBug
+        #assert(type_info(Context_Base).members[0].name == "thread_index");
+        debugMessengerCI.userData = *context.thread_index;
+
         _CHECK(Xr.create_debug_utils_messenger_ext(vr.instance, *debugMessengerCI, *vr.debugUtilsMessenger),
                "Unable to create OpenXR debug utils messenger.");
     }
@@ -154,7 +163,7 @@ engine_vr_cleanup :: (engine : *Engine) {
     // So I prefer not to destroy the OpenXR instance and hard-exit instead...
     // But Basic.exit(0) still executes the registered handlers, so yeah,
     // just making a SegFault instead...
-    Chamber.debug("Warning: Hard quitting with SegFault because of SteamVR hanging otherwise...");
+    Basic.log("Hard quitting with SegFault because of SteamVR hanging otherwise...", flags=.WARNING);
     <<(cast(*u8)0) = 1;
     Xr.destroy_instance(vr.instance);
 }
@@ -226,14 +235,20 @@ _debug_messenger_callback :: (messageSeverity : Xr.DebugUtilsMessageSeverityFlag
                               callbackData : *Xr.DebugUtilsMessengerCallbackDataEXT,
                               userData : *void
 ) -> Xr.Bool32 #c_call {
-    ctx: Context;
+    // :ContextBug
+    ctx := <<cast(*Context) userData;
     push_context ctx {
-        // @todo Have one channel for messages.
-        Chamber.debug("[OpenXR]: ", Basic.to_string(callbackData.functionName), " ", Basic.to_string(callbackData.message));
-
-        if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT != 0 {
-            Basic.assert(false);
+        flags : Log_Flags;
+        if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT {
+            flags |= .VERBOSE_ONLY;
+        } else if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT {
+            flags |= .CONTENT;
+        } else if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT {
+            flags |= .WARNING;
+        } else if messageSeverity & Xr.DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT {
+            flags |= .ERROR;
         }
+        Basic.log("[OpenXR] % % ", Basic.to_string(callbackData.functionName), Basic.to_string(callbackData.message), flags=flags);
     }
     return Xr.TRUE;
 }

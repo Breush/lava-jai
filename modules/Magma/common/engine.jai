@@ -31,7 +31,6 @@ Engine :: struct {
     using engineImpl : EngineImpl;
 
     allocator : Allocator;
-    allocator_data : *void;
 }
 
 create_engine :: (options : Engine.Options = .{}) -> *Engine {
@@ -57,8 +56,8 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
     engine_cleanup(engine, resetMemory = false);
 
     // Cleanup ourselves
-    if engine.allocator != null {
-        Basic.free(engine, engine.allocator, engine.allocator_data);
+    if engine.allocator.proc != null {
+        Basic.free(engine, engine.allocator);
     }
 }
 
@@ -67,7 +66,7 @@ engine_init :: (engine : *Engine, options : Engine.Options) -> bool {
 
     if engine.options.targetFlags & .Vr {
         if !engine_vr_init(engine) {
-            Chamber.debug("Unable to init engine with TargetFlags.Vr: VR is not available. Disabling VR capabilities.");
+            Basic.log("Unable to init engine with TargetFlags.Vr: VR is not available. Disabling VR capabilities.", flags=.WARNING);
         }
     }
 
