@@ -13,7 +13,8 @@ impl_material_init :: (material : *Material) {
 
     for *uniform : material.uniforms {
         if uniform.kind == .Block {
-            _buffer_holder_init(*uniform.block.bufferHolder, engine, .ShaderUniform, .PersistentStaging, cast(u64) uniform.block.buffer.count);
+            _buffer_holder_init(*uniform.block.bufferHolder, engine, "material.uniforms[].block.bufferHolder",
+                                .ShaderUniform, .PersistentStaging, cast(u64) uniform.block.buffer.count);
             _set_debug_utils_name(engine.device, uniform.block.bufferHolder.buffer, "material.uniforms[].block.buffer");
         }
     }

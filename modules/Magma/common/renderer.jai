@@ -47,7 +47,7 @@ renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
     } else if renderer.kind == .PostProcessRenderer {
         _post_process_renderer_cleanup(cast(*PostProcessRenderer) renderer, resetMemory);
     } else {
-        Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+        Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     }
 }
 
@@ -69,14 +69,14 @@ renderer_find_shader :: (renderer : *Renderer, id : string) -> *Shader {
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
     if renderer.kind == .PostProcessRenderer then return renderer_get_eye((cast(*PostProcessRenderer) renderer).rendererOutput.renderer, eyeIndex);
-    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return null;
 }
 
 renderer_get_extent :: (renderer : *Renderer, outputIndex : u32) -> Chamber.uvec2 {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_extent(cast(*ForwardRenderer) renderer, outputIndex);
     if renderer.kind == .PostProcessRenderer then return post_process_renderer_get_extent(cast(*PostProcessRenderer) renderer, outputIndex);
-    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return .{};
 }
 
@@ -86,7 +86,7 @@ renderer_get_material_descriptor_set_index :: (renderer : *Renderer) -> u32 {
     } else if renderer.kind == .PostProcessRenderer {
         return PostProcessRenderer.MATERIAL_DESCRIPTOR_SET_INDEX;
     }
-    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return 0xFFFF_FFFF;
 }
 

@@ -15,6 +15,7 @@ ImageHolder :: struct {
 }
 
 _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
+                       _name : string,
                        _kind : ImageHolder.Kind,
                        _extent : Chamber.uvec2) -> bool {
     engine = _engine;
@@ -45,14 +46,14 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
         format = Vk.Format.D32Sfloat;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.DepthStencilAttachment;
     } else {
-        Basic.assert(false, "Trying to create an image of unhandled kind.\n");
+        Basic.log("Trying to create an image of unhandled kind: %.", kind, flags=.ERROR);
     }
 
     imageCI.format = format;
 
     _CHECK(Vk.create_image(engine.device, *imageCI, null, *image),
            "Unable to create image.");
-    _set_debug_utils_name(engine.device, image, "imageHolder.image");
+    _set_debug_utils_name(engine.device, image, Basic.tprint("%.image\0", _name).data);
 
     // Device memory
     memoryRequirements : Vk.MemoryRequirements;
@@ -72,23 +73,24 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 }
 
 _image_holder_cleanup :: (using imageHolder : *ImageHolder, resetMemory := true) {
+    if image != null {
     Vk.destroy_image(engine.device, image, null);
     Vk.free_memory(engine.device, deviceMemory, null);
+    }
 
     if resetMemory {
         <<imageHolder = .{};
     }
 }
 
-_image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8) {
+_image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8, usage : ImageUsageKind) {
     stagingBufferHolder : BufferHolder;
-    _buffer_holder_init(*stagingBufferHolder, engine, .Staging, .Direct, cast(u64) data.count);
+    _buffer_holder_init(*stagingBufferHolder, engine, "image-holder.stagingBufferHolder",
+                        .Staging, .Direct, cast(u64) data.count);
     _buffer_holder_copy(*stagingBufferHolder, data.data, cast(Vk.DeviceSize) data.count);
     defer _buffer_holder_cleanup(*stagingBufferHolder, resetMemory=false);
 
     commandBuffer := _one_time_command_buffer_begin(engine.device, engine.graphicsCommandPool);
-
-    _change_image_layout(commandBuffer, image, .Undefined, .TransferDstOptimal);
 
     bufferImageCopy : Vk.BufferImageCopy;
     bufferImageCopy.imageSubresource.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
@@ -99,8 +101,9 @@ _image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8) {
     bufferImageCopy.imageExtent.height = extent.height;
     bufferImageCopy.imageExtent.depth = 1;
 
+    _change_image_layout(commandBuffer, image, .DontCare, .TransferOutput);
     Vk.cmd_copy_buffer_to_image(commandBuffer, stagingBufferHolder.buffer, image, .TransferDstOptimal, 1, *bufferImageCopy);
-    _change_image_layout(commandBuffer, image, .TransferDstOptimal, .ShaderReadOnlyOptimal);
+    _change_image_layout(commandBuffer, image, .TransferOutput, usage);
 
     _one_time_command_buffer_end(commandBuffer, engine.device, engine.graphicsCommandPool, engine.graphicsQueue);
 }
@@ -113,7 +116,7 @@ _image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView 
     } else if kind == .Depth {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Depth;
     } else {
-        Basic.assert(false, "Trying to create an image view of unhandled kind.\n");
+        Basic.log("Trying to create an image view of unhandled kind: %.", kind, flags=.ERROR);
     }
 
     imageViewCI : Vk.ImageViewCreateInfo;
@@ -166,7 +169,7 @@ BufferHolder :: struct {
     stagingBufferHolder : *BufferHolder; // Set only when cpuIo == .PersistentStaging
 }
 
-_buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
+_buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, name : string,
                         _kind : BufferHolder.Kind, _cpuIo : BufferHolder.CpuIo,
                         _size : Vk.DeviceSize) -> bool {
     if engine == _engine && kind == _kind && cpuIo == _cpuIo && size == _size then return true;
@@ -182,8 +185,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
 
     if (cpuIo == .PersistentStaging) {
         stagingBufferHolder = Basic.New(BufferHolder);
-        _buffer_holder_init(stagingBufferHolder, engine, .Staging, .Direct, size);
-        _set_debug_utils_name(engine.device, stagingBufferHolder.buffer, "bufferHolder.stagingBuffer");
+        _buffer_holder_init(stagingBufferHolder, engine, Basic.tprint("%.stagingBufferHolder", name), .Staging, .Direct, size);
     }
 
     bufferCIFlags : Vk.BufferUsageFlags;
@@ -208,6 +210,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
     bufferCI.sharingMode = Vk.SharingMode.Exclusive;
     _CHECK(Vk.create_buffer(engine.device, *bufferCI, null, *buffer),
            "Unable to create buffer.");
+    _set_debug_utils_name(engine.device, buffer, Basic.tprint("%.buffer\0", name).data);
 
     memoryRequirements : Vk.MemoryRequirements;
     Vk.get_buffer_memory_requirements(engine.device, buffer, *memoryRequirements);
@@ -225,6 +228,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine,
 
     _CHECK(Vk.allocate_memory(engine.device, *memoryAI, null, *deviceMemory),
            "Unable to create buffer device memory.");
+    _set_debug_utils_name(engine.device, deviceMemory, Basic.tprint("%.deviceMemory\0", name).data);
 
     Vk.bind_buffer_memory(engine.device, buffer, deviceMemory, 0);
 
@@ -257,7 +261,7 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSi
         Vk.unmap_memory(engine.device, deviceMemory);
     } else if cpuIo == .OnDemandStaging {
         stagingBufferHolder : BufferHolder;
-        _buffer_holder_init(*stagingBufferHolder, engine, .Staging, .Direct, dataSize);
+        _buffer_holder_init(*stagingBufferHolder, engine, "buffer-holder.stagingBufferHolder", .Staging, .Direct, dataSize);
         _buffer_holder_copy(*stagingBufferHolder, data, dataSize);
         _copy_buffer(engine.device, engine.graphicsQueue, engine.graphicsCommandPool,
                      stagingBufferHolder.buffer, buffer, cast(u64) dataSize, 0, 0);

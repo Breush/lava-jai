@@ -72,7 +72,7 @@ _init_pipeline :: (shader : *Shader) -> bool {
                "Unable to create descriptor set layout.");
     }
 
-    // @todo Could be extracted from SPIR-V too.
+    // @todo :ExtractPushConstants Could be extracted from SPIR-V too.
     pushConstantRanges := _renderer_get_push_constant_ranges(shader.renderer);
 
     pipelineLayoutCI : Vk.PipelineLayoutCreateInfo;
@@ -198,7 +198,7 @@ _init_pipeline :: (shader : *Shader) -> bool {
     pipelineCI.pColorBlendState = *colorBlendStateCI;
     pipelineCI.pDynamicState = null;
     pipelineCI.layout = shader.pipelineLayout;
-    pipelineCI.renderPass = shader.renderer.renderPass;
+    pipelineCI.renderPass = _renderer_get_render_pass(shader.renderer);
     pipelineCI.subpass = 0;
     pipelineCI.basePipelineHandle = null;
 

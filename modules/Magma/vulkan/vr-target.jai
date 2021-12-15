@@ -170,12 +170,12 @@ _render :: (vrTarget : *VrTarget, frameIndex : u8, compositionLayerViews : []Xr.
         filter := Vk.Filter.Linear;
         if vrTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
 
-        _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.ColorAttachmentOptimal, Vk.ImageLayout.TransferDstOptimal);
-        _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.layout, Vk.ImageLayout.TransferSrcOptimal);
+        _change_image_layout(commandBuffer, swapchainImage, .DontCare, .TransferOutput);
+        _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.usage, .TransferInput);
         Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
                           swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
-        _change_image_layout(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal, rendererImageInfo.layout);
-        _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.TransferDstOptimal, Vk.ImageLayout.ColorAttachmentOptimal);
+        _change_image_layout(commandBuffer, rendererImageInfo.image, .TransferInput, rendererImageInfo.usage);
+        _change_image_layout(commandBuffer, swapchainImage, .TransferOutput, .FragmentInput);
     }
 
     Vk.end_command_buffer(commandBuffer);

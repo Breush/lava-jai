@@ -107,7 +107,6 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     rendererOutputExtent := renderer_output_get_extent(windowTarget.rendererOutput);
     rendererImageInfo := _renderer_output_get_image_info(windowTarget.rendererOutput, frameIndex);
     swapchainImage := windowTarget.swapchainImages[windowTarget.swapchainImageIndex];
-    _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.Undefined, Vk.ImageLayout.TransferDstOptimal);
 
     imageBlit : Vk.ImageBlit;
     imageBlit.srcSubresource.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
@@ -124,12 +123,12 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     filter := Vk.Filter.Linear;
     if windowTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
 
-    _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.layout, Vk.ImageLayout.TransferSrcOptimal);
+    _change_image_layout(commandBuffer, swapchainImage, .DontCare, .TransferOutput);
+    _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.usage, .TransferInput);
     Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
                       swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
-    _change_image_layout(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal, rendererImageInfo.layout);
-
-    _change_image_layout(commandBuffer, swapchainImage, Vk.ImageLayout.TransferDstOptimal, Vk.ImageLayout.PresentSrcKhr);
+    _change_image_layout(commandBuffer, rendererImageInfo.image, .TransferInput, rendererImageInfo.usage);
+    _change_image_layout(commandBuffer, swapchainImage, .TransferOutput, .PresentInput);
 
     Vk.end_command_buffer(commandBuffer);
 
@@ -260,6 +259,10 @@ _init_swapchain :: (windowTarget : *WindowTarget) -> bool {
 
     // Swapchain images
     Vk.array_fill(*windowTarget.swapchainImages, Vk.get_swapchain_images_khr, windowTarget.engine.device, windowTarget.swapchain);
+
+    for image : windowTarget.swapchainImages {
+        _set_debug_utils_name(windowTarget.engine.device, image, "window-target.swapchainImages[]");
+    }
 
     return true;
 }

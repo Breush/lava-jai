@@ -12,7 +12,6 @@
 */
 RendererImpl :: struct {
     pipelineLayout : Vk.PipelineLayout;
-    renderPass : Vk.RenderPass;
 
     lastFrameIndex := cast,trunc(u8) ~0;
     commandPool : Vk.CommandPool;
@@ -30,10 +29,21 @@ RendererImpl :: struct {
     frameObjects : [Engine.FRAME_INDEX_COUNT]FrameObject;
 }
 
+ImageUsageKind :: enum {
+    Unknown;
+    DontCare;
+    FragmentInput;
+    FragmentOutput;
+    TransferInput;
+    TransferOutput;
+    PresentInput;
+}
+
 ImageInfo :: struct {
     image : Vk.Image;
     view : Vk.ImageView;
     layout : Vk.ImageLayout;
+    usage : ImageUsageKind;
 }
 
 VertexInputDescription :: struct {
@@ -155,6 +165,16 @@ _renderer_get_push_constant_ranges :: (renderer : *Renderer) -> []Vk.PushConstan
         return (cast(*ForwardRenderer) renderer).pushConstantRanges;
     }
     return .[];
+}
+
+_renderer_get_render_pass :: (renderer : *Renderer) -> Vk.RenderPass {
+    if (renderer.kind == .ForwardRenderer) {
+        return (cast(*ForwardRenderer) renderer).renderPass;
+    } else if (renderer.kind == .PostProcessRenderer) {
+        return (cast(*PostProcessRenderer) renderer).renderPass;
+    }
+    Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
+    return null;
 }
 
 _renderer_get_vertex_input_description :: (renderer : *Renderer) -> VertexInputDescription {

@@ -1,9 +1,9 @@
 #scope_module
 
 PostProcessRendererImpl :: struct {
-    pipeline : Vk.Pipeline;
-    descriptorSetLayout : Vk.DescriptorSetLayout;
+    renderPass : Vk.RenderPass;
 
+    descriptorSetLayout : Vk.DescriptorSetLayout;
     descriptorPool : Vk.DescriptorPool;
 
     extraFrameObjects : [Engine.FRAME_INDEX_COUNT]struct {
@@ -20,7 +20,6 @@ impl_post_process_renderer_cleanup :: (postProcessRenderer : *PostProcessRendere
     engine := postProcessRenderer.scene.engine;
     Vk.device_wait_idle(engine.device); // @todo :WaitIdle
 
-    Vk.destroy_pipeline(engine.device, postProcessRenderer.pipeline, null);
     Vk.destroy_descriptor_set_layout(engine.device, postProcessRenderer.descriptorSetLayout, null);
     Vk.destroy_descriptor_pool(engine.device, postProcessRenderer.descriptorPool, null);
 
@@ -29,6 +28,8 @@ impl_post_process_renderer_cleanup :: (postProcessRenderer : *PostProcessRendere
         Vk.destroy_image_view(engine.device, extraFrameObject.imageView, null);
         Vk.destroy_framebuffer(engine.device, extraFrameObject.framebuffer, null);
     }
+
+    Vk.destroy_render_pass(engine.device, postProcessRenderer.renderPass, null);
 }
 
 impl_post_process_renderer_get_output_extent :: (postProcessRenderer : *PostProcessRenderer, outputIndex : u8) -> Chamber.uvec2 {
@@ -87,6 +88,7 @@ _post_process_renderer_get_output_image_info :: (postProcessRenderer : *PostProc
     // @todo No view provided, will probably fail at some point when we will want to
     // chain things.
     imageInfo.layout = postProcessRenderer.FINAL_IMAGE_LAYOUT;
+    imageInfo.usage = .FragmentOutput;
     return imageInfo;
 }
 
@@ -173,11 +175,7 @@ _init_extra_frame_objects :: (postProcessRenderer : *PostProcessRenderer) -> boo
 
     for *extraFrameObject : postProcessRenderer.extraFrameObjects {
         // Output image
-        if !_image_holder_init(*extraFrameObject.imageHolder, engine, .RendererOut, extent) {
-            return false;
-        }
-        _set_debug_utils_name(engine.device, extraFrameObject.imageHolder.image, "postProcessRenderer.extraFrameObjects[].image");
-
+        _image_holder_init(*extraFrameObject.imageHolder, engine, "postProcessRenderer.extraFrameObjects[].imageHolder", .RendererOut, extent);
         extraFrameObject.imageView = _image_holder_create_view(*extraFrameObject.imageHolder);
         if extraFrameObject.imageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.imageView, "postProcessRenderer.extraFrameObjects[].imageView");

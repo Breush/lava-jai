@@ -37,18 +37,78 @@ _create_graphics_command_pool :: (engine : *Engine, commandPool : *Vk.CommandPoo
     return true;
 }
 
-_change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, oldLayout : Vk.ImageLayout, newLayout : Vk.ImageLayout) {
+_change_image_layout :: (engine : *Engine, image : Vk.Image, srcImageUsage : ImageUsageKind, dstImageUsage : ImageUsageKind) {
+    commandBuffer := _one_time_command_buffer_begin(engine.device, engine.graphicsCommandPool);
+    _change_image_layout(commandBuffer, image, srcImageUsage, dstImageUsage);
+    _one_time_command_buffer_end(commandBuffer, engine.device, engine.graphicsCommandPool, engine.graphicsQueue);
+}
+
+_change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, srcImageUsage : ImageUsageKind, dstImageUsage : ImageUsageKind) {
+    srcLayout := Vk.ImageLayout.Undefined;
+    dstLayout := Vk.ImageLayout.Undefined;
+    srcAccessMask : Vk.AccessFlagBits;
+    dstAccessMask : Vk.AccessFlagBits;
+    srcStageMask := Vk.PipelineStageFlagBits.BottomOfPipe;
+    dstStageMask := Vk.PipelineStageFlagBits.TopOfPipe;
+
+    if srcImageUsage == .TransferOutput {
+        srcLayout = .TransferDstOptimal;
+        srcAccessMask = .TransferWrite;
+        srcStageMask = .Transfer;
+    } else if srcImageUsage == .TransferInput {
+        srcLayout = .TransferSrcOptimal;
+        srcAccessMask = .TransferRead;
+        srcStageMask = .Transfer;
+    } else if srcImageUsage == .FragmentInput {
+        srcLayout = .ShaderReadOnlyOptimal;
+        srcAccessMask = .ShaderRead;
+        srcStageMask = .FragmentShader;
+    } else if srcImageUsage == .FragmentOutput {
+        srcLayout = .ShaderReadOnlyOptimal;
+        srcAccessMask = .ShaderWrite;
+        srcStageMask = .FragmentShader;
+    } else if srcImageUsage == .DontCare {
+        /* Nothing to do */
+    } else {
+        Basic.log("Unhandled image usage kind: %.", srcImageUsage, flags=.ERROR);
+    }
+
+    if dstImageUsage == .TransferOutput {
+        dstLayout = .TransferDstOptimal;
+        dstAccessMask = .TransferWrite;
+        dstStageMask = .Transfer;
+    } else if dstImageUsage == .TransferInput {
+        dstLayout = .TransferSrcOptimal;
+        dstAccessMask = .TransferRead;
+        dstStageMask = .Transfer;
+    } else if dstImageUsage == .FragmentInput {
+        dstLayout = .ShaderReadOnlyOptimal;
+        dstAccessMask = .ShaderRead;
+        dstStageMask = .FragmentShader;
+    } else if dstImageUsage == .FragmentOutput {
+        dstLayout = .ShaderReadOnlyOptimal;
+        dstAccessMask = .ShaderWrite;
+        dstStageMask = .FragmentShader;
+    } else if dstImageUsage == .PresentInput {
+        dstLayout = .PresentSrcKhr;
+    } else if dstImageUsage == .DontCare {
+        /* Nothing to do */
+    } else {
+        Basic.log("Unhandled image usage kind: %.", dstImageUsage, flags=.ERROR);
+    }
+
     imageMemoryBarrier : Vk.ImageMemoryBarrier;
     imageMemoryBarrier.sType = .ImageMemoryBarrier;
-    imageMemoryBarrier.oldLayout = oldLayout;
-    imageMemoryBarrier.newLayout = newLayout;
+    imageMemoryBarrier.oldLayout = srcLayout;
+    imageMemoryBarrier.newLayout = dstLayout;
+    imageMemoryBarrier.srcAccessMask = cast(u32) srcAccessMask;
+    imageMemoryBarrier.dstAccessMask = cast(u32) dstAccessMask;
     imageMemoryBarrier.image = image;
     imageMemoryBarrier.subresourceRange.levelCount = 1;
     imageMemoryBarrier.subresourceRange.layerCount = 1;
     imageMemoryBarrier.subresourceRange.aspectMask = cast(u32) Vk.ImageAspectFlagBits.Color;
 
-    stageMask := cast(u32) Vk.PipelineStageFlagBits.ColorAttachmentOutput; // @todo How can we be sure this is the right thing to do?
-    Vk.cmd_pipeline_barrier(commandBuffer, stageMask, stageMask, 0, 0, null, 0, null, 1, *imageMemoryBarrier);
+    Vk.cmd_pipeline_barrier(commandBuffer, cast(u32) srcStageMask, cast(u32) dstStageMask, 0, 0, null, 0, null, 1, *imageMemoryBarrier);
 }
 
 _one_time_command_buffer_begin :: (device : Vk.Device, commandPool : Vk.CommandPool) -> Vk.CommandBuffer {
@@ -150,4 +210,12 @@ _set_debug_utils_name :: (device : Vk.Device, object : Vk.CommandPool, name : *u
 
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.PipelineLayout, name : *u8) {
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.PipelineLayout, name);
+}
+
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.DescriptorSet, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.DescriptorSet, name);
+}
+
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.DeviceMemory, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.DeviceMemory, name);
 }

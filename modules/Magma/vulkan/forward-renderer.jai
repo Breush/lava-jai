@@ -1,6 +1,8 @@
 #scope_module
 
 ForwardRendererImpl :: struct {
+    renderPass : Vk.RenderPass;
+
     extraFrameObjects : [Engine.FRAME_INDEX_COUNT]struct {
         imageHolder : ImageHolder;
         imageView : Vk.ImageView;
@@ -21,12 +23,13 @@ ForwardRendererImpl :: struct {
     FINAL_IMAGE_LAYOUT :: Vk.ImageLayout.ShaderReadOnlyOptimal;
 }
 
-impl_forward_renderer_init :: (renderer : *ForwardRenderer) {
+impl_forward_renderer_init :: (forwardRenderer : *ForwardRenderer) {
+    renderer := forwardRenderer;
     nextLocation := _fill_vertex_input_descs(VertexInput, 0, 0, Vk.VertexInputRate.Vertex);
     _fill_vertex_input_descs(InstanceInput, 1, nextLocation, Vk.VertexInputRate.Instance);
 
-    renderer.pushConstantRanges[0].size = size_of(EyeShaderObject);
-    renderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
+    forwardRenderer.pushConstantRanges[0].size = size_of(EyeShaderObject);
+    forwardRenderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
 }
 
 impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
@@ -43,6 +46,8 @@ impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
         Vk.destroy_image_view(engine.device, extraFrameObject.depthImageView, null);
         Vk.destroy_framebuffer(forwardRenderer.scene.engine.device, extraFrameObject.framebuffer, null);
     }
+
+    Vk.destroy_render_pass(engine.device, forwardRenderer.renderPass, null);
 }
 
 impl_forward_renderer_get_output_extent :: (forwardRenderer : *ForwardRenderer, outputIndex : u8) -> Chamber.uvec2 {
@@ -123,6 +128,7 @@ _forward_renderer_get_output_image_info :: (forwardRenderer : *ForwardRenderer, 
     imageInfo.image = forwardRenderer.extraFrameObjects[frameIndex].imageHolder.image;
     imageInfo.view = forwardRenderer.extraFrameObjects[frameIndex].imageView;
     imageInfo.layout = forwardRenderer.FINAL_IMAGE_LAYOUT;
+    imageInfo.usage = .FragmentOutput;
     return imageInfo;
 }
 
@@ -200,21 +206,13 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
 
     for *extraFrameObject : forwardRenderer.extraFrameObjects {
         // Output image
-        if !_image_holder_init(*extraFrameObject.imageHolder, engine, .RendererOut, forwardRenderer.eye.extent) {
-            return false;
-        }
-        _set_debug_utils_name(engine.device, extraFrameObject.imageHolder.image, "forwardRenderer.extraFrameObjects[].image");
-
+        _image_holder_init(*extraFrameObject.imageHolder, engine, "forwardRenderer.extraFrameObjects[].imageHolder", .RendererOut, forwardRenderer.eye.extent);
         extraFrameObject.imageView = _image_holder_create_view(*extraFrameObject.imageHolder);
         if extraFrameObject.imageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.imageView, "forwardRenderer.extraFrameObjects[].imageView");
 
         // Depth image
-        if !_image_holder_init(*extraFrameObject.depthImageHolder, engine, .Depth, forwardRenderer.eye.extent) {
-            return false;
-        }
-        _set_debug_utils_name(engine.device, extraFrameObject.depthImageHolder.image, "forwardRenderer.extraFrameObjects[].depthImage");
-
+        _image_holder_init(*extraFrameObject.depthImageHolder, engine, "forwardRenderer.extraFrameObjects[].depthImageHolder", .Depth, forwardRenderer.eye.extent);
         extraFrameObject.depthImageView = _image_holder_create_view(*extraFrameObject.depthImageHolder);
         if extraFrameObject.depthImageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.depthImageView, "forwardRenderer.extraFrameObject[].depthImageView");
