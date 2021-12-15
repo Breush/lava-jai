@@ -2,7 +2,6 @@
     @fixme Magma roadmap:
     - ComposeRenderer
     - 2D (UI) renderer
-    - Raytracing
 */
 
 #load "common/engine.jai";

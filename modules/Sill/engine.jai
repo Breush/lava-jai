@@ -26,10 +26,10 @@ Engine :: struct ($_Meta : Type) {
     allocator : Allocator;
 }
 
-create_engine :: ($_Meta : Type) -> *Engine(_Meta) {
+create_engine :: ($_Meta : Type, rayTracing := false) -> *Engine(_Meta) {
     engine := Basic.New(Engine(_Meta));
     Basic.remember_allocators(engine);
-    engine_init(engine);
+    engine_init(engine, rayTracing);
     return engine;
 }
 
@@ -44,7 +44,7 @@ destroy_engine :: (engine : *Engine) {
 }
 
 // @todo Enable VR on option, currently doing so as long as available.
-engine_init :: (engine : *EngineBase) {
+engine_init :: (engine : *EngineBase, rayTracing := false) {
     Basic.log("Engine init.", flags=.VERBOSE_ONLY);
 
     // Windowing
@@ -53,6 +53,10 @@ engine_init :: (engine : *EngineBase) {
     // Rendering
     renderEngineOptions : Magma.Engine.Options;
     renderEngineOptions.features |= .Vr;
+    if rayTracing {
+        renderEngineOptions.features |= .RayTracing;
+    }
+
     engine.renderEngine = Magma.create_engine(renderEngineOptions);
     engine.windowTarget = Magma.create_window_target(engine.renderEngine, Crater.window_get_handle(engine.window));
     engine.scene = Magma.create_scene(engine.renderEngine);
@@ -73,7 +77,11 @@ engine_init :: (engine : *EngineBase) {
         // @todo Companion window, probably with own renderer.
         engine.renderer = engine.vrLeftRenderer;
     } else {
-        engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
+        if rayTracing {
+            engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, Crater.window_get_extent(engine.window));
+        } else {
+            engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
+        }
         engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.renderer));
         Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.postProcessRenderer));
     }

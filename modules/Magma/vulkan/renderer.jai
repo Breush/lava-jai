@@ -1,6 +1,7 @@
 #scope_module
 
 #load "forward-renderer.jai";
+#load "ray-tracing-renderer.jai";
 #load "post-process-renderer.jai";
 
 /*
@@ -34,6 +35,7 @@ ImageUsageKind :: enum {
     DontCare;
     FragmentInput;
     FragmentOutput;
+    RayTracingOutput;
     TransferInput;
     TransferOutput;
     PresentInput;
@@ -62,7 +64,6 @@ impl_renderer_cleanup :: (renderer : *Renderer) {
     Vk.destroy_command_pool(engine.device, renderer.commandPool, null);
 
     Vk.destroy_pipeline_layout(engine.device, renderer.pipelineLayout, null);
-    Vk.destroy_render_pass(engine.device, renderer.renderPass, null);
 }
 
 _renderer_post_init :: (renderer : *Renderer) -> bool {
@@ -101,6 +102,8 @@ _renderer_post_init :: (renderer : *Renderer) -> bool {
 
     if renderer.kind == .ForwardRenderer {
         return _forward_renderer_post_init(cast(*ForwardRenderer) renderer);
+    } else if renderer.kind == .RayTracingRenderer {
+        return _ray_tracing_renderer_post_init(cast(*RayTracingRenderer) renderer);
     } else if renderer.kind == .PostProcessRenderer {
         return _post_process_renderer_post_init(cast(*PostProcessRenderer) renderer);
     }
@@ -131,6 +134,8 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
 
     if renderer.kind == .ForwardRenderer {
         _forward_renderer_render(cast(*ForwardRenderer) renderer, frameIndex);
+    } else if renderer.kind == .RayTracingRenderer {
+        _ray_tracing_renderer_render(cast(*RayTracingRenderer) renderer, frameIndex);
     } else if renderer.kind == .PostProcessRenderer {
         _post_process_renderer_render(cast(*PostProcessRenderer) renderer, frameIndex);
     } else {
@@ -163,6 +168,8 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
 _renderer_get_push_constant_ranges :: (renderer : *Renderer) -> []Vk.PushConstantRange {
     if (renderer.kind == .ForwardRenderer) {
         return (cast(*ForwardRenderer) renderer).pushConstantRanges;
+    } else if (renderer.kind == .RayTracingRenderer) {
+        return (cast(*RayTracingRenderer) renderer).pushConstantRanges;
     }
     return .[];
 }
@@ -195,6 +202,8 @@ _renderer_output_get_render_semaphore :: (output : RendererOutput, frameIndex : 
 _renderer_output_get_image_info :: (output : RendererOutput, frameIndex : u8) -> ImageInfo {
     if output.renderer.kind == .ForwardRenderer {
         return _forward_renderer_get_output_image_info(cast(*ForwardRenderer) output.renderer, output.index, frameIndex);
+    } else if output.renderer.kind == .RayTracingRenderer {
+        return _ray_tracing_renderer_get_output_image_info(cast(*RayTracingRenderer) output.renderer, output.index, frameIndex);
     } else if output.renderer.kind == .PostProcessRenderer {
         return _post_process_renderer_get_output_image_info(cast(*PostProcessRenderer) output.renderer, output.index, frameIndex);
     }

@@ -10,6 +10,7 @@ Renderer :: struct {
     Kind :: enum {
         Unknown :: 0;
         ForwardRenderer;
+        RayTracingRenderer;
         PostProcessRenderer;
     }
 
@@ -46,6 +47,8 @@ renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
         _forward_renderer_cleanup(cast(*ForwardRenderer) renderer, resetMemory);
     } else if renderer.kind == .PostProcessRenderer {
         _post_process_renderer_cleanup(cast(*PostProcessRenderer) renderer, resetMemory);
+    } else if renderer.kind == .RayTracingRenderer {
+        _ray_tracing_renderer_cleanup(cast(*RayTracingRenderer) renderer, resetMemory);
     } else {
         Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     }
@@ -68,6 +71,7 @@ renderer_find_shader :: (renderer : *Renderer, id : string) -> *Shader {
 
 renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_eye(cast(*ForwardRenderer) renderer, eyeIndex);
+    if renderer.kind == .RayTracingRenderer then return ray_tracing_renderer_get_eye(cast(*RayTracingRenderer) renderer, eyeIndex);
     if renderer.kind == .PostProcessRenderer then return renderer_get_eye((cast(*PostProcessRenderer) renderer).rendererOutput.renderer, eyeIndex);
     Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return null;
@@ -75,6 +79,7 @@ renderer_get_eye :: (renderer : *Renderer, eyeIndex : u32) -> *Eye {
 
 renderer_get_extent :: (renderer : *Renderer, outputIndex : u32) -> Chamber.uvec2 {
     if renderer.kind == .ForwardRenderer then return forward_renderer_get_extent(cast(*ForwardRenderer) renderer, outputIndex);
+    if renderer.kind == .RayTracingRenderer then return ray_tracing_renderer_get_extent(cast(*RayTracingRenderer) renderer, outputIndex);
     if renderer.kind == .PostProcessRenderer then return post_process_renderer_get_extent(cast(*PostProcessRenderer) renderer, outputIndex);
     Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return .{};
@@ -111,6 +116,8 @@ RendererOutput :: struct {
 renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
     if output.renderer.kind == .ForwardRenderer {
         return impl_forward_renderer_get_output_extent(cast(*ForwardRenderer) output.renderer, output.index);
+    } else if output.renderer.kind == .RayTracingRenderer {
+        return impl_ray_tracing_renderer_get_output_extent(cast(*RayTracingRenderer) output.renderer, output.index);
     } else if output.renderer.kind == .PostProcessRenderer {
         return impl_post_process_renderer_get_output_extent(cast(*PostProcessRenderer) output.renderer, output.index);
     }
@@ -166,6 +173,41 @@ forward_renderer_get_eye :: (forwardRenderer : *ForwardRenderer, eyeIndex : u32)
 
 forward_renderer_get_extent :: (forwardRenderer : *ForwardRenderer, eyeIndex : u32) -> Chamber.uvec2 {
     if eyeIndex == 0 then return forwardRenderer.eye.extent;
+    return .{};
+}
+
+// ----- Ray tracing
+
+RayTracingRenderer :: struct {
+    using renderer : Renderer;
+    using rayTracingRendererImpl : RayTracingRendererImpl;
+
+    eye : Eye;
+}
+
+create_ray_tracing_renderer :: (scene : *Scene, extent : Chamber.uvec2) -> *RayTracingRenderer {
+    rayTracingRenderer := cast(*RayTracingRenderer) Basic.New(RayTracingRenderer);
+    rayTracingRenderer.kind = Renderer.Kind.RayTracingRenderer;
+    Basic.remember_allocators(rayTracingRenderer);
+    ray_tracing_renderer_init(rayTracingRenderer, scene, extent);
+    scene_register(scene, rayTracingRenderer);
+    return rayTracingRenderer;
+}
+
+ray_tracing_renderer_init :: (rayTracingRenderer : *RayTracingRenderer, scene : *Scene, extent : Chamber.uvec2) {
+    _renderer_init(rayTracingRenderer, scene);
+    eye_init(*rayTracingRenderer.eye, extent);
+
+    impl_ray_tracing_renderer_init(rayTracingRenderer);
+}
+
+ray_tracing_renderer_get_eye :: (rayTracingRenderer : *RayTracingRenderer, eyeIndex : u32) -> *Eye {
+    if eyeIndex == 0 then return *rayTracingRenderer.eye;
+    return null;
+}
+
+ray_tracing_renderer_get_extent :: (rayTracingRenderer : *RayTracingRenderer, eyeIndex : u32) -> Chamber.uvec2 {
+    if eyeIndex == 0 then return rayTracingRenderer.eye.extent;
     return .{};
 }
 
@@ -225,6 +267,14 @@ _forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer, resetMemory : 
 
     if resetMemory {
         <<forwardRenderer = .{};
+    }
+}
+
+_ray_tracing_renderer_cleanup :: (rayTracingRenderer : *RayTracingRenderer, resetMemory : bool) {
+    impl_ray_tracing_renderer_cleanup(rayTracingRenderer);
+
+    if resetMemory {
+        <<rayTracingRenderer = .{};
     }
 }
 

@@ -1,9 +1,10 @@
 ImageHolder :: struct {
     Kind :: enum {
         Unknown :: 0;
-        Texture;      // R8G8B8A8Unorm - Color | Sampled | TransferDst
-        RendererOut;  // R8G8B8A8Srgb - Color | Sampled | TransferSrc
-        Depth;        // D32Sfloat    - DepthStencil
+        Texture;            // R8G8B8A8Unorm - Color | Sampled | TransferDst
+        RendererOut;        // R8G8B8A8Srgb  - Color | Sampled | TransferSrc
+        RendererOutStorage; // R8G8B8A8Unorm - Storage | Sampled | TransferSrc
+        Depth;              // D32Sfloat     - DepthStencil
     }
 
     engine : *Engine;
@@ -39,6 +40,9 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
     if kind == .RendererOut {
         format = Vk.Format.R8G8B8A8Srgb;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
+    } else if kind == .RendererOutStorage {
+        format = Vk.Format.R8G8B8A8Unorm;
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.Storage;
     } else if kind == .Texture {
         format = Vk.Format.R8G8B8A8Unorm;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
@@ -74,8 +78,8 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 
 _image_holder_cleanup :: (using imageHolder : *ImageHolder, resetMemory := true) {
     if image != null {
-    Vk.destroy_image(engine.device, image, null);
-    Vk.free_memory(engine.device, deviceMemory, null);
+        Vk.destroy_image(engine.device, image, null);
+        Vk.free_memory(engine.device, deviceMemory, null);
     }
 
     if resetMemory {
@@ -111,7 +115,7 @@ _image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8, usage : Im
 _image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView {
     aspect : Vk.ImageAspectFlags;
 
-    if kind == .RendererOut || kind == .Texture {
+    if kind == .RendererOut || kind == .RendererOutStorage || kind == .Texture {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Color;
     } else if kind == .Depth {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Depth;
@@ -144,10 +148,15 @@ _image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView 
 BufferHolder :: struct {
     Kind :: enum {
         Unknown :: 0;
-        Staging;        // TransferSrc
-        ShaderVertex;   // VertexBuffer
-        ShaderIndex;    // IndexBuffer
-        ShaderUniform;  // UniformBuffer
+        Staging;                        // TransferSrc
+        ShaderVertex;                   // VertexBuffer (RayTracing: | AccelerationStructureBuildInputReadOnlyKHR)
+        ShaderIndex;                    // IndexBuffer (RayTracing: | AccelerationStructureBuildInputReadOnlyKHR)
+        ShaderUniform;                  // UniformBuffer
+        ShaderStorage;                  // StorageBuffer
+        ShaderBindingTable;             // ShaderBindingTableKHR
+        AccelerationStructureInput;     // AccelerationStructureBuildInputReadOnlyKHR
+        AccelerationStructureStorage;   // AccelerationStructureStorageKHR
+        AccelerationStructureScratch;   // StorageBuffer
     }
 
     CpuIo :: enum {
@@ -193,10 +202,30 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.TransferSrc;
     } else if kind == .ShaderVertex {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.VertexBuffer;
+        if engine.options.features & .RayTracing {
+            bufferCIFlags |= cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureBuildInputReadOnlyKhr;
+        }
     } else if kind == .ShaderIndex {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.IndexBuffer;
+        if engine.options.features & .RayTracing {
+            bufferCIFlags |= cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureBuildInputReadOnlyKhr;
+        }
     } else if kind == .ShaderUniform {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.UniformBuffer;
+    } else if kind == .ShaderStorage {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.StorageBuffer;
+    } else if kind == .ShaderBindingTable {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.ShaderBindingTableKhr;
+    } else if kind == .AccelerationStructureInput {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureBuildInputReadOnlyKhr;
+    } else if kind == .AccelerationStructureStorage {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureStorageKhr;
+    } else if kind == .AccelerationStructureScratch {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.StorageBuffer;
+    }
+
+    if engine.options.features & .RayTracing {
+        bufferCIFlags |= cast(u32) Vk.BufferUsageFlagBits.ShaderDeviceAddress;
     }
 
     if cpuIo == .OnDemandStaging || cpuIo == .PersistentStaging {
@@ -225,6 +254,13 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
     memoryAI.allocationSize = memoryRequirements.size;
     memoryAI.memoryTypeIndex = _select_best_memory_type_index(engine, memoryRequirements.memoryTypeBits,
                                                               memoryPropertyFlags);
+
+    memoryAFI : Vk.MemoryAllocateFlagsInfo;
+    if bufferCIFlags & cast(u32) Vk.BufferUsageFlagBits.ShaderDeviceAddress {
+        memoryAFI.sType = .MemoryAllocateFlagsInfo;
+        memoryAFI.flags = cast(u32) Vk.MemoryAllocateFlagBits.DeviceAddress;
+        memoryAI.pNext = *memoryAFI;
+    }
 
     _CHECK(Vk.allocate_memory(engine.device, *memoryAI, null, *deviceMemory),
            "Unable to create buffer device memory.");
@@ -275,6 +311,302 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSi
     }
 
     return true;
+}
+
+_buffer_holder_device_address :: (using bufferHolder : *BufferHolder) -> Vk.DeviceAddress {
+    bufferDAI : Vk.BufferDeviceAddressInfo;
+    bufferDAI.sType = .BufferDeviceAddressInfo;
+    bufferDAI.buffer = bufferHolder.buffer;
+    return Vk.get_buffer_device_address(engine.device, *bufferDAI);
+}
+
+// -----
+
+// @todo Could be used more generally in each renderer.
+// Currently only used in RayTracingRenderer.
+DescriptorHolder :: struct {
+    engine : *Engine;
+    setLayout : Vk.DescriptorSetLayout;
+    pool : Vk.DescriptorPool;
+    options : DescriptorHolderOptions;
+}
+
+DescriptorHolderOptions :: struct {
+    accelerationStructures : u32;
+    storageBuffers : u32;
+    storageImages : u32;
+}
+
+_descriptor_holder_init :: (using descriptorHolder : *DescriptorHolder, _engine : *Engine, _options : DescriptorHolderOptions) -> bool {
+    engine = _engine;
+    options = _options;
+
+    // --- Set layout
+
+    bindingIndex : u32;
+    setLayoutBindings : [..]Vk.DescriptorSetLayoutBinding;
+    defer Basic.array_free(setLayoutBindings);
+
+    // @todo We should get the stageFlags from the parameters, somehow.
+
+    if options.accelerationStructures > 0 {
+        Basic.array_resize(*setLayoutBindings, setLayoutBindings.count + 1);
+        setLayoutBinding := Basic.peek_pointer(setLayoutBindings);
+        setLayoutBindings[bindingIndex].binding = bindingIndex;
+        setLayoutBindings[bindingIndex].descriptorCount = options.accelerationStructures;
+        setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr;
+        setLayoutBindings[bindingIndex].descriptorType = .AccelerationStructureKhr;
+
+        bindingIndex += 1;
+    }
+
+    if options.storageBuffers > 0 {
+        Basic.array_resize(*setLayoutBindings, setLayoutBindings.count + 1);
+        setLayoutBinding := Basic.peek_pointer(setLayoutBindings);
+        setLayoutBindings[bindingIndex].binding = bindingIndex;
+        setLayoutBindings[bindingIndex].descriptorCount = options.storageBuffers;
+        setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.ClosestHitKhr;
+        setLayoutBindings[bindingIndex].descriptorType = .StorageBuffer;
+
+        bindingIndex += 1;
+    }
+
+    if options.storageImages > 0 {
+        Basic.array_resize(*setLayoutBindings, setLayoutBindings.count + 1);
+        setLayoutBinding := Basic.peek_pointer(setLayoutBindings);
+        setLayoutBindings[bindingIndex].binding = bindingIndex;
+        setLayoutBindings[bindingIndex].descriptorCount = options.storageImages;
+        setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr;
+        setLayoutBindings[bindingIndex].descriptorType = .StorageImage;
+
+        bindingIndex += 1;
+    }
+
+    setLayoutCI : Vk.DescriptorSetLayoutCreateInfo;
+    setLayoutCI.sType = .DescriptorSetLayoutCreateInfo;
+    setLayoutCI.bindingCount = cast(u32) setLayoutBindings.count;
+    setLayoutCI.pBindings = setLayoutBindings.data;
+
+    _CHECK(Vk.create_descriptor_set_layout(engine.device, *setLayoutCI, null, *setLayout),
+           "Unable to create descriptor set layout.");
+
+    // --- Pool
+
+    // @todo Should definitely be parametrable.
+    MAX_DESCRIPTOR_SET_COUNT :: Engine.FRAME_INDEX_COUNT;
+
+    poolSizes : [..]Vk.DescriptorPoolSize;
+    defer Basic.array_free(poolSizes);
+
+    if options.accelerationStructures > 0 {
+        Basic.array_resize(*poolSizes, poolSizes.count + 1);
+        poolSize := Basic.peek_pointer(poolSizes);
+        poolSize.type = .AccelerationStructureKhr;
+        poolSize.descriptorCount = options.accelerationStructures * MAX_DESCRIPTOR_SET_COUNT;
+    }
+
+    if options.storageImages > 0 {
+        Basic.array_resize(*poolSizes, poolSizes.count + 1);
+        poolSize := Basic.peek_pointer(poolSizes);
+        poolSize.type = .StorageImage;
+        poolSize.descriptorCount = options.storageImages * MAX_DESCRIPTOR_SET_COUNT;
+    }
+
+    poolCI : Vk.DescriptorPoolCreateInfo;
+    poolCI.sType = .DescriptorPoolCreateInfo;
+    poolCI.poolSizeCount = cast(u32) poolSizes.count;
+    poolCI.pPoolSizes = poolSizes.data;
+    poolCI.maxSets = MAX_DESCRIPTOR_SET_COUNT;
+
+    _CHECK(Vk.create_descriptor_pool(engine.device, *poolCI, null, *pool),
+           "Unable to create descriptor pool.");
+
+    return true;
+}
+
+_descriptor_holder_cleanup :: (using descriptorHolder : *DescriptorHolder) -> bool {
+    Vk.destroy_descriptor_pool(engine.device, pool, null);
+    Vk.destroy_descriptor_set_layout(engine.device, setLayout, null);
+    return true;
+}
+
+_descriptor_holder_allocate_set :: (using descriptorHolder : *DescriptorHolder) -> Vk.DescriptorSet {
+    setAI : Vk.DescriptorSetAllocateInfo;
+    setAI.sType = .DescriptorSetAllocateInfo;
+    setAI.descriptorPool = pool;
+    setAI.descriptorSetCount = 1;
+    setAI.pSetLayouts = *setLayout;
+
+    set : Vk.DescriptorSet;
+    _CHECK(Vk.allocate_descriptor_sets(engine.device, *setAI, *set),
+           null, "Unable to allocate descriptor sets.");
+
+    return set;
+}
+
+_descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, set : Vk.DescriptorSet, accelerationStructure : Vk.AccelerationStructureKHR) -> bool {
+    writeSetAccelerationStructure : Vk.WriteDescriptorSetAccelerationStructureKHR;
+    writeSetAccelerationStructure.sType = .WriteDescriptorSetAccelerationStructureKhr;
+    writeSetAccelerationStructure.accelerationStructureCount = 1;
+    writeSetAccelerationStructure.pAccelerationStructures = *accelerationStructure;
+
+    writeSet : Vk.WriteDescriptorSet;
+    writeSet.sType = .WriteDescriptorSet;
+    writeSet.pNext = *writeSetAccelerationStructure;
+    writeSet.dstSet = set;
+    writeSet.dstBinding = 0; // @todo Should be parametrable + offseted by start of binding
+    writeSet.dstArrayElement = 0;
+    writeSet.descriptorType = .AccelerationStructureKhr;
+    writeSet.descriptorCount = 1;
+
+    Vk.update_descriptor_sets(engine.device, 1, *writeSet, 0, null);
+
+    return true;
+}
+
+_descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, set : Vk.DescriptorSet, imageView : Vk.ImageView, imageLayout : Vk.ImageLayout) -> bool {
+    imageInfo : Vk.DescriptorImageInfo;
+    imageInfo.imageLayout = imageLayout;
+    imageInfo.imageView = imageView;
+
+    writeSet : Vk.WriteDescriptorSet;
+    writeSet.sType = .WriteDescriptorSet;
+    writeSet.pImageInfo = *imageInfo;
+    writeSet.dstSet = set;
+    writeSet.dstBinding = 0; // @todo Should be parametrable + offseted by start of binding
+    writeSet.dstArrayElement = 0;
+    writeSet.descriptorType = .StorageImage;
+    writeSet.descriptorCount = 1;
+
+    Vk.update_descriptor_sets(engine.device, 1, *writeSet, 0, null);
+
+    return true;
+}
+
+_descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, set : Vk.DescriptorSet, buffer : Vk.Buffer, size : Vk.DeviceSize) -> bool {
+    bufferInfo : Vk.DescriptorBufferInfo;
+    bufferInfo.buffer = buffer;
+    bufferInfo.range = size;
+
+    writeSet : Vk.WriteDescriptorSet;
+    writeSet.sType = .WriteDescriptorSet;
+    writeSet.pBufferInfo = *bufferInfo;
+    writeSet.dstSet = set;
+    writeSet.dstBinding = 1; // @todo Should be parametrable + offseted by start of binding
+    writeSet.dstArrayElement = 0;
+    writeSet.descriptorType = .StorageBuffer;
+    writeSet.descriptorCount = 1;
+
+    Vk.update_descriptor_sets(engine.device, 1, *writeSet, 0, null);
+
+    return true;
+}
+
+// -----
+
+AsHolder :: struct {
+    engine : *Engine;
+
+    as : Vk.AccelerationStructureKHR;
+    bufferHolder : BufferHolder;
+    scratchBufferHolder : BufferHolder;
+    geometry : Vk.AccelerationStructureGeometryKHR;
+    buildRangeInfo : Vk.AccelerationStructureBuildRangeInfoKHR;
+    buildGeometryInfo : Vk.AccelerationStructureBuildGeometryInfoKHR;
+
+    buildSizesInfo : Vk.AccelerationStructureBuildSizesInfoKHR;
+    deviceAddress : Vk.DeviceAddress;
+}
+
+_as_holder_init :: (asHolder : *AsHolder, engine : *Engine, name : string,
+                    type : Vk.AccelerationStructureTypeKHR, primitiveCount : u32, geometry : Vk.AccelerationStructureGeometryKHR) -> bool {
+    asHolder.engine = engine;
+    asHolder.geometry = geometry;
+
+    asHolder.buildRangeInfo.primitiveCount = primitiveCount;
+
+    asHolder.buildGeometryInfo.sType = .AccelerationStructureBuildGeometryInfoKhr;
+    asHolder.buildGeometryInfo.type = type;
+    asHolder.buildGeometryInfo.flags = cast(u32) Vk.BuildAccelerationStructureFlagBitsKHR.PreferFastTrace;
+    asHolder.buildGeometryInfo.geometryCount = 1;
+    asHolder.buildGeometryInfo.pGeometries = *asHolder.geometry;
+    asHolder.buildGeometryInfo.mode = .Build;
+
+    buildSizesInfo : Vk.AccelerationStructureBuildSizesInfoKHR;
+    buildSizesInfo.sType = .AccelerationStructureBuildSizesInfoKhr;
+    Vk.get_acceleration_structure_build_sizes_khr(engine.device, .Device, *asHolder.buildGeometryInfo, *primitiveCount, *buildSizesInfo);
+
+    if asHolder.as != null {
+        // Don't recreate the acceleration structure if it is already the same
+        if buildSizesInfo.accelerationStructureSize == asHolder.buildSizesInfo.accelerationStructureSize &&
+           buildSizesInfo.buildScratchSize == asHolder.buildSizesInfo.buildScratchSize {
+            return true;
+        }
+
+        _as_holder_cleanup(asHolder);
+    }
+
+    asHolder.buildSizesInfo = buildSizesInfo;
+
+    _buffer_holder_init(*asHolder.bufferHolder, engine, Basic.tprint("%.bufferHolder", name),
+                        .AccelerationStructureStorage, .OnDemandStaging, asHolder.buildSizesInfo.accelerationStructureSize);
+
+    asCI : Vk.AccelerationStructureCreateInfoKHR;
+    asCI.sType = .AccelerationStructureCreateInfoKhr;
+    asCI.buffer = asHolder.bufferHolder.buffer;
+    asCI.size = asHolder.bufferHolder.size;
+    asCI.type = type;
+
+    _CHECK(Vk.create_acceleration_structure_khr(engine.device, *asCI, null, *asHolder.as),
+           "Unable to create acceleration structure");
+    _set_debug_utils_name(engine.device, asHolder.as, Basic.tprint("%.as\0", name).data);
+
+    _buffer_holder_init(*asHolder.scratchBufferHolder, engine, Basic.tprint("%.scratchBufferHolder", name),
+                        .AccelerationStructureScratch, .None, buildSizesInfo.buildScratchSize);
+
+    asHolder.buildGeometryInfo.dstAccelerationStructure = asHolder.as;
+    asHolder.buildGeometryInfo.scratchData.deviceAddress = _buffer_holder_device_address(*asHolder.scratchBufferHolder);
+
+    // Device address
+    asAI : Vk.AccelerationStructureDeviceAddressInfoKHR;
+    asAI.sType = .AccelerationStructureDeviceAddressInfoKhr;
+    asAI.accelerationStructure = asHolder.as;
+    asHolder.deviceAddress = Vk.get_acceleration_structure_device_address_khr(engine.device, *asAI);
+
+    return true;
+}
+
+_as_holder_cleanup :: (using asHolder : *AsHolder) {
+    if engine == null then return;
+
+    Vk.destroy_acceleration_structure_khr(asHolder.engine.device, asHolder.as, null);
+
+    _buffer_holder_cleanup(*asHolder.bufferHolder);
+    _buffer_holder_cleanup(*asHolder.scratchBufferHolder);
+}
+
+_as_holder_build :: (using asHolder : *AsHolder) {
+    commandBuffer := _one_time_command_buffer_begin(engine.device, engine.graphicsCommandPool);
+    _as_holder_build(asHolder, commandBuffer);
+    _one_time_command_buffer_end(commandBuffer, engine.device, engine.graphicsCommandPool, engine.graphicsQueue);
+}
+
+_as_holder_build :: (using asHolder : *AsHolder, commandBuffer : Vk.CommandBuffer) {
+    asBuildRangeInfos : [1]*Vk.AccelerationStructureBuildRangeInfoKHR;
+    asBuildRangeInfos[0] = *buildRangeInfo;
+
+    Vk.cmd_build_acceleration_structures_khr(commandBuffer, 1, *asHolder.buildGeometryInfo, asBuildRangeInfos.data);
+
+    // @note Synchronization below is needed to be able to use the built acceleration structure
+    // within the same command buffer.
+    memoryBarrier : Vk.MemoryBarrier;
+    memoryBarrier.sType = .MemoryBarrier;
+    memoryBarrier.srcAccessMask = cast(u32) Vk.AccessFlagBits.AccelerationStructureWriteKhr;
+    memoryBarrier.dstAccessMask = cast(u32) Vk.AccessFlagBits.AccelerationStructureReadKhr;
+
+    srcStageMask := cast(u32) Vk.PipelineStageFlagBits.AccelerationStructureBuildKhr;
+    dstStageMask := cast(u32) Vk.PipelineStageFlagBits.RayTracingShaderKhr;
+    Vk.cmd_pipeline_barrier(commandBuffer, srcStageMask, dstStageMask, 0, 1, *memoryBarrier, 0, null, 0, null);
 }
 
 #scope_file

@@ -15,6 +15,7 @@ Engine :: struct {
             None;
             Window;     // Allows to use WindowTarget.
             Vr;         // Allows to use VR features. (Enables OpenXR integration.)
+            RayTracing; // Allows to use RayTracingRenderer.
         }
 
         features : FeatureFlag = .Window;

@@ -67,6 +67,10 @@ _change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, src
         srcLayout = .ShaderReadOnlyOptimal;
         srcAccessMask = .ShaderWrite;
         srcStageMask = .FragmentShader;
+    } else if dstImageUsage == .RayTracingOutput {
+        dstLayout = .General;
+        dstAccessMask = .ShaderWrite;
+        dstStageMask = .RayTracingShaderKhr;
     } else if srcImageUsage == .DontCare {
         /* Nothing to do */
     } else {
@@ -89,6 +93,10 @@ _change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, src
         dstLayout = .ShaderReadOnlyOptimal;
         dstAccessMask = .ShaderWrite;
         dstStageMask = .FragmentShader;
+    } else if dstImageUsage == .RayTracingOutput {
+        dstLayout = .General;
+        dstAccessMask = .ShaderWrite;
+        dstStageMask = .RayTracingShaderKhr;
     } else if dstImageUsage == .PresentInput {
         dstLayout = .PresentSrcKhr;
     } else if dstImageUsage == .DontCare {
@@ -218,4 +226,8 @@ _set_debug_utils_name :: (device : Vk.Device, object : Vk.DescriptorSet, name : 
 
 _set_debug_utils_name :: (device : Vk.Device, object : Vk.DeviceMemory, name : *u8) {
     _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.DeviceMemory, name);
+}
+
+_set_debug_utils_name :: (device : Vk.Device, object : Vk.AccelerationStructureKHR, name : *u8) {
+    _set_debug_utils_name(device, cast(u64) object, Vk.ObjectType.AccelerationStructureKhr, name);
 }

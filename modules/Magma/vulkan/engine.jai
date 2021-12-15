@@ -11,6 +11,7 @@ EngineImpl :: struct {
     device : Vk.Device;
 
     physicalDeviceMemoryProperties : Vk.PhysicalDeviceMemoryProperties;
+    physicalDeviceRayTracingPipelineProperties : Vk.PhysicalDeviceRayTracingPipelinePropertiesKHR;
 
     queueIndices : QueueIndices;
     graphicsQueue : Vk.Queue;
@@ -125,6 +126,12 @@ _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chambe
         macroDefinition = "VERTEX";
     } else if kind == .Fragment {
         macroDefinition = "FRAGMENT";
+    } else if kind == .Raygen {
+        macroDefinition = "RAYGEN";
+    } else if kind == .Miss {
+        macroDefinition = "MISS";
+    } else if kind == .ClosestHit {
+        macroDefinition = "CLOSEST_HIT";
     }
 
     shaderModuleId := Basic.tprint("%.%", shaderId, macroDefinition);
@@ -298,6 +305,12 @@ _init_physical_device :: (engine : *Engine) -> bool {
         if validPhysicalDevice {
             engine.physicalDevice = physicalDevice;
             Vk.get_physical_device_memory_properties(physicalDevice, *engine.physicalDeviceMemoryProperties);
+
+            physicalDeviceProperties : Vk.PhysicalDeviceProperties2;
+            physicalDeviceProperties.sType = .PhysicalDeviceProperties2;
+            engine.physicalDeviceRayTracingPipelineProperties.sType = .PhysicalDeviceRayTracingPipelinePropertiesKhr;
+            physicalDeviceProperties.pNext = *engine.physicalDeviceRayTracingPipelineProperties;
+            Vk.get_physical_device_properties2(engine.physicalDevice, *physicalDeviceProperties);
             break;
         }
     }
@@ -355,6 +368,44 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
         }
     }
 
+    // Features
+    enabledFeatures : Vk.PhysicalDeviceFeatures;
+
+    deviceCIPNext : *void;
+    timelineSemaphoreFeatures : Vk.PhysicalDeviceTimelineSemaphoreFeatures;
+    timelineSemaphoreFeatures.sType = .PhysicalDeviceTimelineSemaphoreFeatures;
+    timelineSemaphoreFeatures.timelineSemaphore = Vk.TRUE;
+    _chain_front(*deviceCIPNext, *timelineSemaphoreFeatures);
+
+    rayTracingPipelineFeatures : Vk.PhysicalDeviceRayTracingPipelineFeaturesKHR;
+    bufferDeviceAddressFeatures : Vk.PhysicalDeviceBufferDeviceAddressFeatures;
+    accelerationStructureFeatures : Vk.PhysicalDeviceAccelerationStructureFeaturesKHR;
+    _16BitStorageFeatures : Vk.PhysicalDevice16BitStorageFeatures;
+    if engine.options.features & .RayTracing {
+        Basic.array_add(*enabledExtensions, Vk.KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        Basic.array_add(*enabledExtensions, Vk.KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        Basic.array_add(*enabledExtensions, Vk.KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+
+        bufferDeviceAddressFeatures.sType = .PhysicalDeviceBufferDeviceAddressFeatures;
+        bufferDeviceAddressFeatures.bufferDeviceAddress = Vk.TRUE;
+        _chain_front(*deviceCIPNext, *bufferDeviceAddressFeatures);
+
+        accelerationStructureFeatures.sType = .PhysicalDeviceAccelerationStructureFeaturesKhr;
+        accelerationStructureFeatures.accelerationStructure = Vk.TRUE;
+        _chain_front(*deviceCIPNext, *accelerationStructureFeatures);
+
+        rayTracingPipelineFeatures.sType = .PhysicalDeviceRayTracingPipelineFeaturesKhr;
+        rayTracingPipelineFeatures.rayTracingPipeline = Vk.TRUE;
+        _chain_front(*deviceCIPNext, *rayTracingPipelineFeatures);
+
+        _16BitStorageFeatures.sType = .PhysicalDevice16BitStorageFeatures;
+        _16BitStorageFeatures.storageBuffer16BitAccess = Vk.TRUE;
+        _chain_front(*deviceCIPNext, *_16BitStorageFeatures);
+
+        enabledFeatures.shaderInt16 = Vk.TRUE;
+        enabledFeatures.shaderInt64 = Vk.TRUE;
+    }
+
     // For debugging
     availableExtensions : [..]Vk.ExtensionProperties;
     defer Basic.array_free(availableExtensions);
@@ -370,10 +421,12 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 
     deviceCI : Vk.DeviceCreateInfo;
     deviceCI.sType = .DeviceCreateInfo;
+    deviceCI.pNext = deviceCIPNext;
     deviceCI.pQueueCreateInfos = queueCreateInfos.data;
     deviceCI.queueCreateInfoCount = cast(u32) queueCreateInfos.count;
     deviceCI.enabledExtensionCount = cast(u32) enabledExtensions.count;
     deviceCI.ppEnabledExtensionNames = enabledExtensions.data;
+    deviceCI.pEnabledFeatures = *enabledFeatures;
 
     _CHECK(Vk.create_device(engine.physicalDevice, *deviceCI, null, *engine.device),
            "Unable to create logical device.");
@@ -384,6 +437,18 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 
     if engine.debugUtilsEnabled {
         Vk.load_device_proc(engine.device, *Vk.set_debug_utils_object_name_ext, "vkSetDebugUtilsObjectNameEXT");
+    }
+
+    if engine.options.features & .RayTracing {
+        // @todo Make that clean by letting the binding do that (calling something like load_device_ray_tracing_procs).
+        Vk.load_device_proc(engine.device, *Vk.cmd_trace_rays_khr, "vkCmdTraceRaysKHR");
+        Vk.load_device_proc(engine.device, *Vk.create_ray_tracing_pipelines_khr, "vkCreateRayTracingPipelinesKHR");
+        Vk.load_device_proc(engine.device, *Vk.get_ray_tracing_shader_group_handles_khr, "vkGetRayTracingShaderGroupHandlesKHR");
+        Vk.load_device_proc(engine.device, *Vk.get_acceleration_structure_build_sizes_khr, "vkGetAccelerationStructureBuildSizesKHR");
+        Vk.load_device_proc(engine.device, *Vk.create_acceleration_structure_khr, "vkCreateAccelerationStructureKHR");
+        Vk.load_device_proc(engine.device, *Vk.destroy_acceleration_structure_khr, "vkDestroyAccelerationStructureKHR");
+        Vk.load_device_proc(engine.device, *Vk.cmd_build_acceleration_structures_khr, "vkCmdBuildAccelerationStructuresKHR");
+        Vk.load_device_proc(engine.device, *Vk.get_acceleration_structure_device_address_khr, "vkGetAccelerationStructureDeviceAddressKHR");
     }
 
     _init_global_resources(engine);
@@ -535,6 +600,12 @@ _is_valid_physical_device :: (engine : *Engine, physicalDevice : Vk.PhysicalDevi
 
     Vk.get_physical_device_features2(physicalDevice, *features);
 
+    if engine.options.features & .RayTracing {
+        if !features.features.shaderInt16 || !features.features.shaderInt64 {
+            return false;
+        }
+    }
+
     // Checking that timeline semaphores are supported.
     if !timelineSemaphoreFeatures.timelineSemaphore {
         return false;
@@ -559,6 +630,11 @@ _is_extension_available :: (extensionName : string, availableExtensions : []Vk.E
         }
     }
     return false;
+}
+
+_chain_front :: (chain : **void, link : *void) {
+    (cast(*Vk.BaseInStructure) link).pNext = <<chain;
+    <<chain = link;
 }
 
 String :: #import "String";

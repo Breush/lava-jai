@@ -36,6 +36,9 @@ UniformsFrame :: Table(string, struct {
 ShaderKind :: enum {
     Vertex;
     Fragment;
+    Raygen;
+    Miss;
+    ClosestHit;
 }
 
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
@@ -48,9 +51,15 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
 
     shadercShaderKind : Shaderc.ShaderKind;
     if shaderKind == .Vertex {
-        shadercShaderKind = .GlslVertexShader;
+        shadercShaderKind = .VertexShader;
     } else if shaderKind == .Fragment {
-        shadercShaderKind = .GlslFragmentShader;
+        shadercShaderKind = .FragmentShader;
+    } else if shaderKind == .Raygen {
+        shadercShaderKind = .RaygenShader;
+    } else if shaderKind == .Miss {
+        shadercShaderKind = .MissShader;
+    } else if shaderKind == .ClosestHit {
+        shadercShaderKind = .ClosesthitShader;
     }
 
     userData : ShadercUserData;
@@ -66,6 +75,7 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     Shaderc.compile_options_set_source_language(compileOptions, .Glsl);
     Shaderc.compile_options_add_macro_definition(compileOptions, macroDefinition.data, xx macroDefinition.count, null, 0);
     Shaderc.compile_options_set_include_callbacks(compileOptions, _include_resolver, _include_result_releaser, *userData);
+    Shaderc.compile_options_set_target_spirv(compileOptions, ._1_4); // @note SPIR-V 1.4 required for ray-tracing extensions
     compilationResult := Shaderc.compile_into_spv(compiler, glslFileContent.data, xx glslFileContent.count, shadercShaderKind,
                                                   glslFile.data, "main", compileOptions);
     defer Shaderc.result_release(compilationResult);

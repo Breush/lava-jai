@@ -120,6 +120,109 @@ mesh_make_plane :: (iMesh : *MeshComponent,
     Basic.array_add(*iNode.primitives, mesh);
 }
 
+mesh_make_cube :: (iMesh : *MeshComponent,
+                   extent := Chamber.uvec3.{1, 1, 1}) {
+    mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+
+    // Positions
+    positions := Chamber.vec3.[
+        // Bottom
+        .{ 1., -1., -1.},
+        .{-1., -1., -1.},
+        .{-1.,  1., -1.},
+        .{ 1.,  1., -1.},
+        // Top
+        .{ 1., -1.,  1.},
+        .{ 1.,  1.,  1.},
+        .{-1.,  1.,  1.},
+        .{-1., -1.,  1.},
+        // Left
+        .{ 1.,  1.,  1.},
+        .{ 1.,  1., -1.},
+        .{-1.,  1., -1.},
+        .{-1.,  1.,  1.},
+        // Right
+        .{-1., -1.,  1.},
+        .{-1., -1., -1.},
+        .{ 1., -1., -1.},
+        .{ 1., -1.,  1.},
+        // Front
+        .{ 1., -1.,  1.},
+        .{ 1., -1., -1.},
+        .{ 1.,  1., -1.},
+        .{ 1.,  1.,  1.},
+        // Back
+        .{-1.,  1.,  1.},
+        .{-1.,  1., -1.},
+        .{-1., -1., -1.},
+        .{-1., -1.,  1.},
+    ];
+    for *position : positions {
+        position.x *= extent.x / 2.;
+        position.y *= extent.y / 2.;
+        position.z *= extent.z / 2.;
+    }
+
+    normals := Chamber.vec3.[
+        // Bottom
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        .{ 0.,  0., -1.},
+        // Top
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+        .{ 0.,  0.,  1.},
+        // Left
+        .{ 0.,  1.,  0.},
+        .{ 0.,  1.,  0.},
+        .{ 0.,  1.,  0.},
+        .{ 0.,  1.,  0.},
+        // Right
+        .{ 0., -1.,  0.},
+        .{ 0., -1.,  0.},
+        .{ 0., -1.,  0.},
+        .{ 0., -1.,  0.},
+        // Front
+        .{ 1.,  0.,  0.},
+        .{ 1.,  0.,  0.},
+        .{ 1.,  0.,  0.},
+        .{ 1.,  0.,  0.},
+        // Back
+        .{-1.,  0.,  0.},
+        .{-1.,  0.,  0.},
+        .{-1.,  0.,  0.},
+        .{-1.,  0.,  0.},
+    ];
+
+    indices := u16.[
+        0,  1,  2,  2,  3,  0,
+        4,  5,  6,  6,  7,  4,
+        8,  9,  10, 10, 11, 8,
+        12, 13, 14, 14, 15, 12,
+        16, 17, 18, 18, 19, 16,
+        20, 21, 22, 22, 23, 20,
+    ];
+
+    Basic.array_resize(*mesh.vertices, positions.count);
+    for *vertex, i : mesh.vertices {
+        vertex.position = positions[i];
+        vertex.normal = normals[i];
+    }
+
+    Basic.array_resize(*mesh.indices, indices.count);
+    memcpy(mesh.indices.data, indices.data, size_of(u16) * indices.count);
+
+    Magma.mesh_commit_vertices(mesh);
+    Magma.mesh_commit_indices(mesh);
+
+    // Node transform
+    iNode := Basic.array_add(*iMesh.nodes);
+
+    Basic.array_add(*iNode.primitives, mesh);
+}
+
 // Returns false on error.
 mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
     fileContent, readOk := File.read_entire_file(filePath);
@@ -316,6 +419,11 @@ _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, material
     cachedMaterial := table_find_pointer(cache.material, materialIndex);
     if cachedMaterial != null {
         iPrimitive.material = <<cachedMaterial;
+        return;
+    }
+
+    // @todo Currently not making materials if the renderer is a raytracer.
+    if iMesh.entity.engine.renderer.kind == .RayTracingRenderer {
         return;
     }
 

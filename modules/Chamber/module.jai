@@ -64,17 +64,17 @@ logger :: (message : string, data : *void, info : Log_Info) {
     path := File_Utilities.parse_path(file);
     originalPathWords : []string = path.words;
     if file.count != 0 {
-    for word, wordIndex : loggerData.ourPath.words {
-        if word == path.words[0] {
-            path.words.data += 1;
-            path.words.count -= 1;
-        } else {
-            break;
+        for word, wordIndex : loggerData.ourPath.words {
+            if word == path.words[0] {
+                path.words.data += 1;
+                path.words.count -= 1;
+            } else {
+                break;
+            }
         }
-    }
 
-    Basic.peek_pointer(path.words).count -= 4; // Remove ".jai".
-    path.number_of_leading_slashes = 0;
+        Basic.peek_pointer(path.words).count -= 4; // Remove ".jai".
+        path.number_of_leading_slashes = 0;
     }
 
     name := File_Utilities.path_to_string(path);
@@ -136,6 +136,10 @@ max :: (a : $T, b : T) -> T #expand {
 
 mix :: (from : $T, to : T, factor : float32) -> T {
     return from * (1 - factor) + to * factor;
+}
+
+align_up :: (value : u32, alignment : u32) -> u32 {
+    return (value + alignment - 1) & ~(alignment - 1);
 }
 
 debug :: (args : ..Any, loc := #caller_location) {
