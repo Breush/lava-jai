@@ -115,7 +115,7 @@ renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
         return impl_post_process_renderer_get_output_extent(cast(*PostProcessRenderer) output.renderer, output.index);
     }
 
-    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", output.renderer, flags=.ERROR);
     return .{};
 }
 

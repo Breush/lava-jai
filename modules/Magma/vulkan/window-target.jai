@@ -147,7 +147,8 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
 
     timelineSemaphoreSI : Vk.TimelineSemaphoreSubmitInfo;
     timelineSemaphoreSI.sType = .TimelineSemaphoreSubmitInfo;
-    // By spec, should be 2, but only the index 0 will be read, as it will be the only timeline semaphore of the two.
+    // @note Only the index 0 will be read, as it will be the only timeline semaphore of the two.
+    // So we can pass only one value here without issue.
     timelineSemaphoreSI.waitSemaphoreValueCount = waitSemaphores.count;
     timelineSemaphoreSI.pWaitSemaphoreValues = *renderSemaphoreFinishedValue;
 

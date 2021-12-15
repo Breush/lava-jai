@@ -24,15 +24,32 @@ loggerData : struct {
     padding : u32;
     nonFatalOnErrorLocks : u32;
     ourPath : File_Utilities.Path;
+    oldLogger : type_of(Context_Base.logger);
+    oldLoggerData : *void;
 };
 
 init_logger :: () {
+    {
+        push_allocator(temp);
+        loggerData.ourPath = File_Utilities.parse_path(#run Basic.tprint(#filepath, "/.."));
+    }
+
+    loggerData.oldLogger = context.logger;
+    loggerData.oldLoggerData = context.logger_data;
+    loggerData.ourPath = File_Utilities.copy_to_permanent(loggerData.ourPath);
     context.logger = logger;
     context.logger_data = *loggerData;
-    loggerData.ourPath = File_Utilities.parse_path(#run Basic.tprint(#filepath, "/.."));
+}
+
+cleanup_logger :: () {
+    File_Utilities.free_permanent(loggerData.ourPath);
+    context.logger = loggerData.oldLogger;
+    context.logger_data = loggerData.oldLoggerData;
 }
 
 logger :: (message : string, data : *void, info : Log_Info) {
+    push_allocator(temp);
+
     needFileAndLine := (info.common_flags & .WARNING) || (info.common_flags & .ERROR);
 
     if ((context.log_level < .VERY_VERBOSE) && (info.common_flags & .VERY_VERBOSE_ONLY)) ||
@@ -45,6 +62,8 @@ logger :: (message : string, data : *void, info : Log_Info) {
     // parts that have the same prefix than us.
     file := info.location.fully_pathed_filename;
     path := File_Utilities.parse_path(file);
+    originalPathWords : []string = path.words;
+    if file.count != 0 {
     for word, wordIndex : loggerData.ourPath.words {
         if word == path.words[0] {
             path.words.data += 1;
@@ -56,6 +75,8 @@ logger :: (message : string, data : *void, info : Log_Info) {
 
     Basic.peek_pointer(path.words).count -= 4; // Remove ".jai".
     path.number_of_leading_slashes = 0;
+    }
+
     name := File_Utilities.path_to_string(path);
 
     if needFileAndLine {

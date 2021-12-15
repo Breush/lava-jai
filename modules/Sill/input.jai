@@ -81,6 +81,7 @@ input_axis_value :: (input : *Input, axisName : string) -> float32 {
 _input_cleanup :: (input : *Input) {
     for *action : input.actions {
         Basic.array_free(action.keys);
+        Basic.array_free(action.triggers);
     }
     for *axis : input.axes {
         Basic.array_free(axis.kinds);

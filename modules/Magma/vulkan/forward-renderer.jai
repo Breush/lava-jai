@@ -182,23 +182,12 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
     subpassDesc.colorAttachmentCount = 1;
     subpassDesc.pColorAttachments = *colorAttachmentRef;
 
-    // @todo Clarify, why is this needed really?
-    subpassDependency : Vk.SubpassDependency;
-    subpassDependency.srcSubpass = cast,no_check(u32) Vk.SUBPASS_EXTERNAL;
-    subpassDependency.dstSubpass = 0;
-    subpassDependency.srcStageMask = cast(u32) Vk.PipelineStageFlagBits.ColorAttachmentOutput;
-    subpassDependency.srcAccessMask = 0;
-    subpassDependency.dstStageMask = cast(u32) Vk.PipelineStageFlagBits.ColorAttachmentOutput;
-    subpassDependency.dstAccessMask = cast(u32) Vk.AccessFlagBits.ColorAttachmentWrite;
-
     renderPassCI : Vk.RenderPassCreateInfo;
     renderPassCI.sType = .RenderPassCreateInfo;
     renderPassCI.attachmentCount = attachmentDescs.count;
     renderPassCI.pAttachments = attachmentDescs.data;
     renderPassCI.subpassCount = 1;
     renderPassCI.pSubpasses = *subpassDesc;
-    renderPassCI.dependencyCount = 1;
-    renderPassCI.pDependencies = *subpassDependency;
 
     _CHECK(Vk.create_render_pass(engine.device, *renderPassCI, null, *forwardRenderer.renderPass),
            "Unable to create render pass.");

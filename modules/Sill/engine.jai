@@ -52,7 +52,7 @@ engine_init :: (engine : *EngineBase) {
 
     // Rendering
     renderEngineOptions : Magma.Engine.Options;
-    renderEngineOptions.targetFlags |= .Vr;
+    renderEngineOptions.features |= .Vr;
     engine.renderEngine = Magma.create_engine(renderEngineOptions);
     engine.windowTarget = Magma.create_window_target(engine.renderEngine, Crater.window_get_handle(engine.window));
     engine.scene = Magma.create_scene(engine.renderEngine);

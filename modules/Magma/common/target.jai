@@ -97,7 +97,7 @@ create_window_target :: (engine : *Engine, windowHandle : Chamber.WindowHandle, 
 }
 
 window_target_init :: (windowTarget : *WindowTarget, engine : *Engine, windowHandle : Chamber.WindowHandle, options := Target.Options.{}) {
-    Basic.assert(cast(bool) engine.options.targetFlags & Engine.Options.TargetFlags.Window);
+    Basic.assert(cast(bool) engine.options.features & .Window);
     _target_init(windowTarget, engine, options);
     impl_window_target_init(windowTarget, windowHandle);
 }
@@ -169,8 +169,8 @@ create_vr_target :: (engine : *Engine, options := Target.Options.{}) -> *VrTarge
 vr_target_init :: (vrTarget : *VrTarget, engine : *Engine, options := Target.Options.{}) -> bool {
     _target_init(vrTarget, engine, options);
 
-    _CHECK(cast(bool) engine.options.targetFlags & Engine.Options.TargetFlags.Vr, false,
-           "Unable to init VR target: VR is not enabled. Be sure to have TargetFlags.Vr set in engine options.");
+    _CHECK(cast(bool) (engine.options.features & .Vr), false,
+           "Unable to init VR target: VR is not enabled. Be sure to have .Vr feature set in engine options.");
     _CHECK(engine.vr.enabled, false,
            "Unable to init VR target: VR is not available.");
 

@@ -95,7 +95,7 @@ _renderer_post_init :: (renderer : *Renderer) -> bool {
         return _post_process_renderer_post_init(cast(*PostProcessRenderer) renderer);
     }
 
-    Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     return false;
 }
 
@@ -124,7 +124,7 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
     } else if renderer.kind == .PostProcessRenderer {
         _post_process_renderer_render(cast(*PostProcessRenderer) renderer, frameIndex);
     } else {
-        Basic.assert(false, "Unhandled renderer kind: %.", renderer.kind);
+        Basic.log("Unhandled renderer kind: %.", renderer.kind, flags=.ERROR);
     }
 
     Vk.end_command_buffer(commandBuffer);
@@ -179,7 +179,7 @@ _renderer_output_get_image_info :: (output : RendererOutput, frameIndex : u8) ->
         return _post_process_renderer_get_output_image_info(cast(*PostProcessRenderer) output.renderer, output.index, frameIndex);
     }
 
-    Basic.assert(false, "Unhandled renderer kind: %.", output.renderer.kind);
+    Basic.log("Unhandled renderer kind: %.", output.renderer.kind, flags=.ERROR);
     imageInfo : ImageInfo;
     return imageInfo;
 }

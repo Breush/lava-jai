@@ -11,13 +11,13 @@
 
 Engine :: struct {
     Options :: struct {
-        TargetFlags :: enum_flags {
-            None :: 0;
-            Window :: 1;
-            Vr :: 2;
+        FeatureFlag :: enum_flags {
+            None;
+            Window;     // Allows to use WindowTarget.
+            Vr;         // Allows to use VR features. (Enables OpenXR integration.)
         }
 
-        targetFlags : TargetFlags = .Window;
+        features : FeatureFlag = .Window;
     }
 
     options : Options;
@@ -64,7 +64,7 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
 engine_init :: (engine : *Engine, options : Engine.Options) -> bool {
     engine.options = options;
 
-    if engine.options.targetFlags & .Vr {
+    if engine.options.features & .Vr {
         if !engine_vr_init(engine) {
             Basic.log("Unable to init engine with TargetFlags.Vr: VR is not available. Disabling VR capabilities.", flags=.WARNING);
         }

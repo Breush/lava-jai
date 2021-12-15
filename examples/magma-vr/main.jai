@@ -11,7 +11,7 @@ main :: () {
     // One can check value of engine.vr.enabled after initing the engine
     // if needed.
     options : Magma.Engine.Options;
-    options.targetFlags |= .Vr;
+    options.features |= .Vr;
     engine := Magma.create_engine(options);
 
     // We create a companion window, it will display the left eye of what's displayed

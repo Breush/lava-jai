@@ -198,7 +198,7 @@ _init_instance :: (engine : *Engine) -> bool {
     }
 
     // Surface extensions
-    if engine.options.targetFlags & .Window {
+    if engine.options.features & .Window {
         Basic.array_add(*enabledExtensions, Vk.KHR_SURFACE_EXTENSION_NAME);
         #if OS == .LINUX {
             Basic.array_add(*enabledExtensions, Vk.KHR_XCB_SURFACE_EXTENSION_NAME);
@@ -231,6 +231,19 @@ _init_instance :: (engine : *Engine) -> bool {
     instanceCI.ppEnabledLayerNames = enabledLayers.data;
     instanceCI.enabledExtensionCount = cast(u32) enabledExtensions.count;
     instanceCI.ppEnabledExtensionNames = enabledExtensions.data;
+
+    if validationLayersEnabled {
+        validationFeaturesEnable := Vk.ValidationFeatureEnableEXT.[/*.GpuAssisted,*/
+                                                                   .BestPractices,
+                                                                   /*.DebugPrintf,*/
+                                                                   .SynchronizationValidation];
+
+        validationFeatures : Vk.ValidationFeaturesEXT;
+        validationFeatures.sType = .ValidationFeaturesExt;
+        validationFeatures.enabledValidationFeatureCount = validationFeaturesEnable.count;
+        validationFeatures.pEnabledValidationFeatures = validationFeaturesEnable.data;
+        instanceCI.pNext = *validationFeatures;
+    }
 
     _CHECK(Vk.create_instance(*instanceCI, null, *engine.instance),
            "Unable to create instance.");
@@ -472,11 +485,12 @@ _debug_message_callback :: (
     push_context ctx {
         flags : Log_Flags;
         if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
-            flags |= .VERBOSE_ONLY;
+            flags |= .VERY_VERBOSE_ONLY;
         } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
             flags |= .CONTENT;
-        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning ||
-                  reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
+            flags |= .VERBOSE_ONLY;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning {
             flags |= .WARNING;
         } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
             flags |= .ERROR;
@@ -487,7 +501,7 @@ _debug_message_callback :: (
         messageString := Basic.to_string(message);
         linkParts := String.split(messageString, "(https://");
         specParts := String.split(linkParts[0], " The Vulkan spec states:");
-        sentences := String.split(specParts[0], "|");
+        sentences := String.split(specParts[0], "| ");
         errorParts := String.split(sentences[0], "Object ");
 
         Basic.log("===== Vulkan Debug Message =====", flags=flags);
@@ -496,7 +510,7 @@ _debug_message_callback :: (
             Basic.log("  | Object %", errorParts[i], flags=flags);
         }
         for i : 1..sentences.count-1 {
-            Basic.log("  |%", sentences[i], flags=flags);
+            Basic.log("  | %", sentences[i], flags=flags);
         }
         if specParts.count == 2 {
             Basic.log("  >%", specParts[1], flags=flags);
@@ -507,12 +521,6 @@ _debug_message_callback :: (
 
         Chamber.loggerPopNonFatalOnError();
         Basic.log("================================", flags=flags);
-
-        // @note SteamVR has inconsistent SPIRV, so we still need to continue...
-        // engine := cast(*Engine) userData;
-        // if engine.validationErrorsAreBlocking { // @fixme
-        //     Basic.assert(false);
-        // }
     }
     return Vk.FALSE;
 }
