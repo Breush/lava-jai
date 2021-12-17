@@ -286,7 +286,7 @@ _init_physical_device :: (engine : *Engine) -> bool {
         requiredPhysicalDevice = _vr_vulkan_required_physical_device(engine);
     }
 
-    Basic.log("Found % Vulkan physical devices:", physicalDevices.count, flags=.VERBOSE_ONLY);
+    Basic.log("Found % physical devices:", physicalDevices.count, flags=.VERBOSE_ONLY);
     for physicalDevice : physicalDevices {
         physicalDeviceProperties : Vk.PhysicalDeviceProperties;
         Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
@@ -294,7 +294,7 @@ _init_physical_device :: (engine : *Engine) -> bool {
     }
 
     engine.physicalDevice = null;
-    for physicalDevice : physicalDevices {
+    for physicalDevice, physicalDeviceIndex : physicalDevices {
         validPhysicalDevice : bool;
         if requiredPhysicalDevice != null {
             validPhysicalDevice = (physicalDevice == requiredPhysicalDevice);
@@ -303,6 +303,8 @@ _init_physical_device :: (engine : *Engine) -> bool {
         }
 
         if validPhysicalDevice {
+            Basic.log("Selecting physical device #%", physicalDeviceIndex, flags=.VERBOSE_ONLY);
+
             engine.physicalDevice = physicalDevice;
             Vk.get_physical_device_memory_properties(physicalDevice, *engine.physicalDeviceMemoryProperties);
 
@@ -596,11 +598,19 @@ _is_valid_physical_device :: (engine : *Engine, physicalDevice : Vk.PhysicalDevi
 
     timelineSemaphoreFeatures : Vk.PhysicalDeviceTimelineSemaphoreFeatures;
     timelineSemaphoreFeatures.sType = .PhysicalDeviceTimelineSemaphoreFeatures;
-    features.pNext = *timelineSemaphoreFeatures;
+    _chain_front(*features.pNext, *timelineSemaphoreFeatures);
+
+    accelerationStructureFeatures : Vk.PhysicalDeviceAccelerationStructureFeaturesKHR;
+    accelerationStructureFeatures.sType = .PhysicalDeviceAccelerationStructureFeaturesKhr;
+    _chain_front(*features.pNext, *accelerationStructureFeatures);
 
     Vk.get_physical_device_features2(physicalDevice, *features);
 
     if engine.options.features & .RayTracing {
+        if !accelerationStructureFeatures.accelerationStructure {
+            return false;
+        }
+
         if !features.features.shaderInt16 || !features.features.shaderInt64 {
             return false;
         }
