@@ -314,10 +314,14 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSi
 }
 
 _buffer_holder_device_address :: (using bufferHolder : *BufferHolder) -> Vk.DeviceAddress {
+    if deviceAddress == 0 {
     bufferDAI : Vk.BufferDeviceAddressInfo;
     bufferDAI.sType = .BufferDeviceAddressInfo;
-    bufferDAI.buffer = bufferHolder.buffer;
-    return Vk.get_buffer_device_address(engine.device, *bufferDAI);
+        bufferDAI.buffer = buffer;
+        deviceAddress = Vk.get_buffer_device_address(engine.device, *bufferDAI);
+    }
+
+    return deviceAddress;
 }
 
 // -----

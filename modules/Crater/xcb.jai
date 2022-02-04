@@ -288,7 +288,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
             event : Event;
             event.kind = Event.Kind.TextEntered;
             event.text.str.data = *event.text.utf8[0]; // Relative pointer
-            event.text.str.count = cast(s8) utf8ByteCount; // @fixme Why count changes type? Is this a compiler issue?
+            event.text.str.count = cast(s8) utf8ByteCount; // @note Count type changes to reduce size, nothing planned to change that in the compiler.
             event.text.utf8 = utf8;
             event.text.utf32 = utf32;
             Basic.array_add(*window.events, event);

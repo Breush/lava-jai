@@ -42,7 +42,7 @@ ShaderKind :: enum {
 }
 
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
-spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string) -> []u8 {
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string, optimized : bool) -> []u8 {
     spvCode : [..]u8;
 
     glslFileContent, readOk := File.read_entire_file(glslFile);
@@ -72,10 +72,12 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     userData.ctx = xx *context.thread_index;
     compiler := Shaderc.compiler_initialize();
     compileOptions := Shaderc.compile_options_initialize();
+    Shaderc.compile_options_set_optimization_level(compileOptions, ifx optimized then Shaderc.OptimizationLevel.Performance else .Zero);
     Shaderc.compile_options_set_source_language(compileOptions, .Glsl);
     Shaderc.compile_options_add_macro_definition(compileOptions, macroDefinition.data, xx macroDefinition.count, null, 0);
     Shaderc.compile_options_set_include_callbacks(compileOptions, _include_resolver, _include_result_releaser, *userData);
     Shaderc.compile_options_set_target_spirv(compileOptions, ._1_4); // @note SPIR-V 1.4 required for ray-tracing extensions
+    Shaderc.compile_options_set_target_env(compileOptions, .Vulkan, cast(u32) Shaderc.EnvVersion.Vulkan1_2);
     compilationResult := Shaderc.compile_into_spv(compiler, glslFileContent.data, xx glslFileContent.count, shadercShaderKind,
                                                   glslFile.data, "main", compileOptions);
     defer Shaderc.result_release(compilationResult);
@@ -234,6 +236,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                 if decoration == .Binding ||
                    decoration == .DescriptorSet {
                     name, ok := table_find(idToName, target);
+                    if !ok then Basic.log("Unable to find variable name in SPIR-V. Have decorations been stripped?", flags=.ERROR);
                     uniformFrame := table_find_pointer(spv.uniformsFrame, name);
                     if uniformFrame == null {
                         name = Basic.copy_string(name); // Needed, original shaderCode will be wiped out.

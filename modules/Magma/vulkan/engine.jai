@@ -148,10 +148,18 @@ _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chambe
         shaderPath = Basic.tprint("./%.glsl\0", shaderId);
     }
 
-    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH);
+    // Optimized SPIR-V, no symbols info inside.
+    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH, true);
     defer Basic.array_free(spvCode);
+    shaderModule.spv = Chamber.spirv_parse(spvCode, false);
 
-    shaderModule.spv = Chamber.spirv_parse(spvCode, parseUniforms);
+    #if parseUniforms {
+        // @todo Currently forced to compile once a non-optimized version to get symbols name and such.
+        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH, false);
+        defer Basic.array_free(nonOptimizedSpvCode);
+        nonOptimizedSpv := Chamber.spirv_parse(nonOptimizedSpvCode, true);
+        shaderModule.spv.uniformsFrame = nonOptimizedSpv.uniformsFrame;
+    }
 
     shaderModuleCI : Vk.ShaderModuleCreateInfo;
     shaderModuleCI.sType = .ShaderModuleCreateInfo;
@@ -287,10 +295,10 @@ _init_physical_device :: (engine : *Engine) -> bool {
     }
 
     Basic.log("Found % physical devices:", physicalDevices.count, flags=.VERBOSE_ONLY);
-    for physicalDevice : physicalDevices {
+    for physicalDevice, physicalDeviceIndex : physicalDevices {
         physicalDeviceProperties : Vk.PhysicalDeviceProperties;
         Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
-        Basic.log("  - %", Basic.to_string(physicalDeviceProperties.deviceName), flags=.VERBOSE_ONLY);
+        Basic.log("  - #% %", physicalDeviceIndex, Basic.to_string(physicalDeviceProperties.deviceName), flags=.VERBOSE_ONLY);
     }
 
     engine.physicalDevice = null;
