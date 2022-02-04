@@ -4,6 +4,8 @@ ImageHolder :: struct {
         Texture;            // R8G8B8A8Unorm - Color | Sampled | TransferDst
         RendererOut;        // R8G8B8A8Srgb  - Color | Sampled | TransferSrc
         RendererOutStorage; // R8G8B8A8Unorm - Storage | Sampled | TransferSrc
+        StorageR8;          // R8Unorm       - Storage
+        StorageR32;         // R32Sfloat     - Storage
         Depth;              // D32Sfloat     - DepthStencil
     }
 
@@ -49,6 +51,12 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
     } else if kind == .Depth {
         format = Vk.Format.D32Sfloat;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.DepthStencilAttachment;
+    } else if kind == .StorageR8 {
+        format = Vk.Format.R8Unorm;
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.Storage;
+    } else if kind == .StorageR32 {
+        format = Vk.Format.R32Sfloat;
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.Storage;
     } else {
         Basic.log("Trying to create an image of unhandled kind: %.", kind, flags=.ERROR);
     }
@@ -115,7 +123,7 @@ _image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8, usage : Im
 _image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView {
     aspect : Vk.ImageAspectFlags;
 
-    if kind == .RendererOut || kind == .RendererOutStorage || kind == .Texture {
+    if kind == .RendererOut || kind == .RendererOutStorage || kind == .Texture || kind == .StorageR8 || kind == .StorageR32 {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Color;
     } else if kind == .Depth {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Depth;
@@ -174,6 +182,7 @@ BufferHolder :: struct {
 
     buffer : Vk.Buffer;
     deviceMemory : Vk.DeviceMemory;
+    deviceAddress : Vk.DeviceAddress;
 
     stagingBufferHolder : *BufferHolder; // Set only when cpuIo == .PersistentStaging
 }
@@ -315,8 +324,8 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSi
 
 _buffer_holder_device_address :: (using bufferHolder : *BufferHolder) -> Vk.DeviceAddress {
     if deviceAddress == 0 {
-    bufferDAI : Vk.BufferDeviceAddressInfo;
-    bufferDAI.sType = .BufferDeviceAddressInfo;
+        bufferDAI : Vk.BufferDeviceAddressInfo;
+        bufferDAI.sType = .BufferDeviceAddressInfo;
         bufferDAI.buffer = buffer;
         deviceAddress = Vk.get_buffer_device_address(engine.device, *bufferDAI);
     }
@@ -338,7 +347,7 @@ DescriptorHolder :: struct {
 DescriptorHolderOptions :: struct {
     accelerationStructures : u32;
     storageBuffers : u32;
-    storageImages : u32;
+    storageImages : []u32;
 }
 
 _descriptor_holder_init :: (using descriptorHolder : *DescriptorHolder, _engine : *Engine, _options : DescriptorHolderOptions) -> bool {
@@ -358,7 +367,7 @@ _descriptor_holder_init :: (using descriptorHolder : *DescriptorHolder, _engine 
         setLayoutBinding := Basic.peek_pointer(setLayoutBindings);
         setLayoutBindings[bindingIndex].binding = bindingIndex;
         setLayoutBindings[bindingIndex].descriptorCount = options.accelerationStructures;
-        setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr;
+        setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr | Vk.ShaderStageFlagBits.ClosestHitKhr;
         setLayoutBindings[bindingIndex].descriptorType = .AccelerationStructureKhr;
 
         bindingIndex += 1;
@@ -375,14 +384,16 @@ _descriptor_holder_init :: (using descriptorHolder : *DescriptorHolder, _engine 
         bindingIndex += 1;
     }
 
-    if options.storageImages > 0 {
+    storageImagesCountsSum : u32 = 0;
+    for storageImagesCount : options.storageImages {
         Basic.array_resize(*setLayoutBindings, setLayoutBindings.count + 1);
         setLayoutBinding := Basic.peek_pointer(setLayoutBindings);
         setLayoutBindings[bindingIndex].binding = bindingIndex;
-        setLayoutBindings[bindingIndex].descriptorCount = options.storageImages;
+        setLayoutBindings[bindingIndex].descriptorCount = storageImagesCount;
         setLayoutBindings[bindingIndex].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr;
         setLayoutBindings[bindingIndex].descriptorType = .StorageImage;
 
+        storageImagesCountsSum += storageImagesCount;
         bindingIndex += 1;
     }
 
@@ -409,11 +420,11 @@ _descriptor_holder_init :: (using descriptorHolder : *DescriptorHolder, _engine 
         poolSize.descriptorCount = options.accelerationStructures * MAX_DESCRIPTOR_SET_COUNT;
     }
 
-    if options.storageImages > 0 {
+    if storageImagesCountsSum > 0 {
         Basic.array_resize(*poolSizes, poolSizes.count + 1);
         poolSize := Basic.peek_pointer(poolSizes);
         poolSize.type = .StorageImage;
-        poolSize.descriptorCount = options.storageImages * MAX_DESCRIPTOR_SET_COUNT;
+        poolSize.descriptorCount = storageImagesCountsSum * MAX_DESCRIPTOR_SET_COUNT;
     }
 
     poolCI : Vk.DescriptorPoolCreateInfo;
@@ -468,7 +479,7 @@ _descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, se
     return true;
 }
 
-_descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, set : Vk.DescriptorSet, imageView : Vk.ImageView, imageLayout : Vk.ImageLayout) -> bool {
+_descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, set : Vk.DescriptorSet, imageView : Vk.ImageView, imageLayout : Vk.ImageLayout, dstBinding : u32 = 0) -> bool {
     imageInfo : Vk.DescriptorImageInfo;
     imageInfo.imageLayout = imageLayout;
     imageInfo.imageView = imageView;
@@ -477,7 +488,7 @@ _descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, se
     writeSet.sType = .WriteDescriptorSet;
     writeSet.pImageInfo = *imageInfo;
     writeSet.dstSet = set;
-    writeSet.dstBinding = 0; // @todo Should be parametrable + offseted by start of binding
+    writeSet.dstBinding = dstBinding; // @todo Should be offseted by start of binding
     writeSet.dstArrayElement = 0;
     writeSet.descriptorType = .StorageImage;
     writeSet.descriptorCount = 1;
