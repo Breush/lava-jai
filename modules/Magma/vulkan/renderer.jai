@@ -14,6 +14,7 @@
 RendererImpl :: struct {
     pipelineLayout : Vk.PipelineLayout;
 
+    frame : u32;
     lastFrameIndex := cast,trunc(u8) ~0;
     commandPool : Vk.CommandPool;
     FrameObject :: struct {
@@ -118,6 +119,7 @@ _renderer_render :: (renderer : *Renderer, frameIndex : u8) -> bool {
         return true;
     }
     renderer.lastFrameIndex = frameIndex;
+    renderer.frame += 1;
 
     engine := renderer.scene.engine;
     frameObject := *renderer.frameObjects[frameIndex];

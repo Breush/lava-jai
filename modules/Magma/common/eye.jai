@@ -27,6 +27,7 @@ EyeShaderObject :: struct {                  // 72 bytes
     viewMatrixRow2 : Chamber.vec4;           // 16 viewMatrixRow[2]
     projectionMatrixFactors1 : Chamber.vec4; // 16 [0][0] [1][1] [2][2] [2][3]
     projectionMatrixFactors2 : Chamber.vec2; // 8 [0][2] [1][2]
+    lastChangeFrame : u32;                   // @todo Temporary, waiting for motion buffer.
 }
 
 eye_init :: (eye : *Eye, extent : Chamber.uvec2) {
@@ -51,6 +52,9 @@ eye_commit :: (eye : *Eye) {
     // Extended for non-symmetric projections
     eye.shaderObject.projectionMatrixFactors2.x = eye.projectionMatrix.coef[0][2];
     eye.shaderObject.projectionMatrixFactors2.y = eye.projectionMatrix.coef[1][2];
+
+    // @note Can't know the frame index here, the renderer will insert it.
+    eye.shaderObject.lastChangeFrame = 0xFFFF_FFFF;
 }
 
 /*

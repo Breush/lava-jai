@@ -18,6 +18,10 @@ RayTracingRendererImpl :: struct {
         sceneDescriptorSet : Vk.DescriptorSet;
     };
 
+    // @todo Own descriptor set for things stable like this?
+    aoImageHolder : ImageHolder;
+    aoImageView : Vk.ImageView;
+
     raygenSbtBufferHolder : BufferHolder;
     missSbtBufferHolder : BufferHolder;
     hitSbtBufferHolder : BufferHolder;
@@ -40,9 +44,13 @@ RayTracingRendererImpl :: struct {
     FINAL_IMAGE_LAYOUT :: Vk.ImageLayout.General;
 }
 
+FrameShaderObject :: struct {
+    frame : u32;
+}
+
 impl_ray_tracing_renderer_init :: (rayTracingRenderer : *RayTracingRenderer) {
-    rayTracingRenderer.pushConstantRanges[0].size = size_of(EyeShaderObject);
-    rayTracingRenderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr;
+    rayTracingRenderer.pushConstantRanges[0].size = size_of(EyeShaderObject) + size_of(FrameShaderObject);
+    rayTracingRenderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.RaygenKhr | Vk.ShaderStageFlagBits.ClosestHitKhr;
 }
 
 impl_ray_tracing_renderer_cleanup :: (using rayTracingRenderer : *RayTracingRenderer) {
@@ -89,10 +97,19 @@ _ray_tracing_renderer_render :: (using rayTracingRenderer : *RayTracingRenderer,
 
     Vk.cmd_bind_pipeline(commandBuffer, .RayTracingKhr, pipeline);
 
-    // Push constant for the eye
-    eyePushConstantStages := Vk.ShaderStageFlagBits.RaygenKhr;
+    // Push constants
+    frameShaderObject : FrameShaderObject; // @todo Temporary, probably SceneShaderObject.
+    frameShaderObject.frame = rayTracingRenderer.frame;
+
+    if eye.shaderObject.lastChangeFrame == 0xFFFF_FFFF {
+        eye.shaderObject.lastChangeFrame = rayTracingRenderer.frame;
+    }
+
+    eyePushConstantStages := Vk.ShaderStageFlagBits.RaygenKhr | Vk.ShaderStageFlagBits.ClosestHitKhr;
     Vk.cmd_push_constants(commandBuffer, pipelineLayout, cast(u32) eyePushConstantStages, 0,
                           size_of(EyeShaderObject), *eye.shaderObject);
+    Vk.cmd_push_constants(commandBuffer, pipelineLayout, cast(u32) eyePushConstantStages, size_of(EyeShaderObject),
+                          size_of(FrameShaderObject), *frameShaderObject);
 
     Vk.cmd_bind_descriptor_sets(commandBuffer, .RayTracingKhr, pipelineLayout, OUTPUT_DESCRIPTOR_SET_INDEX, 1, *extraFrameObject.outputDescriptorSet, 0, null);
     Vk.cmd_bind_descriptor_sets(commandBuffer, .RayTracingKhr, pipelineLayout, SCENE_DESCRIPTOR_SET_INDEX, 1, *extraFrameObject.sceneDescriptorSet, 0, null);
@@ -119,7 +136,7 @@ _init_pipeline :: (using rayTracingRenderer : *RayTracingRenderer) -> bool {
 
     // --- Pipeline Layout
 
-    _descriptor_holder_init(*outputDescriptorHolder, engine, .{ storageImages = 1 });
+    _descriptor_holder_init(*outputDescriptorHolder, engine, .{ storageImages = .[1, 1] });
     _descriptor_holder_init(*sceneDescriptorHolder, engine, .{ accelerationStructures = 1, storageBuffers = 1 });
 
     setLayouts : [2]Vk.DescriptorSetLayout = ---;
@@ -322,13 +339,23 @@ _init_extra_frame_objects :: (rayTracingRenderer : *RayTracingRenderer) -> bool 
     engine := rayTracingRenderer.scene.engine;
 
     for *extraFrameObject : rayTracingRenderer.extraFrameObjects {
-        _image_holder_init(*extraFrameObject.outputImageHolder, engine, "rayTracingRenderer.extraFrameObjects[].imageHolder", .RendererOutStorage, rayTracingRenderer.eye.extent);
+        extent := rayTracingRenderer.eye.extent;
+        _image_holder_init(*extraFrameObject.outputImageHolder, engine, "rayTracingRenderer.extraFrameObjects[].imageHolder", .RendererOutStorage, extent);
         _change_image_layout(engine, extraFrameObject.outputImageHolder.image, .DontCare, .RayTracingOutput);
 
         extraFrameObject.outputImageView = _image_holder_create_view(*extraFrameObject.outputImageHolder);
         if extraFrameObject.outputImageView == null then return false;
         _set_debug_utils_name(engine.device, extraFrameObject.outputImageView, "rayTracingRenderer.extraFrameObjects[].imageView");
     }
+
+    // @fixme TODO: Running at half the size for AO
+    extent := rayTracingRenderer.eye.extent;
+    _image_holder_init(*rayTracingRenderer.aoImageHolder, engine, "rayTracingRenderer.aoImageHolder", .StorageR32, extent);
+    _change_image_layout(engine, rayTracingRenderer.aoImageHolder.image, .DontCare, .RayTracingOutput);
+
+    rayTracingRenderer.aoImageView = _image_holder_create_view(*rayTracingRenderer.aoImageHolder);
+    if rayTracingRenderer.aoImageView == null then return false;
+    _set_debug_utils_name(engine.device, rayTracingRenderer.aoImageView, "rayTracingRenderer.aoImageView");
 
     // Descriptor sets
 
@@ -338,7 +365,8 @@ _init_extra_frame_objects :: (rayTracingRenderer : *RayTracingRenderer) -> bool 
 
         extraFrameObject.outputDescriptorSet = _descriptor_holder_allocate_set(*rayTracingRenderer.outputDescriptorHolder);
         _set_debug_utils_name(engine.device, extraFrameObject.outputDescriptorSet, "rayTracingRenderer.extraFrameObjects[].descriptorSet");
-        _descriptor_holder_update_set(*rayTracingRenderer.outputDescriptorHolder, extraFrameObject.outputDescriptorSet, extraFrameObject.outputImageView, .General);
+        _descriptor_holder_update_set(*rayTracingRenderer.outputDescriptorHolder, extraFrameObject.outputDescriptorSet, extraFrameObject.outputImageView, .General, 0);
+        _descriptor_holder_update_set(*rayTracingRenderer.outputDescriptorHolder, extraFrameObject.outputDescriptorSet, rayTracingRenderer.aoImageView, .General, 1);
     }
 
     return true;
