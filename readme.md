@@ -6,6 +6,10 @@ I'm not creating bindings to it, I'm rewritting it completely in Jai.
 **Still a work in progress!**<br/>
 Focusing on linux support so far, so it's probably useless for other platforms right now.
 
+**NOTE:** There is no example in this repository to try out. If you're interested in the project, better have a look at:
+- https://github.com/Breush/lava-jai-examples (compilation of simple examples demonstrating the different *lava* modules)
+- https://github.com/Breush/hell-is-other-yourselves (VR game in development using *lava*)
+
 ## Project's composition
 
 The **lava** project is in fact a bundle of multiple projects. The image below describes what's the **goal**.
@@ -16,15 +20,6 @@ The core principles of **lava** are:
 - Provide cross-platform redistribuable modules.
 - Keep in mind [essentials in designing API](https://caseymuratori.com/blog_0024).
 - Be simple. Document using clever examples.
-
-## Examples
-
-| Example  | Description | Result |
-| ---- | ---- | ---- |
-| [**crater**-events](https://github.com/Breush/lava/tree/master/examples/crater-events) | How to interact with `Crater.Window` by grabbing keyboard and mouse events. | `MousePointerMoved -> {592, 128, -2, -2}` |
-| [**magma**-scenes](https://github.com/Breush/lava/tree/master/examples/magma-scenes) | How to setup multiple windows and `Magma.Scene`. Showing how to use viewports and cameras. | @todo Add image. |
-| [**magma**-vr](https://github.com/Breush/lava/tree/master/examples/magma-vr) | How to setup a VR environment. | @todo Add image. |
-| [**sill**-meshes](https://github.com/Breush/lava/tree/master/examples/sill-meshes) | How to load meshes from `.glb` files and create basic shapes. | @todo Add image. |
 
 ## Current status
 
