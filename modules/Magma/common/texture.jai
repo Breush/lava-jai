@@ -35,7 +35,30 @@ texture_cleanup :: (texture : *Texture, resetMemory := true) {
     }
 }
 
+texture_load_from_file :: (texture : *Texture, filename : string) -> bool {
+    fileBytes, readOk := File.read_entire_file(filename);
+    _CHECK(readOk, Basic.tprint("Unable to read texture file: %", filename));
+
+    extent : Chamber.uvec2;
+    pixelsRaw := stbi_load_from_memory(fileBytes.data, xx fileBytes.count, xx *extent.width, xx *extent.height, null, 4);
+
+    _CHECK(extent.width != 0 && extent.height != 0, Basic.tprint("Invalid texture file: %", filename));
+
+    pixels : []u8;
+    pixels.data = pixelsRaw;
+    pixels.count = extent.width * extent.height * 4;
+
+    texture_load_from_memory(texture, pixels, extent);
+    stbi_image_free(pixelsRaw);
+
+    return true;
+}
+
 // Channel count will be deduced from pixels array size and extent.
 texture_load_from_memory :: (texture : *Texture, pixels : []u8, extent : Chamber.uvec2) {
     impl_texture_load_from_memory(texture, pixels, extent);
 }
+
+#scope_file
+
+#import "stb_image";
