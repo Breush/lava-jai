@@ -26,10 +26,10 @@ Engine :: struct ($_Meta : Type) {
     allocator : Allocator;
 }
 
-create_engine :: ($_Meta : Type, rayTracing := false) -> *Engine(_Meta) {
+create_engine :: ($_Meta : Type, postProcessing := false, rayTracing := false) -> *Engine(_Meta) {
     engine := Basic.New(Engine(_Meta));
     Basic.remember_allocators(engine);
-    engine_init(engine, rayTracing);
+    engine_init(engine, postProcessing, rayTracing);
     return engine;
 }
 
@@ -44,7 +44,7 @@ destroy_engine :: (engine : *Engine) {
 }
 
 // @todo Enable VR on option, currently doing so as long as available.
-engine_init :: (engine : *EngineBase, rayTracing := false) {
+engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := false) {
     Basic.log("Engine init.", flags=.VERBOSE_ONLY);
 
     // Windowing
@@ -82,8 +82,13 @@ engine_init :: (engine : *EngineBase, rayTracing := false) {
         } else {
             engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
         }
-        engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.renderer));
-        Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.postProcessRenderer));
+
+        if postProcessing {
+            engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.renderer));
+            Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.postProcessRenderer));
+        } else {
+            Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.renderer));
+        }
     }
 }
 
