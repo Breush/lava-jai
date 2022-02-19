@@ -113,7 +113,7 @@ material_set :: (material : *Material, uniformName : string, value : bool) {
 
 material_set :: (material : *Material, uniformName : string, value : $T) {
     uniform := table_find_pointer(<<material.shader.uniformsFrame, uniformName);
-    Basic.assert(uniform != null && uniform.kind == .BlockField);
+    Basic.assert(uniform != null && uniform.kind == .BlockField, "Material of shader '%' has no uniform named '%'.", material.shader.id, uniformName);
 
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 

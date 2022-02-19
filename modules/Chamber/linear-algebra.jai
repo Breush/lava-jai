@@ -194,21 +194,25 @@ copy :: (to: *$T1/interface AnyMatrix3, from: $T2/interface AnyMatrix3) {
 }
 
 // Following same conventions as described in infinite_perspective_projection_matrix.
-infinite_orthographic_projection_matrix :: (center : vec2, extent : vec2, nearClip : float) -> mat4 {
+// @note Infinite orthographic projection matrices do not exist
+// with a depth information conserved. The best we can is "unnear" it, with a nearClip of 0.
+unnear_orthographic_projection_matrix :: (extent : vec2, farClip : float) -> mat4 {
     matrix : mat4;
-    orthographic_projection(*matrix, center, extent, nearClip, false);
+    unneared_orthographic_projection(*matrix, extent, farClip, false);
     return matrix;
 }
 
-infinite_orthographic_projection :: (matrix : *mat4, center : vec2, extent : vec2, nearClip : float, $clear := true) {
+unnear_orthographic_projection :: (matrix : *mat4, extent : vec2, farClip : float, $clear := true) {
     #if clear {
         <<matrix = mat4.{};
     }
 
-    matrix.coef[0][0] = 2. / extent.x;
-    matrix.coef[1][1] = 2. / extent.y;
-    matrix.coef[2][3] = nearClip;
-    matrix.coef[3][2] = 1.;
+    matrix.coef[0][0] = 2. / extent.width;
+    matrix.coef[1][1] = 2. / extent.height;
+
+    // z' = -z / (f - n) + f / (f - n) which gives z' = -z / f + 1 for an unnear projection.
+    matrix.coef[2][2] = - 1. / farClip;
+    matrix.coef[2][3] = 1.;
 }
 
 /*
