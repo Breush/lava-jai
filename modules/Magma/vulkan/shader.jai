@@ -4,8 +4,8 @@ ShaderImpl :: struct {
     descriptorSetLayouts : [..]Vk.DescriptorSetLayout;
 }
 
-impl_shader_init :: (shader : *Shader) {
-    _init_pipeline(shader);
+impl_shader_init :: (shader : *Shader, options : ShaderOptions) {
+    _init_pipeline(shader, options);
 }
 
 impl_shader_cleanup :: (shader : *Shader) {
@@ -23,7 +23,7 @@ impl_shader_cleanup :: (shader : *Shader) {
 
 #scope_file
 
-_init_pipeline :: (shader : *Shader) -> bool {
+_init_pipeline :: (shader : *Shader, options : ShaderOptions) -> bool {
     engine := shader.renderer.scene.engine;
 
     // @note Doing that first, because we need the info about the uniforms.
@@ -166,7 +166,7 @@ _init_pipeline :: (shader : *Shader) -> bool {
     depthStencilStateCI : Vk.PipelineDepthStencilStateCreateInfo;
     depthStencilStateCI.sType = .PipelineDepthStencilStateCreateInfo;
     depthStencilStateCI.depthTestEnable = Vk.TRUE;
-    depthStencilStateCI.depthWriteEnable = Vk.TRUE;
+    depthStencilStateCI.depthWriteEnable = cast(u32) ifx options.depthWriteEnabled then Vk.TRUE else Vk.FALSE;
     depthStencilStateCI.depthCompareOp = .Greater;
     depthStencilStateCI.depthBoundsTestEnable = Vk.FALSE;
     depthStencilStateCI.stencilTestEnable = Vk.FALSE;
@@ -175,7 +175,15 @@ _init_pipeline :: (shader : *Shader) -> bool {
 
     colorBlendAttachmentState : Vk.PipelineColorBlendAttachmentState;
     colorBlendAttachmentState.colorWriteMask = cast(u32) (Vk.ColorComponentFlagBits.R | Vk.ColorComponentFlagBits.G | Vk.ColorComponentFlagBits.B | Vk.ColorComponentFlagBits.A);
-    colorBlendAttachmentState.blendEnable = Vk.FALSE;
+    ifx options.alphaBlendingEnabled {
+        colorBlendAttachmentState.blendEnable = Vk.TRUE;
+        colorBlendAttachmentState.srcColorBlendFactor = Vk.BlendFactor.SrcAlpha;
+        colorBlendAttachmentState.dstColorBlendFactor = Vk.BlendFactor.OneMinusSrcAlpha;
+        colorBlendAttachmentState.colorBlendOp = Vk.BlendOp.Add;
+        colorBlendAttachmentState.srcAlphaBlendFactor = Vk.BlendFactor.One;
+        colorBlendAttachmentState.dstAlphaBlendFactor = Vk.BlendFactor.Zero;
+        colorBlendAttachmentState.alphaBlendOp = Vk.BlendOp.Add;
+    }
 
     colorBlendStateCI : Vk.PipelineColorBlendStateCreateInfo;
     colorBlendStateCI.sType = .PipelineColorBlendStateCreateInfo;

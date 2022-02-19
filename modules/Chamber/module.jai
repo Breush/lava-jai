@@ -5,6 +5,7 @@ Basic :: #import "Basic";
 #load "lib-extensions.jai";
 #load "linear-algebra.jai";
 #load "spirv.jai";
+#load "font.jai";
 
 WindowHandle :: struct {
     union {

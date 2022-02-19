@@ -14,11 +14,16 @@ Shader :: struct {
     allocator : Allocator;
 }
 
+ShaderOptions :: struct {
+    depthWriteEnabled := true;
+    alphaBlendingEnabled := false;
+}
+
 // Allocate, init and register a new shader.
-create_shader :: (renderer : *Renderer, id : string) -> *Shader {
+create_shader :: (renderer : *Renderer, id : string, options : ShaderOptions = .{}) -> *Shader {
     shader := cast(*Shader) Basic.New(Shader);
     Basic.remember_allocators(shader);
-    shader_init(shader, renderer, id);
+    shader_init(shader, renderer, id, options);
     renderer_register(renderer, shader);
     return shader;
 }
@@ -37,10 +42,10 @@ destroy_shader :: (shader : *Shader, destroyResources : bool) {
     }
 }
 
-shader_init :: (shader : *Shader, renderer : *Renderer, id : string) {
+shader_init :: (shader : *Shader, renderer : *Renderer, id : string, options : ShaderOptions = .{}) {
     shader.renderer = renderer;
     shader.id = id;
-    impl_shader_init(shader);
+    impl_shader_init(shader, options);
 }
 
 shader_cleanup :: (shader : *Shader, resetMemory := true) {

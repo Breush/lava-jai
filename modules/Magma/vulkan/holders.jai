@@ -14,16 +14,19 @@ ImageHolder :: struct {
     image : Vk.Image;
     extent : Chamber.uvec2;
     format : Vk.Format;
+    channelsCount : u8;
     deviceMemory : Vk.DeviceMemory;
 }
 
 _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
                        _name : string,
                        _kind : ImageHolder.Kind,
-                       _extent : Chamber.uvec2) -> bool {
+                       _extent : Chamber.uvec2,
+                       _channelsCount : u8 = 0) -> bool {
     engine = _engine;
     kind = _kind;
     extent = _extent;
+    channelsCount = _channelsCount;
 
     // Image itself
     imageCI : Vk.ImageCreateInfo;
@@ -46,7 +49,13 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
         format = Vk.Format.R8G8B8A8Unorm;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.Storage;
     } else if kind == .Texture {
-        format = Vk.Format.R8G8B8A8Unorm;
+        if channelsCount == 4 {
+            format = Vk.Format.R8G8B8A8Unorm;
+        } else if channelsCount == 1 {
+            format = Vk.Format.R8Unorm;
+        } else {
+            Basic.log("Invalid channels count for texture: %.", channelsCount, flags=.ERROR);
+        }
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
     } else if kind == .Depth {
         format = Vk.Format.D32Sfloat;
