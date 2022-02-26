@@ -324,32 +324,38 @@ _init_physical_device :: (engine : *Engine) -> bool {
     }
 
     engine.physicalDevice = null;
+    bestPhysicalDeviceIndex := 0;
+    bestPhysicalDeviceScore := 0;
     for physicalDevice, physicalDeviceIndex : physicalDevices {
-        validPhysicalDevice : bool;
         if requiredPhysicalDevice != null {
-            validPhysicalDevice = (physicalDevice == requiredPhysicalDevice);
+            if physicalDevice == requiredPhysicalDevice {
+                bestPhysicalDeviceIndex = physicalDeviceIndex;
+                bestPhysicalDeviceScore = 1;
+                break;
+            }
         } else {
-            validPhysicalDevice = _is_valid_physical_device(engine, physicalDevice);
-        }
-
-        if validPhysicalDevice {
-            Basic.log("Selecting physical device #%", physicalDeviceIndex, flags=.VERBOSE_ONLY);
-
-            engine.physicalDevice = physicalDevice;
-            Vk.get_physical_device_memory_properties(physicalDevice, *engine.physicalDeviceMemoryProperties);
-
-            physicalDeviceProperties : Vk.PhysicalDeviceProperties2;
-            physicalDeviceProperties.sType = .PhysicalDeviceProperties2;
-            engine.physicalDeviceRayTracingPipelineProperties.sType = .PhysicalDeviceRayTracingPipelinePropertiesKhr;
-            physicalDeviceProperties.pNext = *engine.physicalDeviceRayTracingPipelineProperties;
-            Vk.get_physical_device_properties2(engine.physicalDevice, *physicalDeviceProperties);
-            break;
+            score := _physical_device_score(engine, physicalDevice);
+            if score > bestPhysicalDeviceScore {
+                bestPhysicalDeviceIndex = physicalDeviceIndex;
+                bestPhysicalDeviceScore = score;
+            }
         }
     }
 
-    if engine.physicalDevice == null {
+    if bestPhysicalDeviceScore == 0 {
         _CHECK(false, false, "Unable to find valid physical device.");
     }
+
+    Basic.log("Selecting physical device #%", bestPhysicalDeviceIndex, flags=.VERBOSE_ONLY);
+
+    engine.physicalDevice = physicalDevices[bestPhysicalDeviceIndex];
+    Vk.get_physical_device_memory_properties(engine.physicalDevice, *engine.physicalDeviceMemoryProperties);
+
+    physicalDeviceProperties : Vk.PhysicalDeviceProperties2;
+    physicalDeviceProperties.sType = .PhysicalDeviceProperties2;
+    engine.physicalDeviceRayTracingPipelineProperties.sType = .PhysicalDeviceRayTracingPipelinePropertiesKhr;
+    physicalDeviceProperties.pNext = *engine.physicalDeviceRayTracingPipelineProperties;
+    Vk.get_physical_device_properties2(engine.physicalDevice, *physicalDeviceProperties);
 
     return true;
 }
@@ -579,8 +585,8 @@ _debug_message_callback :: (
 ) -> Vk.Bool32 #c_call {
     // :ContextBug @fixme This does not work anymore.
     // ctx := <<cast(*Context) userData;
-    // ctx : Context;
-    // push_context ctx {
+    ctx : Context;
+    push_context ctx {
     //     flags : Log_Flags;
     //     if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
     //         flags |= .VERY_VERBOSE_ONLY;
@@ -608,8 +614,8 @@ _debug_message_callback :: (
     //         i += 1;
     //     }
 
-    //     Chamber.debug(reportFlags, objectType, /*messageStr,*/ " ", Basic.to_string(message));
-    // }
+        Basic.log(Basic.to_string(message));
+    }
         // i := 0;
         // while true {
         //     Basic.log("%", message[i]);
@@ -644,7 +650,7 @@ _debug_message_callback :: (
     return Vk.FALSE;
 }
 
-_is_valid_physical_device :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice) -> bool {
+_physical_device_score :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice) -> s64 {
     features : Vk.PhysicalDeviceFeatures2;
     features.sType = .PhysicalDeviceFeatures2;
 
@@ -658,22 +664,27 @@ _is_valid_physical_device :: (engine : *Engine, physicalDevice : Vk.PhysicalDevi
 
     Vk.get_physical_device_features2(physicalDevice, *features);
 
+    score := 1;
+    if accelerationStructureFeatures.accelerationStructure then score += 1;
+    if features.features.shaderInt16 then score += 1;
+    if features.features.shaderInt64 then score += 1;
+
     if engine.options.features & .RayTracing {
         if !accelerationStructureFeatures.accelerationStructure {
-            return false;
+            return 0;
         }
 
         if !features.features.shaderInt16 || !features.features.shaderInt64 {
-            return false;
+            return 0;
         }
     }
 
     // Checking that timeline semaphores are supported.
     if !timelineSemaphoreFeatures.timelineSemaphore {
-        return false;
+        return 0;
     }
 
-    return true;
+    return score;
 }
 
 _is_layer_available :: (layerName : string, availableLayers : []Vk.LayerProperties) -> bool {
