@@ -281,7 +281,6 @@ _check_dependencies :: () {
 
 _generate :: (workspace : s64) {
     if _generated then return;
-    if metaEntityList.count == 0 then return;
     _generated = true;
 
     _check_dependencies();

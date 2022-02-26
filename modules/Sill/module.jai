@@ -1,14 +1,11 @@
-/*
-    @fixme Sill roadmap:
-    - Entity hierarchy
-*/
-
 #load "engine.jai";
 #load "input.jai";
+#load "ui.jai";
 #load "components/behavior-component.jai";
 #load "components/camera-component.jai";
 #load "components/mesh-component.jai";
 #load "components/transform-component.jai";
+#load "components/ui-component.jai";
 
 // An entity base, once a struct inherits from it,
 // add components as fields to the latter.

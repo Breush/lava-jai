@@ -4,9 +4,10 @@ Input :: struct {
     axes : Table(string, Axis);
 
     Action :: struct {
-        previousActiveness : u8;
-        activeness : u8; // How many buttons/keys are currently down.
-        keys : [..]Crater.Key; // @todo These are "OR". But we will need to express "AND" somehow.
+        changed : bool;             // Action was updated since last reset.
+        previousActiveness : u8;    // Activess at the last reset.
+        activeness : u8;            // How many buttons/keys are currently down.
+        keys : [..]Crater.Key;      // @todo These are "OR". But we will need to express "AND" somehow.
         triggers : [..]Trigger;
 
         Trigger :: struct {
@@ -52,10 +53,13 @@ input_action_active :: (input : *Input, actionName : string) -> bool {
     return action.activeness != 0;
 }
 
-input_action_just_activated :: (input : *Input, actionName : string) -> bool {
+// Set alsoOnChanged to true to detect auto repeat for the OS.
+input_action_just_activated :: (input : *Input, actionName : string, alsoOnChanged := false) -> bool {
     action := table_find_pointer(input.actions, actionName);
     if action == null then return false;
-    return (action.previousActiveness == 0) && (action.activeness != 0);
+    if action.activeness == 0 then return false;
+    if alsoOnChanged && action.changed then return true;
+    return action.previousActiveness == 0;
 }
 
 input_axis_bind :: (input : *Input, axisName : string, kind : Input.AxisKind) {
@@ -94,6 +98,7 @@ _input_cleanup :: (input : *Input) {
 _input_reset :: (input : *Input) {
     for *action : input.actions {
         action.previousActiveness = action.activeness;
+        action.changed = false;
     }
     for *axis : input.axes {
         axis.value = 0.;
@@ -105,6 +110,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
         for *action : input.actions {
             keyFound, _ := Basic.array_find(action.keys, event.key.which);
             if keyFound {
+                action.changed = true;
                 action.activeness += 1;
             }
         }
@@ -114,6 +120,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
             if action.activeness == 0 then continue;
             keyFound, _ := Basic.array_find(action.keys, event.key.which);
             if keyFound {
+                action.changed = true;
                 action.activeness -= 1;
             }
         }

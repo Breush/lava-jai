@@ -56,6 +56,10 @@ transform_scale :: (iTransform : *TransformComponent, scaleFactor : float32) {
     _update_world_transform(iTransform);
 }
 
+transform_commit :: (iTransform : *TransformComponent) {
+    _update_world_transform(iTransform);
+}
+
 transform_origin_target :: (iTransform : *TransformComponent, origin : Chamber.vec3, target : Chamber.vec3, referenceUp := Chamber.vec3.{0, 0, 1}) {
     iTransform.translation = origin;
     // @todo @speed Could probably be optimized, no need to compute a temporary matrix here.

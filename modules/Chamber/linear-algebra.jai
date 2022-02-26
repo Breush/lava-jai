@@ -159,6 +159,13 @@ multiply :: (lhs : trf, rhs : trf) -> trf {
     return result;
 }
 
+// Multiply, not considering the Z coordinates. Useful for 2D.
+multiply :: (transform : trf, v : $T/interface vec3Interface) -> vec3 {
+    result : vec3;
+    result.std = transform.translation + rotate(transform.factor * v, transform.rotation);
+    return result;
+}
+
 to_radians :: (degrees : float32) -> float32 {
     return degrees * #run cast(float32) (PI / 180.);
 }

@@ -13,7 +13,9 @@ EngineBase :: struct {
     vrRightRenderer : *Magma.Renderer;
 
     input : Input;
+    ui : Ui;
 
+    windowExtent : Chamber.uvec2;
     closingMainWindow : bool; // Set to true to close the main window.
 }
 
@@ -49,6 +51,7 @@ engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := fal
 
     // Windowing
     engine.window = Crater.create_window(.{width=1600, height=900}, "sill");
+    engine.windowExtent = Crater.window_get_extent(engine.window);
 
     // Rendering
     renderEngineOptions : Magma.Engine.Options;
@@ -78,9 +81,9 @@ engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := fal
         engine.renderer = engine.vrLeftRenderer;
     } else {
         if rayTracing {
-            engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, Crater.window_get_extent(engine.window));
+            engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, engine.windowExtent);
         } else {
-            engine.renderer = Magma.create_forward_renderer(engine.scene, Crater.window_get_extent(engine.window));
+            engine.renderer = Magma.create_forward_renderer(engine.scene, engine.windowExtent);
         }
 
         if postProcessing {
@@ -161,6 +164,7 @@ _engine_handle_input_events :: (engine : *EngineBase) {
             return;
         }
 
+        _ui_handle_event(*engine.ui, event);
         _input_handle_event(*engine.input, event);
 
         event = Crater.window_poll_event(engine.window);
