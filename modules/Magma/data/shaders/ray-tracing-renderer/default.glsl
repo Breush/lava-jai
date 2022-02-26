@@ -20,9 +20,9 @@ struct hitPayload {
 
 #if defined(RAYGEN)
 
-#include "../eye.set"
+#include "$/eye.set"
 
-#include "../debug.glsl"
+#include "$/debug.glsl"
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
@@ -89,9 +89,9 @@ void main()
 
 #elif defined(CLOSEST_HIT)
 
-#include "../eye.set"
-#include "../random.glsl"
-#include "../algebra.glsl"
+#include "$/eye.set"
+#include "$/random.glsl"
+#include "$/algebra.glsl"
 
 #extension GL_EXT_scalar_block_layout : enable // For vec3 and such to not be extra aligned
 #extension GL_EXT_shader_16bit_storage : enable // For u16vec3, used as indices' type

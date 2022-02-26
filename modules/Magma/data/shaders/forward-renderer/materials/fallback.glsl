@@ -5,14 +5,14 @@
 
 #if defined(VERTEX)
 
-#include "../default.vert"
+#include "$/forward-renderer/default.vert"
 
 // --------------------
 // ----- FRAGMENT -----
 
 #elif defined(FRAGMENT)
 
-#include "../default-header.frag"
+#include "$/forward-renderer/default-header.frag"
 
 void main() {
     setupEye();

@@ -5,6 +5,33 @@ for_expansion :: Hash.for_expansion;
 
 #scope_module
 
+// @note By convention, things that start with "$" are refering to the internal
+// shaders of Magma. These things are all packed into one giant array.
+// Generate the DOLLAR_SHADERS array that add to the binary all the shipped shaders.
+#insert #run (path : string) -> string {
+    sb : Basic.String_Builder;
+    Basic.init_string_builder(*sb);
+
+    files := FileUtilities.file_list(path, recursive = true, follow_symlinks = false);
+    Basic.append(*sb, "DOLLAR_SHADERS : [");
+    Basic.append(*sb, Basic.tprint("%", files.count)); // @todo :JaiMissing No way to append a number directly?
+    Basic.append(*sb, "]Chamber.DollarFile : .[");
+    for file : files {
+        fileContent, ok := File.read_entire_file(file);
+        Basic.assert(ok, "Could not load $ file '%'.", file);
+
+        // :JaiMissing Why is there no easy way to manipulate paths? (relative to absolute etc.)
+        // The thing below is kind of a hack to get the relative path.
+        Basic.advance(*file, path.count - 1);
+        file[0] = #char "$";
+
+        Basic.append(*sb, Basic.tprint(".{ \"%\", #string __HERE_STRING__\n%\n__HERE_STRING__ }, ", file, fileContent));
+    }
+    Basic.append(*sb, "];");
+
+    return Basic.builder_to_string(*sb);
+}(DOLLAR_SHADERS_PATH);
+
 EngineImpl :: struct {
     instance : Vk.Instance;
     physicalDevice : Vk.PhysicalDevice;
@@ -139,23 +166,18 @@ _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chambe
     if shaderModule != null then return shaderModule;
     shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderModuleId, .{});
 
-    // @note By convention, things that start with "$" are refering to the internal
-    // shaders of Magma.
     shaderPath : string;
-    if shaderId[0] == #char "$" {
-        shaderPath = Basic.tprint("%/%.glsl\0", DOLLAR_SHADERS_PATH, Basic.advance(shaderId, 1));
-    } else {
-        shaderPath = Basic.tprint("./%.glsl\0", shaderId);
-    }
+    shaderPath = Basic.tprint("%.glsl\0", shaderId);
+    shaderPath.count -= 1;
 
     // Optimized SPIR-V, no symbols info inside.
-    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH, true);
+    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS, true);
     defer Basic.array_free(spvCode);
     shaderModule.spv = Chamber.spirv_parse(spvCode, false);
 
     #if parseUniforms {
         // @todo Currently forced to compile once a non-optimized version to get symbols name and such.
-        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS_PATH, false);
+        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS, false);
         defer Basic.array_free(nonOptimizedSpvCode);
         nonOptimizedSpv := Chamber.spirv_parse(nonOptimizedSpvCode, true);
         shaderModule.spv.uniformsFrame = nonOptimizedSpv.uniformsFrame;
@@ -678,3 +700,4 @@ _chain_front :: (chain : **void, link : *void) {
 }
 
 String :: #import "String";
+FileUtilities :: #import "File_Utilities";

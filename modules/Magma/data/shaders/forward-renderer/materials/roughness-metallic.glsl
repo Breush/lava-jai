@@ -11,15 +11,15 @@
 
 #if defined(VERTEX)
 
-#include "../default.vert"
+#include "$/forward-renderer/default.vert"
 
 // --------------------
 // ----- FRAGMENT -----
 
 #elif defined(FRAGMENT)
 
-#include "../default-header.frag"
-#include "../../constants.glsl"
+#include "$/forward-renderer/default-header.frag"
+#include "$/constants.glsl"
 
 // @todo glTF provides more uniforms:
 // float roughnessFactor = 1;

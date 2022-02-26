@@ -41,13 +41,16 @@ ShaderKind :: enum {
     ClosestHit;
 }
 
+DollarFile :: struct {
+    id : string;
+    data : string;
+}
+
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
-spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarPath : string, optimized : bool) -> []u8 {
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarFiles : []DollarFile, optimized : bool) -> []u8 {
     spvCode : [..]u8;
 
-    glslFileContent, readOk := File.read_entire_file(glslFile);
-    _CHECK(readOk, spvCode, Basic.tprint("Unable to read shader file: %", glslFile));
-    defer Basic.free(glslFileContent);
+    _, glslFileContent := _get_entire_shader_file(glslFile, ".", dollarFiles); // @todo Mem leak?
 
     shadercShaderKind : Shaderc.ShaderKind;
     if shaderKind == .Vertex {
@@ -63,7 +66,7 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     }
 
     userData : ShadercUserData;
-    userData.dollarPath = dollarPath;
+    userData.dollarFiles = dollarFiles;
 
     // :ContextBug We need to reference the first
     // field of the context, otherwise this does not work (for some unknown reason).
@@ -314,7 +317,7 @@ ShadercUserData :: struct {
     // just store their content once and for all.
     includeResults : [16]Shaderc.IncludeResult;
     includeResultsCount : u32;
-    dollarPath : string;
+    dollarFiles : []DollarFile;
     ctx : *Context;
 }
 
@@ -334,13 +337,7 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
         requestingSourceString := Basic.to_string(requestingSource);
         _, requestingPath := Compiler.get_basename_and_path(requestingSourceString);
 
-        shaderPath : string;
-        if requestedSourceString[0] == #char "$" {
-            shaderPath = Basic.sprint("%/%", userData.dollarPath, Basic.advance(requestedSourceString, 1));
-        } else {
-            shaderPath = Basic.sprint("%/%", requestingPath, requestedSourceString);
-        }
-        shaderCode, readOk := File.read_entire_file(shaderPath);
+        shaderPath, shaderCode := _get_entire_shader_file(requestedSourceString, requestingPath, userData.dollarFiles);
 
         includeResult = *userData.includeResults[userData.includeResultsCount];
         userData.includeResultsCount += 1;
@@ -349,7 +346,6 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
         includeResult.sourceNameLength = xx shaderPath.count;
         includeResult.content = shaderCode.data;
         includeResult.contentLength = xx shaderCode.count;
-        _CHECK(readOk, null, Basic.tprint("Unable to read shader file: % from %", requestedSourceString, Basic.to_string(requestingSource)));
     }
     return includeResult;
 }
@@ -357,9 +353,35 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
 _include_result_releaser :: (_userData : *void, includeResult : *Shaderc.IncludeResult) #c_call {
     ctx : Context;
     push_context ctx {
-        Basic.free(includeResult.content);
-        Basic.free(includeResult.sourceName);
+        if includeResult.sourceName[0] != #char "$" {
+            Basic.free(includeResult.content);
+            Basic.free(includeResult.sourceName);
+        }
     }
+}
+
+_get_entire_shader_file :: (filename : string, requestingPath : string, dollarFiles : []DollarFile) -> ( shaderPath : string, shaderCode : string ) {
+    path, code : string;
+
+    if filename[0] == #char "$" {
+        for file : dollarFiles {
+            if file.id == filename {
+                path = file.id;
+                code = file.data;
+                break;
+            }
+        }
+    } else {
+        readOk : bool;
+        path = Basic.sprint("%/%", requestingPath, filename);
+        code, readOk = File.read_entire_file(path);
+    }
+
+    if code.count == 0 {
+        Basic.log("Unable to get shader file: % from %", filename, requestingPath, flags = .ERROR);
+    }
+
+    return path, code;
 }
 
 #scope_file

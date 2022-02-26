@@ -8,14 +8,14 @@
 
 #if defined(VERTEX)
 
-#include "../default.vert"
+#include "$/post-process-renderer/default.vert"
 
 // --------------------
 // ----- FRAGMENT -----
 
 #elif defined(FRAGMENT)
 
-#include "../default-header.frag"
+#include "$/post-process-renderer/default-header.frag"
 
 void main() {
     outColor = texture(source, uv);
