@@ -1,6 +1,10 @@
 #scope_module
 
-#load "engine-vr.jai";
+#if VR_ENABLED {
+    #load "openxr/vr.jai";
+} else {
+    #load "dummy/vr.jai";
+}
 
 /*
     An Engine is the heart of the rendering system.
@@ -65,7 +69,7 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
 engine_init :: (engine : *Engine, options : Engine.Options) -> bool {
     engine.options = options;
 
-    if engine.options.features & .Vr {
+    if VR_ENABLED && engine.options.features & .Vr {
         if !engine_vr_init(engine) {
             Basic.log("Unable to init engine with TargetFlags.Vr: VR is not available. Disabling VR capabilities.", flags=.WARNING);
         }

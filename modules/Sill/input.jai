@@ -147,6 +147,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
     }
 }
 
+#if VR_ENABLED {
 _input_handle_vr_events :: (input : *Input, vrTarget : *Magma.VrTarget) {
     // @fixme There might be a latent bug here.
     // As VR updates are done during render(), a very fast "select" might
@@ -180,4 +181,5 @@ _input_handle_vr_events :: (input : *Input, vrTarget : *Magma.VrTarget) {
             }
         }
     }
+}
 }

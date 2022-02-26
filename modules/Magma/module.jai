@@ -4,6 +4,8 @@
     - 2D (UI) renderer
 */
 
+#module_parameters(VR_ENABLED := false);
+
 #load "common/engine.jai";
 #load "common/eye.jai";
 #load "common/material.jai";

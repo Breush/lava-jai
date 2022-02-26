@@ -29,7 +29,11 @@ void setupEye() {
     eye.projectionMatrix[2][3] = pushConstant.eyeProjectionMatrixFactors1[3];
     eye.projectionMatrix[0][2] = pushConstant.eyeProjectionMatrixFactors2[0];
     eye.projectionMatrix[1][2] = pushConstant.eyeProjectionMatrixFactors2[1];
-    eye.projectionMatrix[3][2] = 1;
+    // @fixme This divides by the Z coordinates, making the thing a perspective projection.
+    // eye.projectionMatrix[3][2] = 1;
+    // @fixme This is for an infinite orthographic projection however.
+    eye.projectionMatrix[2][3] = 1;
+    eye.projectionMatrix[3][3] = 1;
 
     // @note GLSL matrices are expressed in columns, thus we need to transpose
     // to be clean.

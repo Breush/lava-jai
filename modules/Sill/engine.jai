@@ -8,9 +8,11 @@ EngineBase :: struct {
     // @todo Make post processes registerable through the engine.
     postProcessRenderer : *Magma.PostProcessRenderer;
 
+#if VR_ENABLED {
     vrTarget : *Magma.VrTarget;
     vrLeftRenderer : *Magma.Renderer;
     vrRightRenderer : *Magma.Renderer;
+}
 
     input : Input;
     ui : Ui;
@@ -64,22 +66,28 @@ engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := fal
     engine.windowTarget = Magma.create_window_target(engine.renderEngine, Crater.window_get_handle(engine.window));
     engine.scene = Magma.create_scene(engine.renderEngine);
 
-    if (engine.renderEngine.vr.enabled) {
-        engine.vrTarget = Magma.create_vr_target(engine.renderEngine);
+    classicRendererRequired := true;
+    #if VR_ENABLED {
+        if engine.renderEngine.vr.enabled {
+            classicRendererRequired = false;
+            engine.vrTarget = Magma.create_vr_target(engine.renderEngine);
 
-        leftEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Left);
-        rightEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Right);
-        engine.vrLeftRenderer = Magma.create_forward_renderer(engine.scene, leftEyeExtent);
-        engine.vrRightRenderer = Magma.create_forward_renderer(engine.scene, rightEyeExtent);
+            leftEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Left);
+            rightEyeExtent := Magma.vr_recommended_eye_extent(*engine.renderEngine.vr, .Right);
+            engine.vrLeftRenderer = Magma.create_forward_renderer(engine.scene, leftEyeExtent);
+            engine.vrRightRenderer = Magma.create_forward_renderer(engine.scene, rightEyeExtent);
 
-        // @todo Currently post-processing only the left eye, do we need two renderers or is there a trick?
-        engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.vrLeftRenderer));
-        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.postProcessRenderer),  Magma.VrTarget.LEFT_EYE_BIND_INDEX);
-        Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrRightRenderer), Magma.VrTarget.RIGHT_EYE_BIND_INDEX);
+            // @todo Currently post-processing only the left eye, do we need two renderers or is there a trick?
+            engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.vrLeftRenderer));
+            Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.postProcessRenderer),  Magma.VrTarget.LEFT_EYE_BIND_INDEX);
+            Magma.target_bind(engine.vrTarget, Magma.renderer_get_output(engine.vrRightRenderer), Magma.VrTarget.RIGHT_EYE_BIND_INDEX);
 
-        // @todo Companion window, probably with own renderer.
-        engine.renderer = engine.vrLeftRenderer;
-    } else {
+            // @todo Companion window, probably with own renderer.
+            engine.renderer = engine.vrLeftRenderer;
+        }
+    }
+
+    if classicRendererRequired {
         if rayTracing {
             engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, engine.windowExtent);
         } else {
@@ -170,8 +178,9 @@ _engine_handle_input_events :: (engine : *EngineBase) {
         event = Crater.window_poll_event(engine.window);
     }
 
-    // VR events
-    if (engine.renderEngine.vr.enabled) {
-        _input_handle_vr_events(*engine.input, engine.vrTarget);
+    #if VR_ENABLED {
+        if (engine.renderEngine.vr.enabled) {
+            _input_handle_vr_events(*engine.input, engine.vrTarget);
+        }
     }
 }

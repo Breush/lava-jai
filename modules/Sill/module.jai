@@ -1,3 +1,5 @@
+#module_parameters(VR_ENABLED := false);
+
 #load "engine.jai";
 #load "input.jai";
 #load "ui.jai";
@@ -29,6 +31,6 @@ File :: #import "File";
 Hash :: #import "Hash_Table";
 Chamber :: #import "Chamber";
 Crater :: #import "Crater";
-Magma :: #import "Magma";
+Magma :: #import "Magma" (VR_ENABLED = VR_ENABLED);
 
 _CHECK :: Chamber._CHECK;

@@ -271,7 +271,7 @@ _init_instance :: (engine : *Engine) -> bool {
         debugReportCI : Vk.DebugReportCallbackCreateInfoEXT;
         debugReportCI.sType = .DebugReportCallbackCreateInfoExt;
         debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning /* | Vk.DebugReportFlagBitsEXT.PerformanceWarning */;
-        debugReportCI.pfnCallback = cast(*void) _debug_message_callback;
+        debugReportCI.pfnCallback = _debug_message_callback;
 
         // :ContextBug
         #assert(type_info(Context_Base).members[0].name == "thread_index");
@@ -555,48 +555,70 @@ _debug_message_callback :: (
     message : *u8,
     userData : *void
 ) -> Vk.Bool32 #c_call {
-    // :ContextBug
-    ctx := <<cast(*Context) userData;
-    push_context ctx {
-        flags : Log_Flags;
-        if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
-            flags |= .VERY_VERBOSE_ONLY;
-        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
-            flags |= .CONTENT;
-        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
-            flags |= .VERBOSE_ONLY;
-        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning {
-            flags |= .WARNING;
-        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
-            flags |= .ERROR;
-        }
+    // :ContextBug @fixme This does not work anymore.
+    // ctx := <<cast(*Context) userData;
+    // ctx : Context;
+    // push_context ctx {
+    //     flags : Log_Flags;
+    //     if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
+    //         flags |= .VERY_VERBOSE_ONLY;
+    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
+    //         flags |= .CONTENT;
+    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
+    //         flags |= .VERBOSE_ONLY;
+    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning {
+    //         flags |= .WARNING;
+    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
+    //         flags |= .ERROR;
+    //     }
 
-        Chamber.loggerPushNonFatalOnError();
+    //     messageStr : string;
+    //     Chamber.loggerPushNonFatalOnError();
+    //     i := 0;
+    //     j : bool;
+    //     while true {
+    //         Basic.log("%", layerPrefix[i]);
+    //         if layerPrefix[i] == 0 {
+    //             messageStr = Basic.to_string(layerPrefix + i + 1);
+    //             if j break;
+    //             else j = true;
+    //         }
+    //         i += 1;
+    //     }
 
-        messageString := Basic.to_string(message);
-        linkParts := String.split(messageString, "(https://");
-        specParts := String.split(linkParts[0], " The Vulkan spec states:");
-        sentences := String.split(specParts[0], "| ");
-        errorParts := String.split(sentences[0], "Object ");
+    //     Chamber.debug(reportFlags, objectType, /*messageStr,*/ " ", Basic.to_string(message));
+    // }
+        // i := 0;
+        // while true {
+        //     Basic.log("%", message[i]);
+        //     if message[i] == 0 then break;
+        //     i += 1;
+        // }
 
-        Basic.log("===== Vulkan Debug Message =====", flags=flags);
-        Basic.log(errorParts[0], flags=flags);
-        for i : 1..errorParts.count-1 {
-            Basic.log("  | Object %", errorParts[i], flags=flags);
-        }
-        for i : 1..sentences.count-1 {
-            Basic.log("  | %", sentences[i], flags=flags);
-        }
-        if specParts.count == 2 {
-            Basic.log("  >%", specParts[1], flags=flags);
-        }
-        if linkParts.count == 2 {
-            Basic.log("  (https://%", linkParts[1], flags=flags);
-        }
+        // messageString := Basic.to_string(message);
+        // linkParts := String.split(messageString, "(https://");
+        // specParts := String.split(linkParts[0], " The Vulkan spec states:");
+        // sentences := String.split(specParts[0], "| ");
+        // errorParts := String.split(sentences[0], "Object ");
 
-        Chamber.loggerPopNonFatalOnError();
-        Basic.log("================================", flags=flags);
-    }
+        // Basic.log("===== Vulkan Debug Message =====", flags=flags);
+        // Basic.log(errorParts[0], flags=flags);
+        // for i : 1..errorParts.count-1 {
+        //     Basic.log("  | Object %", errorParts[i], flags=flags);
+        // }
+        // for i : 1..sentences.count-1 {
+        //     Basic.log("  | %", sentences[i], flags=flags);
+        // }
+        // if specParts.count == 2 {
+        //     Basic.log("  >%", specParts[1], flags=flags);
+        // }
+        // if linkParts.count == 2 {
+        //     Basic.log("  (https://%", linkParts[1], flags=flags);
+        // }
+
+        // Chamber.loggerPopNonFatalOnError();
+        // Basic.log("================================", flags=flags);
+    // }
     return Vk.FALSE;
 }
 
