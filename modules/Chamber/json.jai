@@ -31,7 +31,7 @@ json_parse_string :: (content: string) -> JsonValue, success: bool {
     result, remainder, success := parse_value(content);
     if !success        return result, false;
 
-    remainder = trim_left(remainder, WHITESPACE_CHARS);
+    remainder = trim_whitespaces(remainder);
     if remainder.count {
         report_error("Unexpected trailing characters: %", remainder);
         return result, false;
@@ -49,9 +49,8 @@ json_parse_file :: (filename: string) -> JsonValue, success: bool {
     }
     defer free(file_data);
 
-
-    if context.log_level >= .VERBOSE log("Read file: %", success);
-    return json_parse_string(file_data);
+    result, success = json_parse_string(file_data);
+    return result, success;
 }
 
 json_free :: (using val: JsonValue) {
@@ -221,7 +220,7 @@ parse_array :: (str: string, slot: *u8, info: *Type_Info_Array, ignore_unknown: 
 
     assert(str[0] == #char "[", "Invalid object start %", str);
     remainder := advance(str);
-    remainder = trim_left(remainder, WHITESPACE_CHARS);
+    remainder = trim_whitespaces(remainder);
     if remainder[0] == #char "]" {
         remainder = advance(remainder);
         // @Robustness: Do we need to zero out the array?
@@ -243,10 +242,10 @@ parse_array :: (str: string, slot: *u8, info: *Type_Info_Array, ignore_unknown: 
             memcpy(array.data + array.count * stride, element_data, stride);
             array.count += 1;
 
-            remainder = trim_left(remainder, WHITESPACE_CHARS);
+            remainder = trim_whitespaces(remainder);
             if remainder[0] != #char ","    break;
             remainder = advance(remainder);
-            remainder = trim_left(remainder, WHITESPACE_CHARS);
+            remainder = trim_whitespaces(remainder);
         }
     } else {
         while true {
@@ -254,10 +253,10 @@ parse_array :: (str: string, slot: *u8, info: *Type_Info_Array, ignore_unknown: 
             remainder, success = parse_value(remainder, null, null, ignore_unknown);
             if !success    return remainder, false;
 
-            remainder = trim_left(remainder, WHITESPACE_CHARS);
+            remainder = trim_whitespaces(remainder);
             if remainder[0] != #char ","    break;
             remainder = advance(remainder);
-            remainder = trim_left(remainder, WHITESPACE_CHARS);
+            remainder = trim_whitespaces(remainder);
         }
     }
 
@@ -290,7 +289,7 @@ maybe_grow :: (array: *Resizable_Array, element_size: s64) {
 parse_object :: (str: string, slot: *u8, info: *Type_Info_Struct, ignore_unknown: bool) -> remainder: string, success: bool {
     assert(str[0] == #char "{", "Invalid object start %", str);
     remainder := advance(str);
-    remainder = trim_left(remainder, WHITESPACE_CHARS);
+    remainder = trim_whitespaces(remainder);
     if remainder[0] == #char "}" {
         remainder = advance(remainder);
         return remainder, true;
@@ -319,17 +318,17 @@ parse_object :: (str: string, slot: *u8, info: *Type_Info_Struct, ignore_unknown
             return remainder, false;
         }
 
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         if remainder[0] != #char ":"    return remainder, false;
         remainder = advance(remainder);
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         remainder, success = parse_value(remainder, member_slot, member_info, ignore_unknown);
         if !success        return remainder, false;
 
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         if remainder[0] != #char ","    break;
         remainder = advance(remainder);
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
     }
 
     if remainder[0] != #char "}"    return remainder, false;
@@ -430,7 +429,7 @@ parse_array:: (str: string) -> result: [..] JsonValue, remainder: string, succes
     assert(str[0] == #char "[", "Invalid object start %", str);
     remainder := advance(str);
     result: [..] JsonValue;
-    remainder = trim_left(remainder, WHITESPACE_CHARS);
+    remainder = trim_whitespaces(remainder);
     if remainder[0] == #char "]" {
         remainder = advance(remainder);
         return result, remainder, true;
@@ -444,10 +443,10 @@ parse_array:: (str: string) -> result: [..] JsonValue, remainder: string, succes
 
         array_add(*result, value);
 
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         if remainder[0] != #char ","    break;
         remainder = advance(remainder);
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
     }
 
     if remainder[0] != #char "]"    return result, remainder, false;
@@ -459,7 +458,7 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
     assert(str[0] == #char "{", "Invalid object start %", str);
     remainder := advance(str);
     result: JSON_Object;
-    remainder = trim_left(remainder, WHITESPACE_CHARS);
+    remainder = trim_whitespaces(remainder);
     if remainder[0] == #char "}" {
         remainder = advance(remainder);
         return result, remainder, true;
@@ -478,24 +477,43 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
         existing := table_find_pointer(result, key);
         if existing        return result, remainder, false;
 
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         if remainder[0] != #char ":"    return result, remainder, false;
         remainder = advance(remainder);
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         value, remainder, success = parse_value(remainder);
         if !success    return result, remainder, false;
 
         table_add(*result, key, value);
 
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
         if remainder[0] != #char ","    break;
         remainder = advance(remainder);
-        remainder = trim_left(remainder, WHITESPACE_CHARS);
+        remainder = trim_whitespaces(remainder);
     }
 
     if remainder[0] != #char "}"    return result, remainder, false;
     remainder = advance(remainder);
     return result, remainder, true;
+}
+
+trim_whitespaces :: (remainder : string) -> string {
+    result := remainder;
+
+    // Skipping comments too
+    while true {
+        result = trim_left(result, WHITESPACE_CHARS);
+        if result.count > 2 && result[0] == #char "/" && result[1] == #char "/" {
+            advance(*result, 2);
+            while result.count > 0 && result[0] != #char "\n" {
+                advance(*result);
+            }
+        } else {
+            break;
+        }
+    }
+
+    return result;
 }
 
 unescape :: (str: string) -> result: string, success: bool {

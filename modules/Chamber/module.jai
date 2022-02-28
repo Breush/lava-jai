@@ -1,5 +1,3 @@
-Basic :: #import "Basic";
-
 #load "glb-parser.jai";
 #load "json.jai";
 #load "lib-extensions.jai";
@@ -180,6 +178,10 @@ _CHECK :: (result : $R, message : string, loc := #caller_location) #expand {
 _CHECK_NON_FATAL :: (result : $R, message : string, loc := #caller_location) #expand {
     _CHECK(result, false, message, fatal=false, loc=loc);
 }
+
+#scope_module
+
+Basic :: #import "Basic";
 
 #scope_file
 
