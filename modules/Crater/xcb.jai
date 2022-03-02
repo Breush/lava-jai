@@ -379,6 +379,8 @@ _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     case Xkb.KEY_Alt_L; return Key.AltLeft;
     case Xkb.KEY_Alt_R; return Key.AltRight;
     case Xkb.KEY_Delete; return Key.Delete;
+    case Xkb.KEY_Home; return Key.Home;
+    case Xkb.KEY_End; return Key.End;
     }
 
     return Key.Unknown;

@@ -86,6 +86,7 @@ Key :: enum {
     ShiftLeft; ShiftRight;
     Delete;
     Tab; Space; Backspace;
+    Home; End;
 }
 
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
