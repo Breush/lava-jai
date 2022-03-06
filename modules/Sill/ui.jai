@@ -3,6 +3,7 @@
 Ui :: struct {
     uiComponents : [..]*UiComponent;
 
+    focusedUiComponent : *UiComponent;
     hoveredUiComponents : [..]*UiComponent;
 
     mousePointerPosition : Chamber.vec2;
@@ -13,7 +14,7 @@ ui_register_component :: (ui : *Ui, uiComponent : *UiComponent) {
 }
 
 _ui_handle_event :: (ui : *Ui, event : Crater.Event) {
-    if (event.kind == .MousePointerMoved) {
+    if event.kind == .MousePointerMoved {
         ui.mousePointerPosition.x = cast(float) event.mousePointer.x;
         ui.mousePointerPosition.y = cast(float) event.mousePointer.y;
 
@@ -25,9 +26,21 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event) {
         // if already hovered.
         ui.hoveredUiComponents.count = 0;
         for uiComponent : ui.uiComponents {
-            if ui_check_hovered(uiComponent, ui.mousePointerPosition) {
+            if ui_check_hovered(uiComponent, ui.mousePointerPosition, event) {
                 Basic.array_add(*ui.hoveredUiComponents, uiComponent);
             }
         }
+    } else if event.kind == .MouseButtonPressed {
+        for hoveredUiComponent : ui.hoveredUiComponents {
+            ui_trigger(hoveredUiComponent, UiComponent.CallbackFlags.Click, event);
+        }
+    } else if event.kind == .TextEntered {
+        if ui.focusedUiComponent {
+            ui_trigger(ui.focusedUiComponent, UiComponent.CallbackFlags.Text, event);
+        }
     }
+}
+
+_ui_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
+    ui.focusedUiComponent = uiComponent;
 }

@@ -33,6 +33,8 @@ Event :: struct {
         WindowSizeChanged;
         MousePointerMoved;
         MouseWheelScrolled;
+        MouseButtonPressed;
+        MouseButtonReleased;
         KeyPressed;
         KeyReleased;
         TextEntered;
@@ -58,6 +60,10 @@ Event :: struct {
         which : Key;
     }
 
+    MouseButtonData :: struct {
+        which : MouseButton;
+    }
+
     TextData :: struct {
         str : string~s8;    // Points to the utf8 data below
         utf8 : [5]u8;       // UTF-8, zero-terminated
@@ -69,6 +75,7 @@ Event :: struct {
         windowSize : WindowSizeData;     // On WindowSizeChanged
         mousePointer : MousePointerData; // On MousePointerMoved
         mouseWheel : MouseWheelData;     // On MouseWheelScrolled
+        mouseButton : MouseButtonData;       // On MouseButtonPressed, MouseButtonReleased
         key : KeyData;                   // On KeyPressed, KeyReleased
         text : TextData;                 // On TextEntered
     }
@@ -87,6 +94,11 @@ Key :: enum {
     Delete;
     Tab; Space; Backspace;
     Home; End;
+}
+
+MouseButton :: enum {
+    Unknown :: 0;
+    Left; Middle; Right;
 }
 
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
