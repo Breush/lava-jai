@@ -38,6 +38,10 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event) {
         if ui.focusedUiComponent {
             ui_trigger(ui.focusedUiComponent, UiComponent.CallbackFlags.Text, event);
         }
+    } else if event.kind == .KeyPressed {
+        if ui.focusedUiComponent {
+            ui_trigger(ui.focusedUiComponent, UiComponent.CallbackFlags.Key, event);
+        }
     }
 }
 

@@ -23,6 +23,7 @@ UiComponent :: struct {
         NoHover;
         Click;      // Trigger only.
         NoClick;    // Trigger only.
+        Key;        // Trigger only.
         Text;       // Trigger only.
     }
 

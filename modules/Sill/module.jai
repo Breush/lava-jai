@@ -8,6 +8,7 @@
 #load "components/mesh-component.jai";
 #load "components/transform-component.jai";
 #load "components/ui-component.jai";
+#load "helpers/string-utilities.jai";
 
 // An entity base, once a struct inherits from it,
 // add components as fields to the latter.

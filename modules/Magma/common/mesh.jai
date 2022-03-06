@@ -11,6 +11,8 @@
 Mesh :: struct {
     scene : *Scene;
 
+    disabled : bool;
+
     vertices : [..]VertexInput;
     indices : [..]u16;
     instance : InstanceInput;
