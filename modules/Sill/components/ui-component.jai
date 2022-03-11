@@ -16,7 +16,7 @@ UiComponent :: struct {
     triggerCallbacks : [..]Callback(TriggerCallbackType);
 
     UpdateCallbackType :: #type (flags : CallbackFlags, userData : *void);
-    TriggerCallbackType :: #type (flags : CallbackFlags, event : Crater.Event, userData : *void);
+    TriggerCallbackType :: #type (flags : CallbackFlags, event : Crater.Event, stopPropagation : *bool, userData : *void);
 
     CallbackFlags :: enum_flags {
         Hover;
@@ -72,15 +72,15 @@ ui_set_focused :: (iUi : *UiComponent) {
     _ui_set_focused(*iUi.entity.engine.ui, iUi);
 }
 
-ui_trigger :: (iUi : *UiComponent, flag : UiComponent.CallbackFlags, event : Crater.Event) {
+ui_trigger :: (iUi : *UiComponent, flag : UiComponent.CallbackFlags, event : Crater.Event, stopPropagation : *bool) {
     for callback : iUi.triggerCallbacks {
         if callback.flags & flag {
-            callback.function(flag, event, callback.userData);
+            callback.function(flag, event, stopPropagation, callback.userData);
         }
     }
 }
 
-ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crater.Event.{}) -> bool {
+ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crater.Event.{}, stopPropagation : *bool) -> bool {
     // @todo No notion of anchor here, we assume it is always centered.
 
     // @todo No notion of flats and 2D in the engine for now.
@@ -120,7 +120,7 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crate
         flags := ifx hovered then UiComponent.CallbackFlags.Hover else .NoHover;
         for callback : iUi.triggerCallbacks {
             if callback.flags & flags {
-                callback.function(flags, event, callback.userData);
+                callback.function(flags, event, stopPropagation, callback.userData);
             }
         }
     }
