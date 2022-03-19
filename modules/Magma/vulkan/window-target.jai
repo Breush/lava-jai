@@ -29,6 +29,14 @@ impl_window_target_init :: (windowTarget : *WindowTarget, windowHandle : Chamber
 
         _CHECK(Vk.create_xcb_surface_khr(windowTarget.engine.instance, *surfaceCI, null, *windowTarget.surface),
                "Unable to create XCB surface.");
+    } else #if OS == .WINDOWS {
+        surfaceCI : Vk.Win32SurfaceCreateInfoKHR;
+        surfaceCI.sType = .Win32SurfaceCreateInfoKhr;
+        surfaceCI.hinstance = windowHandle.dwm.hInstance;
+        surfaceCI.hwnd = windowHandle.dwm.hWnd;
+
+        _CHECK(Vk.create_win32_surface_khr(windowTarget.engine.instance, *surfaceCI, null, *windowTarget.surface),
+               "Unable to create Win32 surface.");
     }
 
     return true;
@@ -253,6 +261,7 @@ _init_swapchain :: (windowTarget : *WindowTarget) -> bool {
     swapchainCI.compositeAlpha = Vk.CompositeAlphaFlagBitsKHR.Opaque;
     swapchainCI.presentMode = presentMode;
     swapchainCI.clipped = Vk.TRUE;
+    swapchainCI.preTransform = .Identity;
 
     _CHECK(Vk.create_swapchain_khr(windowTarget.engine.device, *swapchainCI, null, *windowTarget.swapchain),
            "Unable to create swapchain.");

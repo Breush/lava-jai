@@ -2,6 +2,7 @@
 #load "json.jai";
 #load "lib-extensions.jai";
 #load "linear-algebra.jai";
+#load "string-utilities.jai";
 #load "spirv.jai";
 #load "font.jai";
 
@@ -12,8 +13,8 @@ WindowHandle :: struct {
             window : u32 ;      // xcb_window_t
         }
         dwm : struct {
-            hwnd : *void;
-            hinstance : *void;
+            hWnd : *void;
+            hInstance : *void;
         }
     }
 }

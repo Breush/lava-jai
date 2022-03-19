@@ -1,11 +1,10 @@
-Basic :: #import "Basic";
+#scope_module
+
 Posix :: #import "POSIX";
 Unicode :: #import "Unicode";
 
 Xcb :: #import "Xcb";
 Xkb :: #import "Xkb";
-
-#scope_module
 
 WindowImpl :: struct {
     xcbId : u32;
@@ -20,10 +19,6 @@ WindowImpl :: struct {
     xkbState : *Xkb.State;
     xkbComposeTable : *Xkb.ComposeTable;
     xkbComposeState : *Xkb.ComposeState;
-
-    // To prevent big deltas when moving the mouse the first time.
-    pointerPositionToReset : bool;
-    pointerCurrentlyCentered : bool;
 }
 
 EVENT_MASKS :: cast(u32) (Xcb.EventMask.PointerMotion |
@@ -37,7 +32,6 @@ impl_window_init :: (window : *Window) -> bool {
 
     // Creating window indeed
     window.xcbId = Xcb.generate_id(window.xcbConnection);
-    window.pointerPositionToReset = true;
 
     valueMask := cast(u32) (Xcb.Cw.BackPixel | Xcb.Cw.EventMask);
     valueList : [8]u32;
@@ -83,16 +77,6 @@ impl_window_process_events :: (window : *Window) {
         _window_event_process(window, event);
         context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, event, null);
     }
-
-    if window.pointerAutoCentered && !window.pointerCurrentlyCentered {
-        _ignore_pointer_move(window, true);
-        Xcb.warp_pointer(window.xcbConnection, Xcb.NONE, window.xcbId, 0, 0, 0, 0,
-                         cast(s16) window.videoMode.width / 2, cast(s16) window.videoMode.height / 2);
-        _ignore_pointer_move(window, false);
-
-        window.pointerCurrentlyCentered = true;
-        window.pointerPositionToReset = true; // Won't emit delta for the centering
-    }
 }
 
 impl_window_close :: (window : *Window) {
@@ -106,8 +90,9 @@ impl_window_close :: (window : *Window) {
     context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
 }
 
-impl_window_update_pointer_auto_centered :: (window : *Window) {
-    window.pointerCurrentlyCentered = false;
+impl_window_center_pointer :: (window : *Window) {
+    Xcb.warp_pointer(window.xcbConnection, Xcb.NONE, window.xcbId, 0, 0, 0, 0,
+                     cast(s16) window.videoMode.width / 2, cast(s16) window.videoMode.height / 2);
 }
 
 impl_window_update_pointer_hidden :: (window : *Window) {
@@ -202,50 +187,26 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         }
 
         event : Event;
-        event.kind = Event.Kind.WindowClosed;
-        Basic.array_add(*window.events, event);
+        event.kind = .WindowClosed;
+        _window_add_event(window, *event);
 
     case Xcb.CONFIGURE_NOTIFY;
         configureNotifyEvent := cast(*Xcb.ConfigureNotifyEvent) xcbEvent;
-        if window.videoMode.width == configureNotifyEvent.width &&
-           window.videoMode.height == configureNotifyEvent.height {
-           return;
-        }
 
         event : Event;
-        event.kind = Event.Kind.WindowSizeChanged;
+        event.kind = .WindowSizeChanged;
         event.windowSize.width = configureNotifyEvent.width;
         event.windowSize.height = configureNotifyEvent.height;
-        Basic.array_add(*window.events, event);
-
-        window.videoMode.width = configureNotifyEvent.width;
-        window.videoMode.height = configureNotifyEvent.height;
+        _window_add_event(window, *event);
 
     case Xcb.MOTION_NOTIFY;
         motionNotifyEvent := cast(*Xcb.MotionNotifyEvent) xcbEvent;
 
         event : Event;
-        event.kind = Event.Kind.MousePointerMoved;
-
+        event.kind = .MousePointerMoved;
         event.mousePointer.x = motionNotifyEvent.eventX;
         event.mousePointer.y = motionNotifyEvent.eventY;
-        event.mousePointer.dx = event.mousePointer.x - cast(s16) window.mousePosition.x;
-        event.mousePointer.dy = event.mousePointer.y - cast(s16) window.mousePosition.y;
-
-
-        if (window.pointerPositionToReset) {
-            window.mousePosition.x = motionNotifyEvent.eventX;
-            window.mousePosition.y = motionNotifyEvent.eventY;
-            event.mousePointer.dx = 0;
-            event.mousePointer.dy = 0;
-            window.pointerPositionToReset = false;
-        } else {
-            window.mousePosition.x = event.mousePointer.x;
-            window.mousePosition.y = event.mousePointer.y;
-            window.pointerCurrentlyCentered = false;
-        }
-
-        Basic.array_add(*window.events, event);
+        _window_add_event(window, *event);
 
     case Xcb.KEY_PRESS;
         keyPressEvent := cast(*Xcb.KeyPressEvent) xcbEvent;
@@ -255,9 +216,9 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         keysym := Xkb.state_key_get_one_sym(window.xkbState, keycode);
 
         event : Event;
-        event.kind = Event.Kind.KeyPressed;
+        event.kind = .KeyPressed;
         event.key.which = _keysym_to_key(keysym);
-        Basic.array_add(*window.events, event);
+        _window_add_event(window, *event);
 
         // We have two state machines running: one for dead-key composing
         // and one classical. We use the unicode codepoint of the dead-key composing
@@ -286,12 +247,12 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         // and 127 (DELETE) should be ignored too.
         if (utf32 > 31 && utf32 != 127) {
             event : Event;
-            event.kind = Event.Kind.TextEntered;
+            event.kind = .TextEntered;
             event.text.str.data = *event.text.utf8[0]; // Relative pointer
             event.text.str.count = cast(s8) utf8ByteCount; // @note Count type changes to reduce size, nothing planned to change that in the compiler.
             event.text.utf8 = utf8;
             event.text.utf32 = utf32;
-            Basic.array_add(*window.events, event);
+            _window_add_event(window, *event);
         }
 
     case Xcb.KEY_RELEASE;
@@ -302,9 +263,9 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         keysym := Xkb.state_key_get_one_sym(window.xkbState, keycode);
 
         event : Event;
-        event.kind = Event.Kind.KeyReleased;
+        event.kind = .KeyReleased;
         event.key.which = _keysym_to_key(keysym);
-        Basic.array_add(*window.events, event);
+        _window_add_event(window, *event);
 
     case Xcb.BUTTON_PRESS;
         buttonPressEvent := cast(*Xcb.ButtonPressEvent) xcbEvent;
@@ -313,83 +274,75 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         if buttonPressEvent.detail == 4 ||
            buttonPressEvent.detail == 5 {
             event : Event;
-            event.kind = Event.Kind.MouseWheelScrolled;
+            event.kind = .MouseWheelScrolled;
             if buttonPressEvent.detail == 4 {
                 event.mouseWheel.dy = 1.;
             } else {
                 event.mouseWheel.dy = -1.;
             }
-            Basic.array_add(*window.events, event);
+            _window_add_event(window, *event);
         }
     }
 }
 
 _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     if keysym == {
-    case Xkb.KEY_space; return Key.Space;
-    case Xkb.KEY_a; #through; case Xkb.KEY_A; return Key.A;
-    case Xkb.KEY_b; #through; case Xkb.KEY_B; return Key.B;
-    case Xkb.KEY_c; #through; case Xkb.KEY_C; return Key.C;
-    case Xkb.KEY_d; #through; case Xkb.KEY_D; return Key.D;
-    case Xkb.KEY_e; #through; case Xkb.KEY_E; return Key.E;
-    case Xkb.KEY_f; #through; case Xkb.KEY_F; return Key.F;
-    case Xkb.KEY_g; #through; case Xkb.KEY_G; return Key.G;
-    case Xkb.KEY_h; #through; case Xkb.KEY_H; return Key.H;
-    case Xkb.KEY_i; #through; case Xkb.KEY_I; return Key.I;
-    case Xkb.KEY_j; #through; case Xkb.KEY_J; return Key.J;
-    case Xkb.KEY_k; #through; case Xkb.KEY_K; return Key.K;
-    case Xkb.KEY_l; #through; case Xkb.KEY_L; return Key.L;
-    case Xkb.KEY_m; #through; case Xkb.KEY_M; return Key.M;
-    case Xkb.KEY_n; #through; case Xkb.KEY_N; return Key.N;
-    case Xkb.KEY_o; #through; case Xkb.KEY_O; return Key.O;
-    case Xkb.KEY_p; #through; case Xkb.KEY_P; return Key.P;
-    case Xkb.KEY_q; #through; case Xkb.KEY_Q; return Key.Q;
-    case Xkb.KEY_r; #through; case Xkb.KEY_R; return Key.R;
-    case Xkb.KEY_s; #through; case Xkb.KEY_S; return Key.S;
-    case Xkb.KEY_t; #through; case Xkb.KEY_T; return Key.T;
-    case Xkb.KEY_u; #through; case Xkb.KEY_U; return Key.U;
-    case Xkb.KEY_v; #through; case Xkb.KEY_V; return Key.V;
-    case Xkb.KEY_w; #through; case Xkb.KEY_W; return Key.W;
-    case Xkb.KEY_x; #through; case Xkb.KEY_X; return Key.X;
-    case Xkb.KEY_y; #through; case Xkb.KEY_Y; return Key.Y;
-    case Xkb.KEY_z; #through; case Xkb.KEY_Z; return Key.Z;
-    case Xkb.KEY_BackSpace; return Key.Backspace;
-    case Xkb.KEY_Tab; return Key.Tab;
-    case Xkb.KEY_Escape; return Key.Escape;
-    case Xkb.KEY_F1; return Key.F1;
-    case Xkb.KEY_F2; return Key.F2;
-    case Xkb.KEY_F3; return Key.F3;
-    case Xkb.KEY_F4; return Key.F4;
-    case Xkb.KEY_F5; return Key.F5;
-    case Xkb.KEY_F6; return Key.F6;
-    case Xkb.KEY_F7; return Key.F7;
-    case Xkb.KEY_F8; return Key.F8;
-    case Xkb.KEY_F9; return Key.F9;
-    case Xkb.KEY_F10; return Key.F10;
-    case Xkb.KEY_F11; return Key.F11;
-    case Xkb.KEY_F12; return Key.F12;
-    case Xkb.KEY_Left; return Key.Left;
-    case Xkb.KEY_Up; return Key.Up;
-    case Xkb.KEY_Right; return Key.Right;
-    case Xkb.KEY_Down; return Key.Down;
-    case Xkb.KEY_Shift_L; return Key.ShiftLeft;
-    case Xkb.KEY_Shift_R; return Key.ShiftRight;
-    case Xkb.KEY_Control_L; return Key.ControlLeft;
-    case Xkb.KEY_Control_R; return Key.ControlRight;
-    case Xkb.KEY_Alt_L; return Key.AltLeft;
-    case Xkb.KEY_Alt_R; return Key.AltRight;
-    case Xkb.KEY_Delete; return Key.Delete;
-    case Xkb.KEY_Home; return Key.Home;
-    case Xkb.KEY_End; return Key.End;
+    case Xkb.KEY_space; return .Space;
+    case Xkb.KEY_a; #through; case Xkb.KEY_A; return .A;
+    case Xkb.KEY_b; #through; case Xkb.KEY_B; return .B;
+    case Xkb.KEY_c; #through; case Xkb.KEY_C; return .C;
+    case Xkb.KEY_d; #through; case Xkb.KEY_D; return .D;
+    case Xkb.KEY_e; #through; case Xkb.KEY_E; return .E;
+    case Xkb.KEY_f; #through; case Xkb.KEY_F; return .F;
+    case Xkb.KEY_g; #through; case Xkb.KEY_G; return .G;
+    case Xkb.KEY_h; #through; case Xkb.KEY_H; return .H;
+    case Xkb.KEY_i; #through; case Xkb.KEY_I; return .I;
+    case Xkb.KEY_j; #through; case Xkb.KEY_J; return .J;
+    case Xkb.KEY_k; #through; case Xkb.KEY_K; return .K;
+    case Xkb.KEY_l; #through; case Xkb.KEY_L; return .L;
+    case Xkb.KEY_m; #through; case Xkb.KEY_M; return .M;
+    case Xkb.KEY_n; #through; case Xkb.KEY_N; return .N;
+    case Xkb.KEY_o; #through; case Xkb.KEY_O; return .O;
+    case Xkb.KEY_p; #through; case Xkb.KEY_P; return .P;
+    case Xkb.KEY_q; #through; case Xkb.KEY_Q; return .Q;
+    case Xkb.KEY_r; #through; case Xkb.KEY_R; return .R;
+    case Xkb.KEY_s; #through; case Xkb.KEY_S; return .S;
+    case Xkb.KEY_t; #through; case Xkb.KEY_T; return .T;
+    case Xkb.KEY_u; #through; case Xkb.KEY_U; return .U;
+    case Xkb.KEY_v; #through; case Xkb.KEY_V; return .V;
+    case Xkb.KEY_w; #through; case Xkb.KEY_W; return .W;
+    case Xkb.KEY_x; #through; case Xkb.KEY_X; return .X;
+    case Xkb.KEY_y; #through; case Xkb.KEY_Y; return .Y;
+    case Xkb.KEY_z; #through; case Xkb.KEY_Z; return .Z;
+    case Xkb.KEY_BackSpace; return .Backspace;
+    case Xkb.KEY_Tab; return .Tab;
+    case Xkb.KEY_Escape; return .Escape;
+    case Xkb.KEY_F1; return .F1;
+    case Xkb.KEY_F2; return .F2;
+    case Xkb.KEY_F3; return .F3;
+    case Xkb.KEY_F4; return .F4;
+    case Xkb.KEY_F5; return .F5;
+    case Xkb.KEY_F6; return .F6;
+    case Xkb.KEY_F7; return .F7;
+    case Xkb.KEY_F8; return .F8;
+    case Xkb.KEY_F9; return .F9;
+    case Xkb.KEY_F10; return .F10;
+    case Xkb.KEY_F11; return .F11;
+    case Xkb.KEY_F12; return .F12;
+    case Xkb.KEY_Left; return .Left;
+    case Xkb.KEY_Up; return .Up;
+    case Xkb.KEY_Right; return .Right;
+    case Xkb.KEY_Down; return .Down;
+    case Xkb.KEY_Shift_L; return .ShiftLeft;
+    case Xkb.KEY_Shift_R; return .ShiftRight;
+    case Xkb.KEY_Control_L; return .ControlLeft;
+    case Xkb.KEY_Control_R; return .ControlRight;
+    case Xkb.KEY_Alt_L; return .AltLeft;
+    case Xkb.KEY_Alt_R; return .AltRight;
+    case Xkb.KEY_Delete; return .Delete;
+    case Xkb.KEY_Home; return .Home;
+    case Xkb.KEY_End; return .End;
     }
 
-    return Key.Unknown;
-}
-
-_ignore_pointer_move :: (window : *Window, ignore := true) {
-    eventMasks : = EVENT_MASKS;
-    if ignore {
-        eventMasks ^= cast(u32) Xcb.EventMask.PointerMotion;
-    }
-    Xcb.change_window_attributes(window.xcbConnection, window.xcbId, cast(u32) Xcb.Cw.EventMask, *eventMasks);
+    return .Unknown;
 }

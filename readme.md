@@ -23,19 +23,19 @@ The core principles of **lava** are:
 
 ## Current status
 
-- [40%] **Crater** (windowing system)
+- [90%] **Crater** (windowing system)
     - Linux support OK using generated Xcb/Xkb bindings.
-    - Windows support using DWM not started.
+    - Windows support OK using DWM.
     - Missing fullscreen option.
-- [70%] **Magma** (real-time 3D engine)
-    - Linux support OK using Vulkan.
-    - Using Vulkan for all platforms is the goal, but currently untested.
+- [80%] **Magma** (real-time 3D engine)
+    - Linux and Windows support OK using Vulkan.
 - [0%] **Dike** (physics engine)
     - Port not started. Goal is to use Bullet as BE for all platforms.
 - [0%] **Flow** (sound engine)
     - Port not started.
-- [40%] **Sill** (game engine - Jai API)
-    - Basic support for now.
+- [60%] **Sill** (game engine - Jai API)
+    - Entities creation through meta programmation.
+    - Multiple components.
 - [0%] **Caldera** (game engine - drag&drop editor)
     - Not started.
 

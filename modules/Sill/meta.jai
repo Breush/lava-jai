@@ -24,7 +24,7 @@
  * and all their components too.
  */
 
-#load "helpers/string-utilities.jai";
+#load "../Chamber/string-utilities.jai";
 
 sill_meta_handle_message :: (message : *Compiler.Message) {
     if message.kind == .TYPECHECKED {

@@ -239,6 +239,8 @@ _init_instance :: (engine : *Engine) -> bool {
         Basic.array_add(*enabledExtensions, Vk.KHR_SURFACE_EXTENSION_NAME);
         #if OS == .LINUX {
             Basic.array_add(*enabledExtensions, Vk.KHR_XCB_SURFACE_EXTENSION_NAME);
+        } else #if OS == .WINDOWS {
+            Basic.array_add(*enabledExtensions, Vk.KHR_WIN32_SURFACE_EXTENSION_NAME);
         }
     }
 
@@ -334,7 +336,7 @@ _init_physical_device :: (engine : *Engine) -> bool {
                 break;
             }
         } else {
-            score := _physical_device_score(engine, physicalDevice);
+            score := _physical_device_score(engine, physicalDevice, cast(u8) physicalDeviceIndex);
             if score > bestPhysicalDeviceScore {
                 bestPhysicalDeviceIndex = physicalDeviceIndex;
                 bestPhysicalDeviceScore = score;
@@ -650,7 +652,7 @@ _debug_message_callback :: (
     return Vk.FALSE;
 }
 
-_physical_device_score :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice) -> s64 {
+_physical_device_score :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice, physicalDeviceIndex : u8) -> s64 {
     features : Vk.PhysicalDeviceFeatures2;
     features.sType = .PhysicalDeviceFeatures2;
 
@@ -671,16 +673,19 @@ _physical_device_score :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice)
 
     if engine.options.features & .RayTracing {
         if !accelerationStructureFeatures.accelerationStructure {
+            Basic.log("Physical device #% does not support acceleration structures (ray-tracing requirement).", physicalDeviceIndex, flags = .WARNING);
             return 0;
         }
 
         if !features.features.shaderInt16 || !features.features.shaderInt64 {
+            Basic.log("Physical device #% does not support both shader int16 and int64 (ray-tracing requirement).", physicalDeviceIndex, flags = .WARNING);
             return 0;
         }
     }
 
     // Checking that timeline semaphores are supported.
     if !timelineSemaphoreFeatures.timelineSemaphore {
+        Basic.log("Physical device #% does not support timeline semaphores.", physicalDeviceIndex, flags = .WARNING);
         return 0;
     }
 

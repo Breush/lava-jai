@@ -1,7 +1,7 @@
-Chamber :: #import "Chamber";
-
 #if OS == .LINUX {
     #load "xcb.jai";
+} else #if OS == .WINDOWS {
+    #load "dwm.jai";
 }
 
 Window :: struct {
@@ -13,6 +13,13 @@ Window :: struct {
 
     pointerAutoCentered := false;
     pointerHidden := false;
+
+    using details : struct {
+        // To prevent big deltas when moving the mouse the first time.
+        pointerPositionToReset : bool;
+        pointerCurrentlyCentered : bool;
+        pointerLastKnownPosition : Chamber.svec2;
+    };
 
     using impl : WindowImpl;
 
@@ -103,6 +110,7 @@ window_init :: (window : *Window, videoMode : VideoMode, title : string) -> bool
     window.videoMode = videoMode;
     window.title = title;
     window.opened = impl_window_init(window);
+    window.pointerPositionToReset = true;
     return window.opened;
 }
 
@@ -143,6 +151,10 @@ window_poll_event :: (window : *Window) -> Event {
 
     if window.events.count == 0 {
         impl_window_process_events(window);
+        if window.pointerAutoCentered && !window.pointerCurrentlyCentered {
+            _center_pointer(window);
+        }
+
         if window.events.count == 0 {
             return event;
         }
@@ -158,12 +170,78 @@ window_close :: (window : *Window) {
     impl_window_close(window);
 }
 
+// During auto-centering, the only mouse position you can get is the
+// center of the window. Only the (dx,dy) events are interesting.
 window_pointer_auto_centered :: (window : *Window, autoCentered := true) {
     window.pointerAutoCentered = autoCentered;
-    impl_window_update_pointer_auto_centered(window);
+    window.pointerCurrentlyCentered = false;
+    window.mousePosition.x = window.videoMode.width / 2;
+    window.mousePosition.y = window.videoMode.height / 2;
 }
 
 window_pointer_hidden :: (window : *Window, hidden := true) {
     window.pointerHidden = hidden;
     impl_window_update_pointer_hidden(window);
 }
+
+#scope_module
+
+_window_add_event :: (window : *Window, event : *Event) {
+    if event.kind == .WindowSizeChanged {
+        if window.videoMode.width == event.windowSize.width &&
+           window.videoMode.height == event.windowSize.height {
+           return;
+        }
+
+        window.videoMode.width = event.windowSize.width;
+        window.videoMode.height = event.windowSize.height;
+    } else if event.kind == .MousePointerMoved {
+        // @note We do not emit an event when the mouse is meant to be centered.
+        // We just flag it might not be at the right position.
+        // And it's window_center_pointer that does the job of emitting one event per frame if necessary.
+        if window.pointerAutoCentered {
+            window.pointerLastKnownPosition.x = event.mousePointer.x;
+            window.pointerLastKnownPosition.y = event.mousePointer.y;
+            // This way, centering events won't flag this back to not centered.
+            window.pointerCurrentlyCentered = window.mousePosition.x == event.mousePointer.x &&
+                                              window.mousePosition.y == event.mousePointer.y;
+            return;
+        }
+
+        if (window.pointerPositionToReset) {
+            event.mousePointer.dx = event.mousePointer.x - cast(s16) window.mousePosition.x;
+            event.mousePointer.dy = event.mousePointer.y - cast(s16) window.mousePosition.y;
+        } else {
+            window.pointerPositionToReset = false;
+        }
+
+        window.mousePosition.x = event.mousePointer.x;
+        window.mousePosition.y = event.mousePointer.y;
+    }
+
+    Basic.array_add(*window.events, <<event);
+}
+
+_center_pointer :: (window : *Window) {
+    impl_window_center_pointer(window);
+    window.pointerCurrentlyCentered = true;
+
+    // Emit an event, (x,y) centered and (dx,dy) the movement.
+    event : Event;
+    event.kind = .MousePointerMoved;
+    event.mousePointer.x = cast(s16) window.mousePosition.x;
+    event.mousePointer.y = cast(s16) window.mousePosition.y;
+    if !window.pointerPositionToReset {
+        event.mousePointer.dx = cast(s16) (window.pointerLastKnownPosition.x - window.mousePosition.x);
+        event.mousePointer.dy = cast(s16) (window.pointerLastKnownPosition.y - window.mousePosition.y);
+    } else {
+        window.pointerPositionToReset = false;
+    }
+
+    Basic.array_add(*window.events, event);
+}
+
+Basic :: #import "Basic";
+Chamber :: #import "Chamber";
+
+_CHECK :: Chamber._CHECK;

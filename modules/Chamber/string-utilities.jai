@@ -123,6 +123,37 @@ append_as_pascal_case :: (builder : *Basic.String_Builder, word : string) {
     append_as_lower_case(builder, restOfWord);
 }
 
+// @note We don't have that, not creating a string on the fly in the Unicode module.
+// So this has been largely stolen.
+utf32_to_utf8 :: (codepoint : u32, data : []u8) -> byteCount : s8 {
+    UNI_MAX_LEGAL_UTF32 :: 0x0010FFFF;
+    UNI_REPLACEMENT_CHAR :: 0x0000FFFD;
+    FIRST_BYTE_MASK : [7] u8 : .[ 0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC ];
+
+    ch := codepoint;
+    byteCount : s8;
+    if ch < 0x80                        byteCount = 1;
+    else if ch < 0x800                  byteCount = 2;
+    else if ch < 0x10000                byteCount = 3;
+    else if ch <= UNI_MAX_LEGAL_UTF32   byteCount = 4;
+    else {
+        byteCount = 3;
+        ch = UNI_REPLACEMENT_CHAR;
+    }
+
+    byteMask :: 0xBF;
+    byteMark :: 0x80;
+
+    if byteCount == {
+        case 4; data[3] = cast(u8) ((ch | byteMark) & byteMask); ch = ch >> 6; #through;
+        case 3; data[2] = cast(u8) ((ch | byteMark) & byteMask); ch = ch >> 6; #through;
+        case 2; data[1] = cast(u8) ((ch | byteMark) & byteMask); ch = ch >> 6; #through;
+        case 1; data[0] = cast(u8)  (ch | FIRST_BYTE_MASK[byteCount]);
+    }
+
+    return byteCount;
+}
+
 #scope_file
 
 Basic :: #import "Basic";
