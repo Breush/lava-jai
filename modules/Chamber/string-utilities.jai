@@ -154,6 +154,69 @@ utf32_to_utf8 :: (codepoint : u32, data : []u8) -> byteCount : s8 {
     return byteCount;
 }
 
+utf8_word_length_after_byte :: (s : string, byteIndex : u32) -> u8 {
+    return 1 + Unicode.trailingBytesForUTF8[s[byteIndex]];
+}
+
+utf8_word_length_before_byte :: (s : string, byteIndex : u32) -> u8 {
+    index := byteIndex - 1;
+    while index >= 0 {
+        // If a byte starts with 10xxxxxx, we're in the middle of a UTF8 word.
+        if s[index] & 0b1100_0000 == 0b1000_0000 {
+            index -= 1;
+        } else {
+            break;
+        }
+    }
+    return cast(u8) (byteIndex - index);
+}
+
+delete_after_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
+    if s.count == 0 then return 0;
+    if byteIndex >= s.count then return 0;
+
+    deletedBytes := utf8_word_length_after_byte(<<s, byteIndex);
+
+    // @fixme Be way more clever than a reallocation...
+    s1 := <<s;
+    s1.count = byteIndex;
+
+    s2 := <<s;
+    Basic.advance(*s2, byteIndex + deletedBytes);
+
+    (<<s) = Basic.sprint("%1%2", s1, s2);
+    return deletedBytes;
+}
+
+delete_before_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
+    if s.count == 0 then return 0;
+    if byteIndex == 0 || byteIndex > s.count then return 0;
+
+    deletedBytes := utf8_word_length_before_byte(<<s, byteIndex);
+
+    // @fixme Be way more clever than a reallocation...
+    s1 := <<s;
+    s1.count = byteIndex - deletedBytes;
+
+    s2 := <<s;
+    Basic.advance(*s2, byteIndex);
+
+    (<<s) = Basic.sprint("%1%2", s1, s2);
+    return deletedBytes;
+}
+
+insert_after_byte :: (s : *string, byteIndex : u32, c : string) {
+    // @fixme Be way more clever than a reallocation...
+    s1 := <<s;
+    s1.count = byteIndex;
+
+    s2 := <<s;
+    Basic.advance(*s2, byteIndex);
+
+    (<<s) = Basic.sprint("%1%2%3", s1, c, s2);
+}
+
 #scope_file
 
 Basic :: #import "Basic";
+Unicode :: #import "Unicode";

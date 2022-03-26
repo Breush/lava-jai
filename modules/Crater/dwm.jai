@@ -122,6 +122,26 @@ _on_message :: (hWnd : Windows.HWND, msg : u32, wParam : Windows.WPARAM, lParam 
             event.mousePointer.y = cast(s16) ((lParam >> 16) & 0xFFFF);
             _window_add_event(window, *event);
 
+        case Windows.WM_LBUTTONDOWN; #through;
+        case Windows.WM_MBUTTONDOWN; #through;
+        case Windows.WM_RBUTTONDOWN; #through;
+            event : Event;
+            event.kind = .MouseButtonPressed;
+            if msg == Windows.WM_LBUTTONUP then event.mouseButton.which = .Left;
+            else if msg == Windows.WM_MBUTTONUP then event.mouseButton.which = .Middle;
+            else if msg == Windows.WM_RBUTTONUP then event.mouseButton.which = .Right;
+            _window_add_event(window, *event);
+
+        case Windows.WM_LBUTTONUP; #through;
+        case Windows.WM_MBUTTONUP; #through;
+        case Windows.WM_RBUTTONUP; #through;
+            event : Event;
+            event.kind = .MouseButtonReleased;
+            if msg == Windows.WM_LBUTTONUP then event.mouseButton.which = .Left;
+            else if msg == Windows.WM_MBUTTONUP then event.mouseButton.which = .Middle;
+            else if msg == Windows.WM_RBUTTONUP then event.mouseButton.which = .Right;
+            _window_add_event(window, *event);
+
         case Windows.WM_MOUSEWHEEL;
             WHEEL_DELTA :: 120;
 

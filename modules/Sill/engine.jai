@@ -172,8 +172,9 @@ _engine_handle_input_events :: (engine : *EngineBase) {
             return;
         }
 
-        _ui_handle_event(*engine.ui, event);
-        _input_handle_event(*engine.input, event);
+        stopPropagation := false;
+        _ui_handle_event(*engine.ui, event, *stopPropagation);
+        if !stopPropagation then _input_handle_event(*engine.input, event);
 
         event = Crater.window_poll_event(engine.window);
     }
