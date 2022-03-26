@@ -76,8 +76,8 @@ trs :: struct {
 }
 
 make_matrix :: (transform : trs, $T := mat3x4) -> T {
-    matrix : T;
-    tmpMatrix := make_rotation_matrix3(transform.rotation);
+    matrix : T = ---;
+    tmpMatrix := rotation_matrix(mat3, transform.rotation);
     tmpMatrix *= make_scaling_mat3(transform.scaling);
 
     copy(*matrix, tmpMatrix);
@@ -122,8 +122,8 @@ trf :: struct {
 }
 
 make_matrix :: (transform : trf, $T := mat3x4) -> T {
-    matrix : T;
-    tmpMatrix := make_rotation_matrix3(transform.rotation);
+    matrix : T = ---;
+    tmpMatrix := rotation_matrix(mat3, transform.rotation);
     tmpMatrix *= make_scaling_mat3(transform.factor);
 
     copy(*matrix, tmpMatrix);
@@ -171,8 +171,7 @@ to_radians :: (degrees : float32) -> float32 {
 }
 
 make_scaling_mat3 :: (scaling : vec3) -> mat3 {
-    matrix : mat3 = ---;
-    matrix = inline matrix3_identity();
+    matrix : mat3 = Matrix3_Identity;
     matrix.coef[0][0] = scaling.x;
     matrix.coef[1][1] = scaling.y;
     matrix.coef[2][2] = scaling.z;
@@ -180,8 +179,7 @@ make_scaling_mat3 :: (scaling : vec3) -> mat3 {
 }
 
 make_scaling_mat3 :: (factor : float32) -> mat3 {
-    matrix : mat3 = ---;
-    matrix = inline matrix3_identity();
+    matrix : mat3 = Matrix3_Identity;
     matrix.coef[0][0] = factor;
     matrix.coef[1][1] = factor;
     matrix.coef[2][2] = factor;

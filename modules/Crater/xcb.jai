@@ -19,6 +19,9 @@ WindowImpl :: struct {
     xkbState : *Xkb.State;
     xkbComposeTable : *Xkb.ComposeTable;
     xkbComposeState : *Xkb.ComposeState;
+
+    // To prevent extra key inputs when focusing the window the first time.
+    keyPressedAtLeastOnce : bool;
 }
 
 EVENT_MASKS :: cast(u32) (Xcb.EventMask.PointerMotion |
@@ -28,7 +31,6 @@ EVENT_MASKS :: cast(u32) (Xcb.EventMask.PointerMotion |
 
 impl_window_init :: (window : *Window) -> bool {
     if !setup_xcb(window) then return false;
-    if !setup_xkb(window) then return false;
 
     // Creating window indeed
     window.xcbId = Xcb.generate_id(window.xcbConnection);
@@ -163,13 +165,13 @@ setup_xkb :: (window : *Window) -> bool {
     }
 
     // Compose
-    window.xkbComposeTable = Xkb.compose_table_new_from_locale(window.xkbContext, Posix.getenv("LANG"), Xkb.ComposeCompileFlags.No);
+    window.xkbComposeTable = Xkb.compose_table_new_from_locale(window.xkbContext, Posix.getenv("LANG"), .No);
     if window.xkbComposeTable == null {
         context.logger("Could not setup XKB compose table (wrong LANG environment variable?).\n", null, .{common_flags=Log_Flags.ERROR});
         return false;
     }
 
-    window.xkbComposeState = Xkb.compose_state_new(window.xkbComposeTable, Xkb.ComposeStateFlags.No);
+    window.xkbComposeState = Xkb.compose_state_new(window.xkbComposeTable, .No);
     if window.xkbComposeState == null {
         context.logger("Could not setup XKB compose state (wrong LANG environment variable?).\n", null, .{common_flags=Log_Flags.ERROR});
         return false;
@@ -211,6 +213,11 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
     case Xcb.KEY_PRESS;
         keyPressEvent := cast(*Xcb.KeyPressEvent) xcbEvent;
 
+        if !window.keyPressedAtLeastOnce {
+            window.keyPressedAtLeastOnce = true;
+            setup_xkb(window);
+        }
+
         keycode := keyPressEvent.detail;
         Xkb.state_update_key(window.xkbState, keycode, Xkb.KeyDirection.KeyDown);
         keysym := Xkb.state_key_get_one_sym(window.xkbState, keycode);
@@ -228,14 +235,15 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         utf32 : u32;
         composeFeedResult := Xkb.compose_state_feed(window.xkbComposeState, keysym);
         composeStateStatus := Xkb.compose_state_get_status(window.xkbComposeState);
-        if composeFeedResult == Xkb.ComposeFeedResult.Accepted && composeStateStatus == Xkb.ComposeStatus.Composed {
+        if composeFeedResult == .Accepted && composeStateStatus == .Composed {
             utf8ByteCount = cast(u32) Xkb.compose_state_get_utf8(window.xkbComposeState, *utf8[0], 4);
             utf32 = Unicode.character_utf8_to_utf32(*utf8[0], utf8ByteCount);
         }
-        else if composeStateStatus == Xkb.ComposeStatus.Nothing {
+        else if composeStateStatus == .Nothing {
             utf8ByteCount = cast(u32) Xkb.state_key_get_utf8(window.xkbState, keycode, *utf8[0], 4);
             utf32 = Unicode.character_utf8_to_utf32(*utf8[0], 4);
         }
+
         // Else:
         // 1) XKB_COMPOSE_CANCELLED
         // Example: typing <dead_acute> <b> cancels the composition,
@@ -258,6 +266,12 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
     case Xcb.KEY_RELEASE;
         keyReleaseEvent := cast(*Xcb.KeyReleaseEvent) xcbEvent;
 
+        // Ignore released keys as long as no key has been pressed.
+        // This is to prevent wrong Xkb state while launching the program with a key pressed.
+        if !window.keyPressedAtLeastOnce {
+            return;
+        }
+
         keycode := keyReleaseEvent.detail;
         Xkb.state_update_key(window.xkbState, keycode, Xkb.KeyDirection.KeyUp);
         keysym := Xkb.state_key_get_one_sym(window.xkbState, keycode);
@@ -270,9 +284,17 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
     case Xcb.BUTTON_PRESS;
         buttonPressEvent := cast(*Xcb.ButtonPressEvent) xcbEvent;
 
+        // Classic buttons
+        if buttonPressEvent.detail <= 3 {
+            event : Event;
+            event.kind = .MouseButtonPressed;
+            if buttonPressEvent.detail == 1 then event.mouseButton.which = .Left;
+            else if buttonPressEvent.detail == 2 then event.mouseButton.which = .Middle;
+            else if buttonPressEvent.detail == 3 then event.mouseButton.which = .Right;
+            _window_add_event(window, *event);
+        }
         // Vertical mouse wheel buttons
-        if buttonPressEvent.detail == 4 ||
-           buttonPressEvent.detail == 5 {
+        else if buttonPressEvent.detail <= 5 {
             event : Event;
             event.kind = .MouseWheelScrolled;
             if buttonPressEvent.detail == 4 {
@@ -280,6 +302,19 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
             } else {
                 event.mouseWheel.dy = -1.;
             }
+            _window_add_event(window, *event);
+        }
+
+    case Xcb.BUTTON_RELEASE;
+        buttonReleaseEvent := cast(*Xcb.ButtonReleaseEvent) xcbEvent;
+
+        // Classic buttons
+        if buttonReleaseEvent.detail <= 3 {
+            event : Event;
+            event.kind = .MouseButtonReleased;
+            if buttonReleaseEvent.detail == 1 then event.mouseButton.which = .Left;
+            else if buttonReleaseEvent.detail == 2 then event.mouseButton.which = .Middle;
+            else if buttonReleaseEvent.detail == 3 then event.mouseButton.which = .Right;
             _window_add_event(window, *event);
         }
     }

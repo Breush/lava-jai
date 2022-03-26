@@ -1,12 +1,13 @@
 Font :: struct {
     infos : [..]Info;
+    size : float;
 
     // Image-related
     extent : uvec2;
     pixels : [..]u8;
     nextGlyphStartPosition : u32 = 1;
 
-    glyphInfos : Hash.Table(CodePoint, GlyphInfo);
+    glyphInfos : Hash.Table(Codepoint, GlyphInfo);
 
     Info :: struct {
         stb : StbTrueType.Fontinfo;
@@ -20,7 +21,7 @@ Font :: struct {
     MAX_GLYPH_COUNT :: 32; // @todo Why? Better make a new pixel array if no more space.
 }
 
-CodePoint :: u32;
+Codepoint :: u32;
 
 GlyphInfo :: struct {
     blank := true;
@@ -35,11 +36,13 @@ GlyphInfo :: struct {
     advance : float;
 
     fontInfo : *Font.Info;
+    codepoint : Codepoint;
     index : s32;
 }
 
 font_load :: (filenames : []string, size : float) -> Font {
     font : Font;
+    font.size = size;
 
     for filename : filenames {
         Basic.array_add(*font.infos, .{});
@@ -84,15 +87,15 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
 
     s := str;
     while s.count != 0 {
-        codePoint := Unicode.character_utf8_to_utf32(s.data, s.count);
+        codepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
         Unicode.utf8_next_character(*s);
-        nextCodePoint := Unicode.character_utf8_to_utf32(s.data, s.count);
+        nextCodepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
 
-        glyphInfo := <<font_glyph_info(font, codePoint);
+        glyphInfo := <<font_glyph_info(font, codepoint);
 
         if glyphInfo.fontInfo != null {
             glyphInfo.offset.x += advance;
-            kernAdvance := StbTrueType.get_codepoint_kern_advance(*glyphInfo.fontInfo.stb, cast,no_check(s32) codePoint, cast,no_check(s32) nextCodePoint);
+            kernAdvance := StbTrueType.get_codepoint_kern_advance(*glyphInfo.fontInfo.stb, cast,no_check(s32) codepoint, cast,no_check(s32) nextCodepoint);
             advance += (glyphInfo.advance + kernAdvance * glyphInfo.fontInfo.glyphScale);
 
             // @todo This pseudo-subpixel clean on option?
@@ -106,12 +109,13 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
     return glyphInfos;
 }
 
-font_glyph_info :: (font : *Font, codePoint : CodePoint) -> *GlyphInfo {
-    glyphInfo := Hash.table_find_pointer(font.glyphInfos, codePoint);
+font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo {
+    glyphInfo := Hash.table_find_pointer(font.glyphInfos, codepoint);
     if glyphInfo != null then return glyphInfo;
 
-    glyphInfo = Hash.table_add(*font.glyphInfos, codePoint, .{});
-    glyphInfo.fontInfo, glyphInfo.index = _find_glyph_index(font, codePoint);
+    glyphInfo = Hash.table_add(*font.glyphInfos, codepoint, .{});
+    glyphInfo.codepoint = codepoint;
+    glyphInfo.fontInfo, glyphInfo.index = _find_glyph_index(font, codepoint);
     if glyphInfo.index == 0 then return glyphInfo; // Glyph does not exist in any font.
 
     // Basic glyph advance
@@ -125,13 +129,14 @@ font_glyph_info :: (font : *Font, codePoint : CodePoint) -> *GlyphInfo {
     // Glyph is blank
     width := x1 - x0;
     height := y1 - y0;
-    if width == 0 || height == 0 return glyphInfo;
 
-    glyphInfo.blank = false;
+    glyphInfo.blank = (width == 0 || height == 0);
     glyphInfo.extent.width = cast(float) width;
     glyphInfo.extent.height = cast(float) height;
     glyphInfo.offset.x = cast(float) x0;
     glyphInfo.offset.y = cast(float) (glyphInfo.fontInfo.glyphAscent * glyphInfo.fontInfo.glyphScale + y0);
+
+    if glyphInfo.blank return glyphInfo;
 
     // Draw the bitmap to the pixels
     glyphStartPosition := cast(s32) font.nextGlyphStartPosition;
@@ -157,9 +162,9 @@ Hash :: #import "Hash_Table";
 Unicode :: #import "Unicode";
 StbTrueType :: #import "StbTrueType";
 
-_find_glyph_index :: (font : *Font, codePoint : CodePoint) -> (*Font.Info, s32) {
+_find_glyph_index :: (font : *Font, codepoint : Codepoint) -> (*Font.Info, s32) {
     for *fontInfo : font.infos {
-        index := StbTrueType.find_glyph_index(*fontInfo.stb, cast,no_check(s32) codePoint);
+        index := StbTrueType.find_glyph_index(*fontInfo.stb, cast,no_check(s32) codepoint);
         if index != 0 then return fontInfo, index;
     }
     return null, 0;

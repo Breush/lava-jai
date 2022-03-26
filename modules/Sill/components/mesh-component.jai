@@ -39,13 +39,7 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
 
 component_update :: (iMesh : *MeshComponent, dt : float64) {
     if iMesh._nodesTransformsDirty {
-        iMesh._nodesTransformsDirty = false;
-        matrix := Chamber.make_matrix(iMesh.transform.worldTransform);
-        for *node : iMesh.nodes {
-            if node.parent == -1 {
-                _update_node_transforms(iMesh.nodes, node, matrix);
-            }
-        }
+        mesh_commit_nodes(iMesh, instantly = true);
     }
 }
 
@@ -58,8 +52,17 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
     }
 }
 
-mesh_commit_nodes :: (iMesh : *MeshComponent) {
-    iMesh._nodesTransformsDirty = true;
+mesh_commit_nodes :: (iMesh : *MeshComponent, instantly := false) {
+    iMesh._nodesTransformsDirty = !instantly;
+
+    if instantly {
+        matrix := Chamber.make_matrix(iMesh.transform.worldTransform);
+        for *node : iMesh.nodes {
+            if node.parent == -1 {
+                _update_node_transforms(iMesh.nodes, node, matrix);
+            }
+        }
+    }
 }
 
 mesh_make_plane :: (iMesh : *MeshComponent,
