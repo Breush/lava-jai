@@ -17,11 +17,17 @@ Entity :: struct {
     engine : *EngineBase;
 
     name : string;
+    children : [..]*Entity;
+    type : Type;
 }
 
 // A component base, to be added to an entity.
 Component :: struct {
     entity : *Entity;
+}
+
+destroy_entity :: (entity : *Entity) {
+    Basic.array_add(*entity.engine.pendingDestroyedEntities, entity);
 }
 
 #scope_module

@@ -21,7 +21,7 @@ create_scene :: (engine : *Engine) -> *Scene {
 destroy_scene :: (scene : *Scene, destroyResources : bool) {
     if destroyResources {
         for mesh : scene.meshes {
-            destroy_mesh(mesh);
+            destroy_mesh(mesh, unregister = false);
         }
         for renderer : scene.renderers {
             destroy_renderer(renderer, destroyResources);
@@ -54,6 +54,10 @@ scene_cleanup :: (scene : *Scene, resetMemory := true) {
 
 scene_register :: (scene : *Scene, mesh : *Mesh) {
     Basic.array_add(*scene.meshes, mesh);
+}
+
+scene_unregister :: (scene : *Scene, mesh : *Mesh) {
+    Basic.array_unordered_remove_by_value(*scene.meshes, mesh, stop_after_first = true);
 }
 
 scene_register :: (scene : *Scene, renderer : *Renderer) {

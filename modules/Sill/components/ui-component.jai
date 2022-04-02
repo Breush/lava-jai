@@ -47,6 +47,9 @@ component_init :: (iUi : *UiComponent) {
 }
 
 component_cleanup :: (iUi : *UiComponent) {
+    ui_unregister_component(*iUi.entity.engine.ui, iUi);
+    Basic.array_reset(*iUi.updateCallbacks);
+    Basic.array_reset(*iUi.triggerCallbacks);
 }
 
 component_update :: (iUi : *UiComponent, dt : float64) {

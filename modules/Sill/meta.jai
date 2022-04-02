@@ -302,6 +302,10 @@ _generate :: (workspace : s64) {
     // Building functions string
     Basic.reset(*builder);
 
+    Basic.append(*builder, "\n    destroy_entity :: (entity : *Sill.Entity) {\n");
+    Basic.append(*builder, "        if entity.type == EntryEntity then entity_cleanup(cast(*EntryEntity) entity);\n");
+    Basic.append(*builder, "    }\n");
+
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
@@ -315,6 +319,7 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
         Basic.append(*builder, "        entity.engine = engine;\n");
+        Basic.print_to_builder(*builder, "        entity.type = %;\n", metaEntity.structName);
         for component : metaEntity.structMembers {
             if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component.id);

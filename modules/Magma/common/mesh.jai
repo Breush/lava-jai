@@ -49,8 +49,12 @@ create_mesh :: (scene : *Scene) -> *Mesh {
     return mesh;
 }
 
-destroy_mesh :: (mesh : *Mesh) {
+destroy_mesh :: (mesh : *Mesh, unregister := true) {
     mesh_cleanup(mesh, resetMemory = false);
+
+    if unregister {
+        scene_unregister(mesh.scene, mesh);
+    }
 
     if mesh.allocator.proc != null {
         Basic.free(mesh, mesh.allocator);
