@@ -21,9 +21,10 @@ UiComponent :: struct {
     CallbackFlags :: enum_flags {
         Hover;
         NoHover;
-        Click;      // Trigger only.
-        NoClick;    // Trigger only.
-        Key;        // Trigger only.
+        Child;
+        Click;      // Trigger only. Why trigger only?
+        NoClick;    // Trigger only. Why trigger only?
+        Key;        // Trigger only. Why trigger only?
         Text;       // Trigger only.
     }
 
@@ -53,6 +54,13 @@ component_cleanup :: (iUi : *UiComponent) {
 }
 
 component_update :: (iUi : *UiComponent, dt : float64) {
+    if iUi.entity.childrenChanged {
+        for callback : iUi.updateCallbacks {
+            if callback.flags & .Child {
+                callback.function(.Child, callback.userData);
+            }
+        }
+    }
 }
 
 ui_on_update :: (iUi : *UiComponent, function : UiComponent.UpdateCallbackType, flags : UiComponent.CallbackFlags = 0xFF, userData : *void = null) {
@@ -118,6 +126,7 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crate
                relativePosition.y >= -iUi.extent.y / 2.0 &&
                relativePosition.y <=  iUi.extent.y / 2.0;
 
+    // @fixme That's getting messy... We're triggering unhovered above.
     if iUi.hovered != hovered {
         iUi.hovered = hovered;
         flags := ifx hovered then UiComponent.CallbackFlags.Hover else .NoHover;

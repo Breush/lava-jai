@@ -302,8 +302,12 @@ _generate :: (workspace : s64) {
     // Building functions string
     Basic.reset(*builder);
 
-    Basic.append(*builder, "\n    destroy_entity :: (entity : *Sill.Entity) {\n");
-    Basic.append(*builder, "        if entity.type == EntryEntity then entity_cleanup(cast(*EntryEntity) entity);\n");
+    Basic.append(*builder, "\n    _destroy_entity :: (entity : *Sill.Entity) {\n");
+    Basic.append(*builder, "        if entity.type == {\n");
+    for metaEntity : metaEntityList {
+        Basic.print_to_builder(*builder, "            case %; entity_cleanup(cast(*%) entity);\n", metaEntity.structName, metaEntity.structName);
+    }
+    Basic.append(*builder, "        }\n");
     Basic.append(*builder, "    }\n");
 
     for metaEntity : metaEntityList {
@@ -331,6 +335,7 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "    }\n");
     }
 
+    // @fixme Not freeing from the bucket array!
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
         for component : metaEntity.structMembers {
@@ -362,6 +367,7 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
+        Basic.append(*builder, "            entity.childrenChanged = false;\n");
         Basic.append(*builder, "        }\n");
     }
     Basic.append(*builder, "    }\n");

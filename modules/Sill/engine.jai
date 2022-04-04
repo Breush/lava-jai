@@ -172,7 +172,7 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
         engine.pendingDestroyedEntities.count = 0;
 
         for entity : pendingDestroyedEntities {
-            engine.Meta.destroy_entity(entity);
+            engine.Meta._destroy_entity(entity);
         }
     }
 }

@@ -16,9 +16,11 @@
 Entity :: struct {
     engine : *EngineBase;
 
-    name : string;
-    children : [..]*Entity;
     type : Type;
+    name : string;
+    children : [..]*Entity; // Do not add directly, use entity_add_child.
+
+    childrenChanged : bool;
 }
 
 // A component base, to be added to an entity.
@@ -26,8 +28,21 @@ Component :: struct {
     entity : *Entity;
 }
 
-destroy_entity :: (entity : *Entity) {
+destroy_entity :: (entity : *Entity, destroyChildren := false, warnParent := true) {
     Basic.array_add(*entity.engine.pendingDestroyedEntities, entity);
+    if destroyChildren {
+        for child : entity.children {
+            destroy_entity(child, destroyChildren = true, warnParent = false);
+        }
+    }
+    if warnParent {
+        // @todo Not implemented yet. Should remove the child from the parent's children array.
+    }
+}
+
+entity_add_child :: (entity : *Entity, child : *Entity) {
+    Basic.array_add(*entity.children, child);
+    entity.childrenChanged = true;
 }
 
 #scope_module

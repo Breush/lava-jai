@@ -28,25 +28,37 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         // @note Will update all hovered components,
         // setting false to no-more hovered and keeping true
         // if already hovered.
-        ui.hoveredUiComponents.count = 0; // @fixme Not warning them about being NoHover, this can be an issue, because we break.
+        oldHoveredUiComponents : [..]*UiComponent;
+        oldHoveredUiComponents.allocator = Basic.temp;
+        Basic.array_copy(*oldHoveredUiComponents, ui.hoveredUiComponents);
+
+        ui.hoveredUiComponents.count = 0;
         for uiComponent : ui.uiComponents {
             if ui_check_hovered(uiComponent, ui.mousePointerPosition, event, stopPropagation) {
+                Chamber.debug("Hover ", uiComponent);
                 Basic.array_add(*ui.hoveredUiComponents, uiComponent);
             }
             if <<stopPropagation then break;
         }
+
+        for oldHoveredUiComponent : oldHoveredUiComponents {
+            if !Basic.array_find(ui.hoveredUiComponents, oldHoveredUiComponent) {
+                Chamber.debug("No hover ", oldHoveredUiComponent);
+                ui_trigger(oldHoveredUiComponent, .NoHover, event, stopPropagation);
+            }
+        }
     } else if event.kind == .MouseButtonPressed {
         ui.focusedUiComponent = null;
         for hoveredUiComponent : ui.hoveredUiComponents {
-            ui_trigger(hoveredUiComponent, UiComponent.CallbackFlags.Click, event, stopPropagation);
+            ui_trigger(hoveredUiComponent, .Click, event, stopPropagation);
         }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
-            ui_trigger(ui.focusedUiComponent, UiComponent.CallbackFlags.Text, event, stopPropagation);
+            ui_trigger(ui.focusedUiComponent, .Text, event, stopPropagation);
         }
     } else if event.kind == .KeyPressed {
         if ui.focusedUiComponent {
-            ui_trigger(ui.focusedUiComponent, UiComponent.CallbackFlags.Key, event, stopPropagation);
+            ui_trigger(ui.focusedUiComponent, .Key, event, stopPropagation);
         }
     }
 }
