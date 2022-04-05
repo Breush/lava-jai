@@ -15,23 +15,13 @@ UiComponent :: struct {
     updateCallbacks : [..]Callback(UpdateCallbackType);
     triggerCallbacks : [..]Callback(TriggerCallbackType);
 
-    UpdateCallbackType :: #type (flags : CallbackFlags, userData : *void);
-    TriggerCallbackType :: #type (flags : CallbackFlags, event : Crater.Event, stopPropagation : *bool, userData : *void);
-
-    CallbackFlags :: enum_flags {
-        Hover;
-        NoHover;
-        Child;
-        Click;      // Trigger only. Why trigger only?
-        NoClick;    // Trigger only. Why trigger only?
-        Key;        // Trigger only. Why trigger only?
-        Text;       // Trigger only.
-    }
+    UpdateCallbackType :: #type (flags : UiCallbackFlags, userData : *void);
+    TriggerCallbackType :: #type (trigger : UiTrigger, userData : *void);
 
     Callback :: struct($CallbackType : Type) {
         function : CallbackType;
         userData : *void;
-        flags : CallbackFlags;
+        flags : UiCallbackFlags;
     }
 
     Anchor :: enum {
@@ -41,6 +31,22 @@ UiComponent :: struct {
         TopLeft; TopRight;
         BottomLeft; BottomRight;
     }
+}
+
+UiCallbackFlags :: enum_flags {
+    Hover;
+    NoHover;
+    Child;
+    Click;      // Trigger only. Why trigger only?
+    NoClick;    // Trigger only. Why trigger only?
+    Key;        // Trigger only. Why trigger only?
+    Text;       // Trigger only.
+}
+
+UiTrigger :: struct {
+    flags : UiCallbackFlags;
+    event : Crater.Event;
+    stopPropagation : *bool;
 }
 
 component_init :: (iUi : *UiComponent) {
@@ -63,18 +69,17 @@ component_update :: (iUi : *UiComponent, dt : float64) {
     }
 }
 
-ui_on_update :: (iUi : *UiComponent, function : UiComponent.UpdateCallbackType, flags : UiComponent.CallbackFlags = 0xFF, userData : *void = null) {
-    Basic.array_add(*iUi.updateCallbacks, .{});
-    callback := Basic.peek_pointer(iUi.updateCallbacks);
+ui_on_update :: (iUi : *UiComponent, function : UiComponent.UpdateCallbackType, flags : UiCallbackFlags = 0xFF, userData : *void = null) {
+    callback := Basic.array_add(*iUi.updateCallbacks);
     callback.function = function;
     callback.flags = flags;
     callback.userData = userData;
 }
 
-ui_on_trigger :: (iUi : *UiComponent, function : UiComponent.TriggerCallbackType, flags : UiComponent.CallbackFlags = 0xFF, userData : *void = null) {
-    Basic.array_add(*iUi.triggerCallbacks, .{});
-    callback := Basic.peek_pointer(iUi.triggerCallbacks);
-    callback.function = function;
+ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFF, userData : *T = null)
+{
+    callback := Basic.array_add(*iUi.triggerCallbacks);
+    callback.function = cast(UiComponent.TriggerCallbackType) function;
     callback.flags = flags;
     callback.userData = userData;
 }
@@ -83,10 +88,14 @@ ui_set_focused :: (iUi : *UiComponent) {
     _ui_set_focused(*iUi.entity.engine.ui, iUi);
 }
 
-ui_trigger :: (iUi : *UiComponent, flag : UiComponent.CallbackFlags, event : Crater.Event, stopPropagation : *bool) {
+ui_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
+    trigger : UiTrigger = ---;
+    trigger.flags = flags;
+    trigger.event = event;
+    trigger.stopPropagation = stopPropagation;
     for callback : iUi.triggerCallbacks {
-        if callback.flags & flag {
-            callback.function(flag, event, stopPropagation, callback.userData);
+        if callback.flags & flags {
+            callback.function(trigger, callback.userData);
         }
     }
 }
@@ -129,12 +138,8 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crate
     // @fixme That's getting messy... We're triggering unhovered above.
     if iUi.hovered != hovered {
         iUi.hovered = hovered;
-        flags := ifx hovered then UiComponent.CallbackFlags.Hover else .NoHover;
-        for callback : iUi.triggerCallbacks {
-            if callback.flags & flags {
-                callback.function(flags, event, stopPropagation, callback.userData);
-            }
-        }
+        flags := ifx hovered then UiCallbackFlags.Hover else .NoHover;
+        ui_trigger(iUi, flags, event, stopPropagation);
     }
 
     for callback : iUi.updateCallbacks {

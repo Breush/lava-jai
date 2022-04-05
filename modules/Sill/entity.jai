@@ -28,7 +28,7 @@ destroy_entity :: (entity : *Entity, destroyChildren := false, warnParent := tru
         }
     }
     if warnParent {
-        entity_set_parent(entity, null, /* warnParent = */ true);
+        entity_set_parent(entity, null, warnParent = true);
     }
 }
 
@@ -45,7 +45,7 @@ entity_get_component :: (entity : *Entity, $componentType : Type) -> *componentT
 entity_add_child :: (entity : *Entity, child : *Entity) {
     Basic.array_add(*entity.children, child);
     entity.childrenChanged = true;
-    entity_set_parent(child, entity, /* warnParent = */ false);
+    entity_set_parent(child, entity, warnParent = false);
 }
 
 entity_set_parent :: (entity : *Entity, parent : *Entity, warnParent := true) {
