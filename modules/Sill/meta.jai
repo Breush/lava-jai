@@ -305,7 +305,8 @@ _generate :: (workspace : s64) {
     Basic.append(*builder, "\n    _destroy_entity :: (entity : *Sill.Entity) {\n");
     Basic.append(*builder, "        if entity.type == {\n");
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "            case %; entity_cleanup(cast(*%) entity);\n", metaEntity.structName, metaEntity.structName);
+        Basic.print_to_builder(*builder, "            case %;\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "                destroy_%_entity(cast(*%) entity);\n", metaEntity.idSnakeCase, metaEntity.structName);
     }
     Basic.append(*builder, "        }\n");
     Basic.append(*builder, "    }\n");
@@ -318,12 +319,23 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "        engine.Meta.entity_init(entity, engine);\n");
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
+        Basic.print_to_builder(*builder, "\n    destroy_%_entity :: (entity : *%) {\n", metaEntity.idSnakeCase, metaEntity.structName);
+        Basic.print_to_builder(*builder, "        array := *(cast(*Sill.Engine(SillMeta)) entity.engine).entities.%;\n", metaEntity.idCamelCase);
+        Basic.append(*builder, "        for *bucketedEntity : <<array {\n");
+        Basic.append(*builder, "            if entity == bucketedEntity {\n");
+        Basic.append(*builder, "                remove bucketedEntity;\n");
+        Basic.append(*builder, "                break;\n");
+        Basic.append(*builder, "            }\n");
+        Basic.append(*builder, "        }\n");
+        Basic.append(*builder, "        entity_cleanup(entity);\n");
+        Basic.append(*builder, "    }\n");
     }
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
         Basic.append(*builder, "        entity.engine = engine;\n");
         Basic.print_to_builder(*builder, "        entity.type = %;\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "        entity.typeInfo = type_info(%);\n", metaEntity.structName);
         for component : metaEntity.structMembers {
             if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component.id);
@@ -335,7 +347,6 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "    }\n");
     }
 
-    // @fixme Not freeing from the bucket array!
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
         for component : metaEntity.structMembers {

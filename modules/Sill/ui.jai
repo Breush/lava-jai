@@ -35,7 +35,6 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         ui.hoveredUiComponents.count = 0;
         for uiComponent : ui.uiComponents {
             if ui_check_hovered(uiComponent, ui.mousePointerPosition, event, stopPropagation) {
-                Chamber.debug("Hover ", uiComponent);
                 Basic.array_add(*ui.hoveredUiComponents, uiComponent);
             }
             if <<stopPropagation then break;
@@ -43,7 +42,6 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
 
         for oldHoveredUiComponent : oldHoveredUiComponents {
             if !Basic.array_find(ui.hoveredUiComponents, oldHoveredUiComponent) {
-                Chamber.debug("No hover ", oldHoveredUiComponent);
                 ui_trigger(oldHoveredUiComponent, .NoHover, event, stopPropagation);
             }
         }

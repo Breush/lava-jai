@@ -26,10 +26,10 @@ EngineBase :: struct {
 }
 
 Engine :: struct ($_Meta : Type) {
+    using base : EngineBase;
+
     Meta :: _Meta;
     entities : _Meta.Entities;
-
-    using base : EngineBase;
 
     allocator : Allocator;
 }

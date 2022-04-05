@@ -153,7 +153,7 @@ inverse :: (transform : trf) -> trf {
 
 multiply :: (lhs : trf, rhs : trf) -> trf {
     result : trf;
-    result.translation.std = lhs.translation + rotate(lhs.scaling * rhs.translation, lhs.rotation);
+    result.translation.std = lhs.translation + rotate(lhs.factor * rhs.translation, lhs.rotation);
     result.factor = lhs.factor * rhs.factor;
     result.rotation = lhs.rotation * rhs.rotation;
     return result;
