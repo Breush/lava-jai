@@ -1,6 +1,6 @@
 UiComponent :: struct {
     using component : Component;
-    transform : *TransformComponent;
+    transform : *TransformComponent; // @todo Should be used to mark componentsDepthDirty
 
     // Main configuration.
     anchor := Anchor.Center;
@@ -15,7 +15,7 @@ UiComponent :: struct {
     updateCallbacks : [..]Callback(UpdateCallbackType);
     triggerCallbacks : [..]Callback(TriggerCallbackType);
 
-    UpdateCallbackType :: #type (flags : UiCallbackFlags, userData : *void);
+    UpdateCallbackType :: #type (update : UiUpdate, userData : *void);
     TriggerCallbackType :: #type (trigger : UiTrigger, userData : *void);
 
     Callback :: struct($CallbackType : Type) {
@@ -49,6 +49,11 @@ UiTrigger :: struct {
     stopPropagation : *bool;
 }
 
+UiUpdate :: struct {
+    flags : UiCallbackFlags;
+    stopPropagation : *bool;
+}
+
 component_init :: (iUi : *UiComponent) {
     ui_register_component(*iUi.entity.engine.ui, iUi);
 }
@@ -61,17 +66,13 @@ component_cleanup :: (iUi : *UiComponent) {
 
 component_update :: (iUi : *UiComponent, dt : float64) {
     if iUi.entity.childrenChanged {
-        for callback : iUi.updateCallbacks {
-            if callback.flags & .Child {
-                callback.function(.Child, callback.userData);
-            }
-        }
+        ui_send_update(iUi, .Child, null);
     }
 }
 
-ui_on_update :: (iUi : *UiComponent, function : UiComponent.UpdateCallbackType, flags : UiCallbackFlags = 0xFF, userData : *void = null) {
+ui_on_update :: (iUi : *UiComponent, function : (update : UiUpdate, userData : *$T), flags : UiCallbackFlags = 0xFF, userData : *T = null) {
     callback := Basic.array_add(*iUi.updateCallbacks);
-    callback.function = function;
+    callback.function = cast(UiComponent.UpdateCallbackType)  function;
     callback.flags = flags;
     callback.userData = userData;
 }
@@ -88,7 +89,7 @@ ui_set_focused :: (iUi : *UiComponent) {
     _ui_set_focused(*iUi.entity.engine.ui, iUi);
 }
 
-ui_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
+ui_send_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
     trigger : UiTrigger = ---;
     trigger.flags = flags;
     trigger.event = event;
@@ -100,9 +101,18 @@ ui_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event
     }
 }
 
-ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crater.Event.{}, stopPropagation : *bool) -> bool {
-    // @todo No notion of anchor here, we assume it is always centered.
+ui_send_update :: (iUi : *UiComponent, flags : UiCallbackFlags, stopPropagation : *bool) {
+    update : UiUpdate = ---;
+    update.flags = flags;
+    update.stopPropagation = stopPropagation;
+    for callback : iUi.updateCallbacks {
+        if callback.flags & flags {
+            callback.function(update, callback.userData);
+        }
+    }
+}
 
+ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
     // @todo No notion of flats and 2D in the engine for now.
     relativePosition : Chamber.vec3;
     relativePosition.xy = position;
@@ -139,15 +149,13 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event := Crate
     if iUi.hovered != hovered {
         iUi.hovered = hovered;
         flags := ifx hovered then UiCallbackFlags.Hover else .NoHover;
-        ui_trigger(iUi, flags, event, stopPropagation);
+        ui_send_trigger(iUi, flags, event, stopPropagation);
     }
 
-    for callback : iUi.updateCallbacks {
-        if hovered && callback.flags & .Hover {
-            callback.function(.Hover, callback.userData);
-        } else if !hovered && callback.flags & .NoHover {
-            callback.function(.NoHover, callback.userData);
-        }
+    if hovered {
+        ui_send_update(iUi, .Hover, stopPropagation);
+    } else {
+        ui_send_update(iUi, .NoHover, stopPropagation);
     }
 
     return iUi.hovered;

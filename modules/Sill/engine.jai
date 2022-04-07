@@ -14,7 +14,7 @@ EngineBase :: struct {
     vrRightRenderer : *Magma.Renderer;
 }
 
-    input : Input;
+    #as input : Input; // @fixme Spread these #as, they are awesome. One could just care about the engine afterwards...
     ui : Ui;
 
     windowExtent : Chamber.uvec2;
@@ -149,6 +149,7 @@ engine_run :: (engine : *Engine) {
             _input_reset(*engine.input);
             _engine_handle_input_events(engine);
             _engine_update_entities(engine, updateTime);
+            _ui_update(*engine.ui);
             updateTimeLag -= updateTime;
         }
 

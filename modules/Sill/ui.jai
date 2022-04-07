@@ -7,14 +7,29 @@ Ui :: struct {
     hoveredUiComponents : [..]*UiComponent;
 
     mousePointerPosition : Chamber.vec2;
+
+    componentsDepthDirty : bool;
 }
 
 ui_register_component :: (ui : *Ui, uiComponent : *UiComponent) {
     Basic.array_add(*ui.uiComponents, uiComponent);
+    ui.componentsDepthDirty = true;
 }
 
 ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
     Basic.array_unordered_remove_by_value(*ui.uiComponents, uiComponent, stop_after_first = true);
+}
+
+_ui_update :: (ui : *Ui) {
+    if ui.componentsDepthDirty {
+        ui.componentsDepthDirty = false;
+
+        Sort.quick_sort(ui.uiComponents, (a : *UiComponent, b : *UiComponent) -> int {
+            if a.transform.translation.z < b.transform.translation.z then return -1;
+            if a.transform.translation.z > b.transform.translation.z then return 1;
+            return 0;
+        });
+    }
 }
 
 _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
@@ -42,21 +57,21 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
 
         for oldHoveredUiComponent : oldHoveredUiComponents {
             if !Basic.array_find(ui.hoveredUiComponents, oldHoveredUiComponent) {
-                ui_trigger(oldHoveredUiComponent, .NoHover, event, stopPropagation);
+                ui_send_trigger(oldHoveredUiComponent, .NoHover, event, stopPropagation);
             }
         }
     } else if event.kind == .MouseButtonPressed {
         ui.focusedUiComponent = null;
         for hoveredUiComponent : ui.hoveredUiComponents {
-            ui_trigger(hoveredUiComponent, .Click, event, stopPropagation);
+            ui_send_trigger(hoveredUiComponent, .Click, event, stopPropagation);
         }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
-            ui_trigger(ui.focusedUiComponent, .Text, event, stopPropagation);
+            ui_send_trigger(ui.focusedUiComponent, .Text, event, stopPropagation);
         }
     } else if event.kind == .KeyPressed {
         if ui.focusedUiComponent {
-            ui_trigger(ui.focusedUiComponent, .Key, event, stopPropagation);
+            ui_send_trigger(ui.focusedUiComponent, .Key, event, stopPropagation);
         }
     }
 }

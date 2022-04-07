@@ -15,6 +15,7 @@
 Basic :: #import "Basic";
 File :: #import "File";
 Hash :: #import "Hash_Table";
+Sort :: #import "Sort";
 Chamber :: #import "Chamber";
 Crater :: #import "Crater";
 Magma :: #import "Magma" (VR_ENABLED = VR_ENABLED);
