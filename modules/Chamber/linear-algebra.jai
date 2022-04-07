@@ -420,7 +420,7 @@ _vec2 :: struct(T : Type) {
 
     #place x;
     #if T == float32 {
-        #as std : Vector2;
+        #as std : Vector2 = ---;
     } else {
         std : void = ---;
     }
@@ -437,11 +437,11 @@ _vec3 :: struct(T : Type) {
     x, y, z : T;
 
     #place x;
-        #as xy : _vec2(T);
+        #as xy : _vec2(T) = ---;
 
     #place x;
     #if T == float32 {
-        #as std : Vector3;
+        #as std : Vector3 = ---;
     } else {
         std : void = ---;
     }
@@ -458,14 +458,14 @@ _vec4 :: struct(T : Type) {
     x, y, z, w : T;
 
     #place x;
-        #as xy : _vec2(T);
+        #as xy : _vec2(T) = ---;
 
     #place x;
-        #as xyz : _vec3(T);
+        #as xyz : _vec3(T) = ---;
 
     #place x;
     #if T == float32 {
-        #as std : Vector4;
+        #as std : Vector4 = ---;
     } else {
         std : void = ---;
     }
