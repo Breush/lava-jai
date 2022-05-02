@@ -95,7 +95,7 @@ operator [] :: (json_val: JsonValue, i: u64) -> JsonValue {
 
 #scope_file
 
-WHITESPACE_CHARS :: " \t\n";
+WHITESPACE_CHARS :: " \t\r\n";
 
 get_array_stride :: (size: s64) -> s64 {
     // @Robustness: We assume 8-byte alignment for now.

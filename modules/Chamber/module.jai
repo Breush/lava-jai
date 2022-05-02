@@ -2,6 +2,7 @@
 #load "json.jai";
 #load "lib-extensions.jai";
 #load "linear-algebra.jai";
+#load "os.jai";
 #load "string-utilities.jai";
 #load "spirv.jai";
 #load "font.jai";
