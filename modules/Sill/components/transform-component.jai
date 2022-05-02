@@ -77,8 +77,23 @@ transform_on_world_transform_changed :: (iTransform : *TransformComponent, funct
 #scope_file
 
 _update_world_transform :: (iTransform : *TransformComponent) {
-    // @todo No entity parenting yet, so no difference between world and local transforms.
-    iTransform.worldTransform = iTransform.transform;
+    if iTransform.entity.parent != null {
+        // @note The world transform updates are done instantly, so it should be up-to-date.
+        iParentTransform := entity_get_component(iTransform.entity.parent, TransformComponent);
+        if iParentTransform != null {
+            iTransform.worldTransform = Chamber.multiply(iParentTransform.worldTransform, iTransform.transform);
+        } else {
+            iTransform.worldTransform = iTransform.transform;
+        }
+    } else {
+        iTransform.worldTransform = iTransform.transform;
+    }
+
+    // Update children position
+    for child : iTransform.entity.children {
+        _update_world_transform(entity_get_component(child, TransformComponent));
+    }
+
     _call_world_transform_changed_callbacks(iTransform);
 }
 

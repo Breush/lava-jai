@@ -14,18 +14,22 @@ EngineBase :: struct {
     vrRightRenderer : *Magma.Renderer;
 }
 
-    input : Input;
+    #as input : Input; // @fixme Spread these #as, they are awesome. One could just care about the engine afterwards...
     ui : Ui;
 
     windowExtent : Chamber.uvec2;
     closingMainWindow : bool; // Set to true to close the main window.
+
+    // @note We delay entity destruction so that other entities updates
+    // can schedule destruction of any entity.
+    pendingDestroyedEntities : [..]*Entity;
 }
 
 Engine :: struct ($_Meta : Type) {
+    using base : EngineBase;
+
     Meta :: _Meta;
     entities : _Meta.Entities;
-
-    using base : EngineBase;
 
     allocator : Allocator;
 }
@@ -144,7 +148,8 @@ engine_run :: (engine : *Engine) {
             Basic.reset_temporary_storage();
             _input_reset(*engine.input);
             _engine_handle_input_events(engine);
-            engine.Meta._update_entities(engine, updateTime);
+            _engine_update_entities(engine, updateTime);
+            _ui_update(*engine.ui);
             updateTimeLag -= updateTime;
         }
 
@@ -157,6 +162,21 @@ engine_run :: (engine : *Engine) {
 }
 
 #scope_file
+
+_engine_update_entities :: (engine : *Engine, updateTime : float64) {
+    engine.Meta._update_entities(engine, updateTime);
+
+    // Remove pending entities
+    if (engine.pendingDestroyedEntities.count != 0) {
+        // Some entities might remove others, so we copy everything before-hand.
+        pendingDestroyedEntities := Basic.array_copy(engine.pendingDestroyedEntities);
+        engine.pendingDestroyedEntities.count = 0;
+
+        for entity : pendingDestroyedEntities {
+            engine.Meta._destroy_entity(entity);
+        }
+    }
+}
 
 _engine_handle_input_events :: (engine : *EngineBase) {
     event := Crater.window_poll_event(engine.window);

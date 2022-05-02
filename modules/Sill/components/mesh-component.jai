@@ -27,6 +27,9 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
     for *node : iMesh.nodes {
         // @todo Really improve what cleanup means...
         // Here, for instance, do we need to remove the primitives for the render engine?
+        for primitive : node.primitives {
+            Magma.destroy_mesh(primitive);
+        }
         Basic.array_free(node.primitives);
         Basic.array_free(node.children);
     }

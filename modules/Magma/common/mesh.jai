@@ -49,8 +49,12 @@ create_mesh :: (scene : *Scene) -> *Mesh {
     return mesh;
 }
 
-destroy_mesh :: (mesh : *Mesh) {
+destroy_mesh :: (mesh : *Mesh, unregister := true) {
     mesh_cleanup(mesh, resetMemory = false);
+
+    if unregister {
+        scene_unregister(mesh.scene, mesh);
+    }
 
     if mesh.allocator.proc != null {
         Basic.free(mesh, mesh.allocator);
@@ -110,7 +114,7 @@ mesh_compute_flat_normals :: (mesh : *Mesh) {
         v0 := *mesh.vertices[i0];
         v1 := mesh.vertices[i1];
         v2 := mesh.vertices[i2];
-        v0.normal.std = normalize(cross(v1.position.std - v2.position.std, v1.position.std - v0.position.std));
+        v0.normal.std = normalize(cross(v1.position - v2.position, v1.position - v0.position));
         v1.normal = v0.normal;
         v2.normal = v0.normal;
 

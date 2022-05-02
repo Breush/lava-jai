@@ -322,7 +322,8 @@ _init_physical_device :: (engine : *Engine) -> bool {
     for physicalDevice, physicalDeviceIndex : physicalDevices {
         physicalDeviceProperties : Vk.PhysicalDeviceProperties;
         Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
-        Basic.log("  - #% %", physicalDeviceIndex, Basic.to_string(physicalDeviceProperties.deviceName), flags=.VERBOSE_ONLY);
+        deviceName := Basic.to_string(*physicalDeviceProperties.deviceName[0]); // @note Not passing the object directly, because the full length of the array of char is used instead.
+        Basic.log("  - #% '%'", physicalDeviceIndex, deviceName, flags=.VERBOSE_ONLY);
     }
 
     engine.physicalDevice = null;

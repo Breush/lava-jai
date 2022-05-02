@@ -153,7 +153,7 @@ inverse :: (transform : trf) -> trf {
 
 multiply :: (lhs : trf, rhs : trf) -> trf {
     result : trf;
-    result.translation.std = lhs.translation + rotate(lhs.scaling * rhs.translation, lhs.rotation);
+    result.translation.std = lhs.translation + rotate(lhs.factor * rhs.translation, lhs.rotation);
     result.factor = lhs.factor * rhs.factor;
     result.rotation = lhs.rotation * rhs.rotation;
     return result;
@@ -416,14 +416,13 @@ rotate_around_target :: (origin : vec3, target : vec3,
 #import "Math";
 
 _vec2 :: struct(T : Type) {
+    x, y : T;
+
+    #place x;
     #if T == float32 {
-        union {
-            using std : Vector2;
-        }
+        #as std : Vector2 = ---;
     } else {
-        x, y : T;
-        #place x;
-            std : void = ---;
+        std : void = ---;
     }
 
     #place x;
@@ -435,33 +434,40 @@ _vec2 :: struct(T : Type) {
 }
 
 _vec3 :: struct(T : Type) {
+    x, y, z : T;
+
+    #place x;
+        #as xy : _vec2(T) = ---;
+
+    #place x;
     #if T == float32 {
-        union {
-            using std : Vector3;
-        }
+        #as std : Vector3 = ---;
     } else {
-        x, y, z : T;
-        #place x;
-            std : void = ---;
+        std : void = ---;
     }
 
-    #place std;
+    #place x;
         r, g, b : T = ---;
-    #place std;
+    #place x;
         s, t, p : T = ---;
-    #place std;
+    #place x;
         width, height, depth : T = ---;
 }
 
 _vec4 :: struct(T : Type) {
+    x, y, z, w : T;
+
+    #place x;
+        #as xy : _vec2(T) = ---;
+
+    #place x;
+        #as xyz : _vec3(T) = ---;
+
+    #place x;
     #if T == float32 {
-        union {
-            using std : Vector4;
-        }
+        #as std : Vector4 = ---;
     } else {
-        x, y, z, w : T;
-        #place x;
-            std : void = ---;
+        std : void = ---;
     }
 
     #place std;
