@@ -1,3 +1,11 @@
+#if OS == .LINUX {
+    PATH_SEPARATOR :: "/";
+} else #if OS == .WINDOWS {
+    PATH_SEPARATOR :: "\\";
+} else {
+    PATH_SEPARATOR :: #run Basic.assert(false);
+}
+
 os_user_path :: () -> string {
     path : string;
 
@@ -6,10 +14,12 @@ os_user_path :: () -> string {
         POSIX :: #import "POSIX";
         posixPath := POSIX.getenv("HOME");
         if posixPath == null then path = "/";
-        else path = Basic.to_string(posixPath);
+        else path =  Basic.sprint("%/", Basic.to_string(posixPath));
     } else #if OS == .WINDOWS {
-        // @todo Probably getenv("HOMEDRIVE")/getenv("HOMEPATH");
-        #run Basic.assert(false);
+        Windows :: #import "Windows";
+        windowsPath := Windows.getenv("HOMEPATH");
+        if windowsPath == null then path = "C:\\"; // @todo Should probably list drives.
+        else path =  Basic.sprint("%\\", Basic.to_string(windowsPath));
     } else {
         #run Basic.assert(false);
     }
@@ -23,8 +33,10 @@ os_application_data_storage_path :: () -> string {
     #if OS == .LINUX {
         path = os_user_path();
     } else #if OS == .WINDOWS {
-        // @todo Probably getenv("APPDATA")
-        #run Basic.assert(false);
+        Windows :: #import "Windows";
+        windowsPath := Windows.getenv("APPDATA");
+        if windowsPath != null then path =  Basic.sprint("%\\", Basic.to_string(windowsPath));
+        else path = os_user_path();
     } else {
         #run Basic.assert(false);
     }

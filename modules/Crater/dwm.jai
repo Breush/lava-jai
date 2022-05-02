@@ -29,13 +29,19 @@ impl_window_init :: (window : *Window) -> bool {
         wndClassRegistered = true;
     }
 
+    // @note Window size specifided in CreateWindowExW takes the decorations into account.
+    // To get the effective client area we do the thing below.
+    rect : Windows.RECT;
+    rect.right  = window.videoMode.width;
+    rect.bottom = window.videoMode.height;
+    Windows.AdjustWindowRect(*rect, Windows.WS_OVERLAPPEDWINDOW, Windows.BOOL.FALSE);
+
     window.hWnd = Windows.CreateWindowExW(0, className, WindowsUtf8.utf8_to_wide(window.title),
                                           Windows.WS_OVERLAPPEDWINDOW,
                                           Windows.CW_USEDEFAULT, Windows.CW_USEDEFAULT,
-                                          window.videoMode.width, window.videoMode.height,
+                                          (rect.right - rect.left), (rect.bottom - rect.top),
                                           null, null,
                                           window.hInstance, null);
-
 
     _CHECK(window.hWnd != null, Basic.tprint("Unable to create window handle: %.", Windows.GetLastError()));
 
@@ -124,7 +130,7 @@ _on_message :: (hWnd : Windows.HWND, msg : u32, wParam : Windows.WPARAM, lParam 
 
         case Windows.WM_LBUTTONDOWN; #through;
         case Windows.WM_MBUTTONDOWN; #through;
-        case Windows.WM_RBUTTONDOWN; #through;
+        case Windows.WM_RBUTTONDOWN;
             event : Event;
             event.kind = .MouseButtonPressed;
             if msg == Windows.WM_LBUTTONUP then event.mouseButton.which = .Left;
@@ -134,7 +140,7 @@ _on_message :: (hWnd : Windows.HWND, msg : u32, wParam : Windows.WPARAM, lParam 
 
         case Windows.WM_LBUTTONUP; #through;
         case Windows.WM_MBUTTONUP; #through;
-        case Windows.WM_RBUTTONUP; #through;
+        case Windows.WM_RBUTTONUP;
             event : Event;
             event.kind = .MouseButtonReleased;
             if msg == Windows.WM_LBUTTONUP then event.mouseButton.which = .Left;
@@ -230,5 +236,6 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
     return .Unknown;
 }
 
+DPI :: #import "DPI";
 Windows :: #import "Windows";
 WindowsUtf8 :: #import "Windows_Utf8";
