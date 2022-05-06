@@ -160,7 +160,9 @@ _CHECK :: (result : $R, returnedValue : $T, message : string, fatal := true, loc
 
     #if type_of(result) == bool {
         if !result {
-            Basic.log(message, loc=loc, flags=.ERROR);
+            // @note Don't use message directly, as it can have % in its content,
+            // raising an error because there are no formatted arguments.
+            Basic.log("%", message, loc=loc, flags=.ERROR);
             if !fatal then loggerPopNonFatalOnError();
             `return returnedValue;
         }
