@@ -20,6 +20,16 @@ WindowHandle :: struct {
     }
 }
 
+Sphere :: struct {
+    center : vec3;
+    radius : float;
+}
+
+AxisAlignedBox :: struct {
+    center : vec3;
+    extent : vec3;
+}
+
 loggerData : struct {
     indentationLevel : u32;
     padding : u32;

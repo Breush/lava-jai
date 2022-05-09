@@ -33,6 +33,10 @@ Engine :: struct {
 
     vr : Vr;
 
+    stats : struct {
+        drawCalls : u32;
+    }
+
     using engineImpl : EngineImpl;
 
     allocator : Allocator;
@@ -106,6 +110,7 @@ engine_update :: (engine : *Engine) {
 }
 
 engine_draw :: (engine : *Engine) {
+    engine.stats.drawCalls = 0;
     impl_engine_draw(engine);
 }
 

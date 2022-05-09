@@ -52,6 +52,7 @@ _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
     Vk.cmd_bind_vertex_buffers(commandBuffer, 1, 1, *mesh.instanceBufferHolder.buffer, *offsets);
     Vk.cmd_bind_index_buffer(commandBuffer, mesh.indexBufferHolder.buffer, 0, Vk.IndexType.Uint16);
     Vk.cmd_draw_indexed(commandBuffer, cast(u32) mesh.indices.count, 1, 0, 0, 0);
+    mesh.scene.engine.stats.drawCalls += 1;
 }
 
 #scope_file

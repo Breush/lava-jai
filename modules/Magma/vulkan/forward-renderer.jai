@@ -99,6 +99,7 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     // @todo Sort meshes by shaders, in order to reduce context switches.
     for mesh : forwardRenderer.scene.meshes {
         if mesh.disabled then continue;
+        if !eye_is_seeing(*forwardRenderer.eye, mesh.boundingSphere) then continue;
 
         if mesh.material != lastDrawnMaterial {
             lastDrawnMaterial = mesh.material;

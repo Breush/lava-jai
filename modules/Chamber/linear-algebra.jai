@@ -109,6 +109,12 @@ make_trs :: (matrix : $T/interface AnyMatrix4x3) -> trs {
     return transform;
 }
 
+multiply :: (transform : trs, v : $T/interface vec3Interface) -> vec3 {
+    result : vec3;
+    result.std = transform.translation + rotate(transform.scaling * v, transform.rotation);
+    return result;
+}
+
 /*
     A TRS but with scaling being uniform.
     This allows for inverses and compositions

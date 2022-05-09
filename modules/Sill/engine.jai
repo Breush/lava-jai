@@ -135,7 +135,10 @@ engine_run :: (engine : *Engine) {
             fpsElapsedTime += elapsedTime;
             fpsAverageElapsedTime += elapsedTime;
             if fpsElapsedTime >= 1.0 {
-                Basic.print("RenderTime: %ms | FPS: %\n", cast(u32) (fpsAverageElapsedTime / fpsFrameRenderedCount * 10000) / 10.0, fpsFrameRenderedCount);
+                Basic.print("RenderTime: %ms | FPS: % | DrawCalls: %\n",
+                            cast(u32) (fpsAverageElapsedTime / fpsFrameRenderedCount * 10000) / 10.0,
+                            fpsFrameRenderedCount,
+                            engine.renderEngine.stats.drawCalls);
                 fpsFrameRenderedCount = 0;
                 fpsAverageElapsedTime = 0;
                 fpsElapsedTime = 0;

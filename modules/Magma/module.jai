@@ -26,3 +26,5 @@ DOLLAR_SHADERS_PATH :: #run Basic.tprint("%data/shaders", #filepath);
 Basic :: #import "Basic";
 File :: #import "File";
 Chamber :: #import "Chamber";
+Math :: #import "Math";
+#import "Math"; // For operators

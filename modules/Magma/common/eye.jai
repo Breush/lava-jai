@@ -19,6 +19,19 @@ Eye :: struct {
     projectionMatrix : Chamber.mat4;
 
     shaderObject : EyeShaderObject;
+
+    frustum : struct {
+        // :NearFarEyeFrustumCulling
+        forward : Chamber.vec3;
+        leftNormal : Chamber.vec3;
+        rightNormal : Chamber.vec3;
+        bottomNormal : Chamber.vec3;
+        topNormal : Chamber.vec3;
+        leftDistance : float;
+        rightDistance : float;
+        bottomDistance : float;
+        topDistance : float;
+    };
 }
 
 EyeShaderObject :: struct {                  // 72 bytes
@@ -55,6 +68,63 @@ eye_commit :: (eye : *Eye) {
 
     // @note Can't know the frame index here, the renderer will insert it.
     eye.shaderObject.lastChangeFrame = 0xFFFF_FFFF;
+
+    // Updating the frustum
+    projectionMatrixInverse := inverse(eye.projectionMatrix);
+    viewMatrixInverse := inverse(eye.viewMatrix);
+
+    // @note Far is at 0, by our conventions (see linear-algebra in Chamber module).
+    topLeftNearLocal := projectionMatrixInverse * Chamber.vec4.{-1, -1, 1, 1}; // NDC to local
+    topRightNearLocal := projectionMatrixInverse * Chamber.vec4.{1, -1, 1, 1};
+    bottomLeftNearLocal := projectionMatrixInverse * Chamber.vec4.{-1, 1, 1, 1};
+    bottomRightNearLocal := projectionMatrixInverse * Chamber.vec4.{1, 1, 1, 1};
+
+    topLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, -1, 0, 1};
+    topRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, -1, 0, 1};
+    bottomLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, 1, 0, 1};
+    bottomRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, 1, 0, 1};
+
+    // W component can be zeroed with orthographic projections.
+    if topLeftNearLocal.w != 0 then topLeftNearLocal /= topLeftNearLocal.w;
+    if topRightNearLocal.w != 0 then topRightNearLocal /= topRightNearLocal.w;
+    if bottomLeftNearLocal.w != 0 then bottomLeftNearLocal /= bottomLeftNearLocal.w;
+    if bottomRightNearLocal.w != 0 then bottomRightNearLocal /= bottomRightNearLocal.w;
+    if topLeftFarLocal.w != 0 then topLeftFarLocal /= topLeftFarLocal.w;
+    if topRightFarLocal.w != 0 then topRightFarLocal /= topRightFarLocal.w;
+    if bottomLeftFarLocal.w != 0 then bottomLeftFarLocal /= bottomLeftFarLocal.w;
+    if bottomRightFarLocal.w != 0 then bottomRightFarLocal /= bottomRightFarLocal.w;
+
+    topLeftNear := (viewMatrixInverse * topLeftNearLocal).xyz;
+    topRightNear := (viewMatrixInverse * topRightNearLocal).xyz;
+    bottomLeftNear := (viewMatrixInverse * bottomLeftNearLocal).xyz;
+    bottomRightNear := (viewMatrixInverse * bottomRightNearLocal).xyz;
+
+    topLeftFar := (viewMatrixInverse * topLeftFarLocal).xyz;
+    topRightFar := (viewMatrixInverse * topRightFarLocal).xyz;
+    bottomLeftFar := (viewMatrixInverse * bottomLeftFarLocal).xyz;
+    bottomRightFar := (viewMatrixInverse * bottomRightFarLocal).xyz;
+
+    origin := viewMatrixInverse.v[3].xyz;
+
+    eye.frustum.forward.std = normalize(cross(topLeftNear - bottomLeftNear, bottomRightNear - bottomLeftNear));
+    eye.frustum.leftNormal.std = normalize(cross(topLeftFar - topLeftNear, bottomLeftNear - topLeftNear));
+    eye.frustum.rightNormal.std = normalize(cross(bottomRightFar - bottomRightNear, topRightNear - bottomRightNear));
+    eye.frustum.bottomNormal.std = normalize(cross(bottomLeftFar - bottomLeftNear, bottomRightFar - bottomLeftNear));
+    eye.frustum.topNormal.std = normalize(cross(topRightFar - topRightNear, topLeftFar - topRightNear));
+
+    eye.frustum.leftDistance = dot(topLeftNear, eye.frustum.leftNormal);
+    eye.frustum.rightDistance = dot(bottomRightNear, eye.frustum.rightNormal);
+    eye.frustum.bottomDistance = dot(bottomLeftNear, eye.frustum.bottomNormal);
+    eye.frustum.topDistance = dot(topRightNear, eye.frustum.topNormal);
+}
+
+eye_is_seeing :: (eye : *Eye, sphere : Chamber.Sphere) -> bool {
+    // @todo :NearFarEyeFrustumCulling Missing near/far checks...
+    if dot(sphere.center, eye.frustum.leftNormal) - sphere.radius > eye.frustum.leftDistance then return false;
+    if dot(sphere.center, eye.frustum.rightNormal) - sphere.radius > eye.frustum.rightDistance then return false;
+    if dot(sphere.center, eye.frustum.topNormal) - sphere.radius > eye.frustum.topDistance then return false;
+    if dot(sphere.center, eye.frustum.bottomNormal) - sphere.radius > eye.frustum.bottomDistance then return false;
+    return true;
 }
 
 /*

@@ -22,6 +22,9 @@ Mesh :: struct {
     indicesDirty : bool;
     instanceDirty : bool;
 
+    geometryAabb : Chamber.AxisAlignedBox; // The axis-aligned bounding box if transform is identity.
+    boundingSphere : Chamber.Sphere; // The world-space bounding sphere.
+
     using transform : Chamber.trs;
 
     using meshImpl : MeshImpl;
@@ -88,6 +91,8 @@ mesh_update :: (mesh : *Mesh) {
 }
 
 mesh_commit_vertices :: (mesh : *Mesh) {
+    _updateGeometryAabb(mesh);
+    _updateBoundingSphere(mesh);
     mesh.verticesDirty = true;
 }
 
@@ -102,6 +107,7 @@ mesh_commit_instance :: (mesh : *Mesh, $copyTrs := true) {
         mesh.transform = Chamber.make_trs(mesh.instance.matrix);
     }
 
+    _updateBoundingSphere(mesh);
     mesh.instanceDirty = true;
 }
 
@@ -130,4 +136,25 @@ mesh_translate :: (mesh : *Mesh, delta : Chamber.vec3) {
 
 #scope_file
 
-#import "Math"; // For operators
+_updateGeometryAabb :: (mesh : *Mesh) {
+    minRange := mesh.vertices[0].position;
+    maxRange := minRange;
+    for *vertex : mesh.vertices {
+        if vertex.position.x > maxRange.x then maxRange.x = vertex.position.x;
+        if vertex.position.x < minRange.x then minRange.x = vertex.position.x;
+        if vertex.position.y > maxRange.y then maxRange.y = vertex.position.y;
+        if vertex.position.y < minRange.y then minRange.y = vertex.position.y;
+        if vertex.position.z > maxRange.z then maxRange.z = vertex.position.z;
+        if vertex.position.z < minRange.z then minRange.z = vertex.position.z;
+    }
+    mesh.geometryAabb.center.std = (minRange + maxRange) / 2.;
+    mesh.geometryAabb.extent.std = maxRange - minRange;
+}
+
+_updateBoundingSphere :: (mesh : *Mesh) {
+    // @todo For 2D, an AABB would be more benificial, as the camera
+    // is often aligned with axes.
+
+    mesh.boundingSphere.center = Chamber.multiply(mesh.transform, mesh.geometryAabb.center);
+    mesh.boundingSphere.radius = Math.length((mesh.transform.scaling * mesh.geometryAabb.extent) / 2.);
+}
