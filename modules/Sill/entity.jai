@@ -1,7 +1,7 @@
 // An entity base, once a struct inherits from it,
 // add components as fields to the latter.
 // The metaprogram will register all entity kinds to the engine.
-// See Sill/meta.jai for more information.
+// See Sill/plugin.jai for more information.
 Entity :: struct {
     engine : *EngineBase;
 

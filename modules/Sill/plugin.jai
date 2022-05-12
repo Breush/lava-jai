@@ -1,6 +1,6 @@
 /*
  * Metaprogram to be called during compilation.
- * (Call sill_meta_handle_message.)
+ * (Either use -plug Sill/plugin with the default metaprogram or call message.)
  *
  * Create a new struct which inherits from Entity.
  *
@@ -26,7 +26,13 @@
 
 #load "../Chamber/string-utilities.jai";
 
-sill_meta_handle_message :: (message : *Compiler.Message) {
+get_plugin :: () -> *Compiler.Metaprogram_Plugin {
+    p := Basic.New(Compiler.Metaprogram_Plugin);
+    p.message = message;
+    return p;
+}
+
+message :: (p : *Compiler.Metaprogram_Plugin, message : *Compiler.Message) {
     if message.kind == .TYPECHECKED {
         messageTypechecked := cast(*Compiler.Message_Typechecked) message;
         for decl : messageTypechecked.declarations {
@@ -42,6 +48,9 @@ sill_meta_handle_message :: (message : *Compiler.Message) {
 }
 
 #scope_file
+
+Basic :: #import "Basic";
+Compiler :: #import "Compiler";
 
 MetaEntity :: struct {
     structName : string;    // "MyCustomEntity" Expected PascalCase is user source code.
@@ -85,12 +94,15 @@ metaEntityList : [..]MetaEntity;
 metaComponentList : [..]MetaComponent;
 
 META_STRING :: #string DONE
-#import "Bucket_Array";
-
 SillMeta :: struct {
 %1
 %2
 }
+
+#scope_file
+Bucket_Array :: #import "Bucket_Array";
+for_expansion :: Bucket_Array.for_expansion;
+#scope_export
 DONE
 
 _generated := false;
@@ -293,7 +305,7 @@ _generate :: (workspace : s64) {
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
         // @todo We could make the size of buckets configurable.
-        Basic.print_to_builder(*builder, "\n        % : Bucket_Array(%, 16);", metaEntity.idCamelCase, metaEntity.structName);
+        Basic.print_to_builder(*builder, "\n        % : Bucket_Array.Bucket_Array(%, 16);", metaEntity.idCamelCase, metaEntity.structName);
     }
     Basic.append(*builder, "\n    }");
 
@@ -314,7 +326,7 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
-        Basic.append(*builder, "        entity, _ := find_and_occupy_empty_slot(array);\n");
+        Basic.append(*builder, "        entity, _ := Bucket_Array.find_and_occupy_empty_slot(array);\n");
         Basic.print_to_builder(*builder, "        <<entity = %.{};\n", metaEntity.structName);
         Basic.append(*builder, "        engine.Meta.entity_init(entity, engine);\n");
         Basic.append(*builder, "        return entity;\n");
@@ -370,7 +382,7 @@ _generate :: (workspace : s64) {
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_cleanup(entity);\n");
         Basic.append(*builder, "        }\n");
-        Basic.print_to_builder(*builder, "        bucket_array_reset(*engine.entities.%);\n", metaEntity.idCamelCase);
+        Basic.print_to_builder(*builder, "        Bucket_Array.bucket_array_reset(*engine.entities.%);\n", metaEntity.idCamelCase);
     }
     Basic.append(*builder, "    }\n");
 
