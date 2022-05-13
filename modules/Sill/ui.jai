@@ -69,6 +69,7 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         ui.focusedUiComponent = null;
         for hoveredUiComponent : ui.hoveredUiComponents {
             ui_send_trigger(hoveredUiComponent, .Click, event, stopPropagation);
+            if <<stopPropagation then break;
         }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
