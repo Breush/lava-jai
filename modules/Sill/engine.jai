@@ -42,9 +42,9 @@ create_engine :: ($_Meta : Type, postProcessing := false, rayTracing := false) -
 }
 
 destroy_engine :: (engine : *Engine) {
-    Magma.destroy_engine(engine.renderEngine);
-
     engine_cleanup(engine, resetMemory = false);
+
+    Magma.destroy_engine(engine.renderEngine);
 
     if engine.allocator.proc != null {
         Basic.free(engine, engine.allocator);
@@ -108,8 +108,11 @@ engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := fal
 }
 
 engine_cleanup :: (engine : *Engine, resetMemory := true) {
+    _ui_cleanup(*engine.ui);
     _input_cleanup(*engine.input);
     engine.Meta._cleanup_entities(engine);
+
+    Basic.array_free(engine.pendingDestroyedEntities);
 
     if resetMemory {
         <<engine = Engine(engine.Meta).{};
@@ -173,6 +176,7 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
     if (engine.pendingDestroyedEntities.count != 0) {
         // Some entities might remove others, so we copy everything before-hand.
         pendingDestroyedEntities := Basic.array_copy(engine.pendingDestroyedEntities);
+        defer Basic.array_free(pendingDestroyedEntities);
         engine.pendingDestroyedEntities.count = 0;
 
         for entity : pendingDestroyedEntities {

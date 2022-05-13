@@ -50,7 +50,8 @@ DollarFile :: struct {
 spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarFiles : []DollarFile, optimized : bool) -> []u8 {
     spvCode : [..]u8;
 
-    _, glslFileContent := _get_entire_shader_file(glslFile, ".", dollarFiles); // @todo Mem leak?
+    _, glslFileContent := _get_entire_shader_file(glslFile, ".", dollarFiles);
+    defer if glslFile[0] != #char "$" then Basic.free(glslFileContent);
 
     shadercShaderKind : Shaderc.ShaderKind;
     if shaderKind == .Vertex {
@@ -373,7 +374,7 @@ _get_entire_shader_file :: (filename : string, requestingPath : string, dollarFi
         }
     } else {
         readOk : bool;
-        path = Basic.sprint("%/%", requestingPath, filename);
+        path = Basic.tprint("%/%", requestingPath, filename);
         code, readOk = File.read_entire_file(path);
     }
 

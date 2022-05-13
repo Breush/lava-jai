@@ -295,8 +295,10 @@ _buffer_holder_cleanup :: (using bufferHolder : *BufferHolder, resetMemory := tr
         Basic.free(stagingBufferHolder);
     }
 
-    Vk.destroy_buffer(engine.device, buffer, null);
-    Vk.free_memory(engine.device, deviceMemory, null);
+    if bufferHolder.engine != null {
+        Vk.destroy_buffer(engine.device, buffer, null);
+        Vk.free_memory(engine.device, deviceMemory, null);
+    }
 
     if resetMemory {
         <<bufferHolder = .{};

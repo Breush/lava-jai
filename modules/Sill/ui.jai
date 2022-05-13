@@ -20,6 +20,11 @@ ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
     Basic.array_unordered_remove_by_value(*ui.uiComponents, uiComponent, stop_after_first = true);
 }
 
+_ui_cleanup :: (ui : *Ui) {
+    Basic.array_free(ui.uiComponents);
+    Basic.array_free(ui.hoveredUiComponents);
+}
+
 _ui_update :: (ui : *Ui) {
     if ui.componentsDepthDirty {
         ui.componentsDepthDirty = false;

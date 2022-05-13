@@ -37,6 +37,7 @@ texture_cleanup :: (texture : *Texture, resetMemory := true) {
 
 texture_load_from_file :: (texture : *Texture, filename : string) -> bool {
     fileBytes, readOk := File.read_entire_file(filename);
+    defer Basic.free(fileBytes);
     _CHECK(readOk, Basic.tprint("Unable to read texture file: %", filename));
 
     extent : Chamber.uvec2;

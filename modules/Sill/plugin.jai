@@ -57,6 +57,7 @@ MetaEntity :: struct {
     idCamelCase : string;   // "myCustom"
     idSnakeCase : string;   // "my_custom"
     structMembers : [..]StructMember;
+    hasOnCleanup : bool;
 
     // This entity has multiple components defined as "some : SomeComponent;"
     // @note During compilation, we're not sure whether this is a component or not.
@@ -183,6 +184,8 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
         if member.kind != .DECLARATION then continue;
 
         memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
+        metaEntity.hasOnCleanup = metaEntity.hasOnCleanup || (memberCodeDeclaration.name == "on_cleanup");
+
         if memberCodeDeclaration.flags & .IS_MARKED_AS_USING != 0 ||
            memberCodeDeclaration.flags & .IS_IMPORTED != 0 {
             continue;
@@ -361,10 +364,14 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
+        if metaEntity.hasOnCleanup {
+            Basic.append(*builder, "        entity.on_cleanup(entity);\n");
+        }
         for component : metaEntity.structMembers {
             if !component.isComponent then continue;
             Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component.id);
         }
+        Basic.append(*builder, "        Basic.array_free(entity.children);\n");
         Basic.append(*builder, "    }\n");
     }
 

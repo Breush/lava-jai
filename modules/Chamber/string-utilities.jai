@@ -177,14 +177,15 @@ delete_after_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
 
     deletedBytes := utf8_word_length_after_byte(<<s, byteIndex);
 
-    // @fixme Be way more clever than a reallocation...
     s1 := <<s;
     s1.count = byteIndex;
 
     s2 := <<s;
     Basic.advance(*s2, byteIndex + deletedBytes);
 
-    (<<s) = Basic.sprint("%1%2", s1, s2);
+    memcpy(s1.data + s1.count, s2.data, s2.count); // :MissingMemmove
+    s.count = s1.count + s2.count;
+
     return deletedBytes;
 }
 
@@ -194,26 +195,29 @@ delete_before_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
 
     deletedBytes := utf8_word_length_before_byte(<<s, byteIndex);
 
-    // @fixme Be way more clever than a reallocation...
     s1 := <<s;
     s1.count = byteIndex - deletedBytes;
 
     s2 := <<s;
     Basic.advance(*s2, byteIndex);
 
-    (<<s) = Basic.sprint("%1%2", s1, s2);
+    memcpy(s1.data + s1.count, s2.data, s2.count); // @todo :MissingMemmove Could be memmove, but the intrisics does not exist.
+    s.count = s1.count + s2.count;
+
     return deletedBytes;
 }
 
 insert_after_byte :: (s : *string, byteIndex : u32, c : string) {
-    // @fixme Be way more clever than a reallocation...
     s1 := <<s;
     s1.count = byteIndex;
 
     s2 := <<s;
     Basic.advance(*s2, byteIndex);
 
+    // @todo Sometimes, we could prevent the reallocation, if the allocated space is known.
+    // So maybe this should take a [..]u8?
     (<<s) = Basic.sprint("%1%2%3", s1, c, s2);
+    Basic.free(s1);
 }
 
 #scope_file

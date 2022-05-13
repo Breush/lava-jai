@@ -78,6 +78,15 @@ font_load :: (filename : string, size : float) -> Font {
     return font_load(array, size);
 }
 
+font_free :: (font : *Font) {
+    for info : font.infos {
+        Basic.free(info.content);
+    }
+    Basic.array_free(font.infos);
+    Basic.array_free(font.pixels);
+    Hash.uninit(*font.glyphInfos);
+}
+
 // @note We're not considering subpixel for now, which would require to redraw each letter
 // on a new buffer. This is definitely possible, but require much more work.
 font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
