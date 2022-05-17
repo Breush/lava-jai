@@ -8,6 +8,7 @@ Shader :: struct {
 
     materials : [..]*Material;
     uniformsFrame : *Chamber.UniformsFrame;
+    options : ShaderOptions;
 
     using shaderImpl : ShaderImpl;
 
@@ -45,7 +46,8 @@ destroy_shader :: (shader : *Shader, destroyResources : bool) {
 shader_init :: (shader : *Shader, renderer : *Renderer, id : string, options : ShaderOptions = .{}) {
     shader.renderer = renderer;
     shader.id = id;
-    impl_shader_init(shader, options);
+    shader.options = options;
+    impl_shader_init(shader);
 }
 
 shader_cleanup :: (shader : *Shader, resetMemory := true) {

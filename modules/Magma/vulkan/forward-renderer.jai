@@ -96,7 +96,29 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     lastDrawnMaterial := cast(*Material) 0x1;
     lastBoundPipeline : Vk.Pipeline = null;
 
-    // @todo Sort meshes by shaders, in order to reduce context switches.
+    // @note We sort the meshes by shader to reduce switches, except for the translucent materials
+    // that go at the end and are sorted by distance to the camera.
+    // @fixme If the array is already sorted (very possible), quick sort  will still
+    // move objects around. Which is a bit sad.
+    // Maybe we should filter meshes by eye_is_seeing beforehand anyway and have some
+    // kind of an insertion sort.
+    Sort.quick_sort(forwardRenderer.scene.meshes, (m1 : *Mesh, m2 : *Mesh) -> int {
+        if m1.material == null then return ifx m2.material == null then 0 else 1;
+        if m2.material == null then return -1;
+
+        if m1.material.shader.options.alphaBlendingEnabled != m2.material.shader.options.alphaBlendingEnabled {
+            return cast(int) m1.material.shader.options.alphaBlendingEnabled - cast(int) m2.material.shader.options.alphaBlendingEnabled;
+        }
+
+        if m1.material.shader.options.alphaBlendingEnabled {
+            // @fixme Should be distance to camera! This does not work outside 2D.
+            if m1.boundingSphere.center.z < m2.boundingSphere.center.z then return 1;
+            if m1.boundingSphere.center.z > m2.boundingSphere.center.z then return -1;
+        }
+
+        return m2.material.shader - m1.material.shader;
+    });
+
     for mesh : forwardRenderer.scene.meshes {
         if mesh.disabled then continue;
         if !eye_is_seeing(*forwardRenderer.eye, mesh.boundingSphere) then continue;
