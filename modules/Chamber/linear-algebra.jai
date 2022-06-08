@@ -20,6 +20,14 @@ mat3x4 :: Matrix4x3;
 // Following GLM naming.
 quat :: Quaternion;
 
+Axis :: enum {
+    PositiveX;
+    PositiveY;
+    PositiveZ;
+    NegativeX;
+    NegativeY;
+    NegativeZ;
+}
 
 vec2Interface :: struct {
     x, y : float32;
@@ -85,7 +93,11 @@ make_matrix :: (transform : trs, $T := mat3x4) -> T {
     matrix.coef[1][3] = transform.translation.y;
     matrix.coef[2][3] = transform.translation.z;
 
+    #assert T == mat4 || T == mat3x4;
     #if T == mat4 {
+        matrix.coef[3][0] = 0;
+        matrix.coef[3][1] = 0;
+        matrix.coef[3][2] = 0;
         matrix.coef[3][3] = 1;
     }
 
@@ -137,7 +149,11 @@ make_matrix :: (transform : trf, $T := mat3x4) -> T {
     matrix.coef[1][3] = transform.translation.y;
     matrix.coef[2][3] = transform.translation.z;
 
+    #assert T == mat4 || T == mat3x4;
     #if T == mat4 {
+        matrix.coef[3][0] = 0;
+        matrix.coef[3][1] = 0;
+        matrix.coef[3][2] = 0;
         matrix.coef[3][3] = 1;
     }
 
@@ -224,6 +240,7 @@ unnear_orthographic_projection :: (matrix : *mat4, extent : vec2, farClip : floa
     // z' = -z / (f - n) + f / (f - n) which gives z' = -z / f + 1 for an unnear projection.
     matrix.coef[2][2] = - 1. / farClip;
     matrix.coef[2][3] = 1.;
+    matrix.coef[3][3] = 1.;
 }
 
 /*
@@ -385,10 +402,20 @@ rotate :: (v : vec3, angle : float32, axis : vec3) -> vec3 {
 
 // Given an origin/target, returns the delta to be applied to the origin to rotate around the target.
 rotate_around_target :: (origin : vec3, target : vec3,
-                         longitudeAngle : float32, latitudeAngle : float32) -> vec3 {
+                         longitudeAngle : float32, latitudeAngle : float32, $upAxis := Axis.PositiveZ) -> vec3 {
     delta : vec3;
     relativePosition : vec3;
     relativePosition.std = origin - target;
+
+    #if upAxis == .PositiveZ {
+        // Nothing to do.
+    } else #if upAxis == .NegativeY {
+        tmp := relativePosition.z;
+        relativePosition.z = relativePosition.y;
+        relativePosition.y = tmp;
+    } else {
+        #assert(false);
+    }
 
     if longitudeAngle < -0.001 || longitudeAngle > 0.001 {
         longitudeDelta := rotate_z(relativePosition, longitudeAngle) - relativePosition;
@@ -412,6 +439,12 @@ rotate_around_target :: (origin : vec3, target : vec3,
 
         latitudeDelta := rotate(relativePosition, latitudeAngle, axis) - relativePosition;
         delta.std += latitudeDelta;
+    }
+
+    #if upAxis == .NegativeY {
+        tmp = delta.z;
+        delta.z = delta.y;
+        delta.y = tmp;
     }
 
     return delta;

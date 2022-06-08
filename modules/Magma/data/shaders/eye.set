@@ -3,8 +3,7 @@ layout(std430, push_constant) uniform PushConstant {
     vec4 eyeViewMatrixRow0;
     vec4 eyeViewMatrixRow1;
     vec4 eyeViewMatrixRow2;
-    vec4 eyeProjectionMatrixFactors1;
-    vec2 eyeProjectionMatrixFactors2;
+    mat4 eyeProjectionMatrix;
     int eyeLastChangeFrame;
     int frame; // @todo Trick, this is in an other push constant in code...
 } pushConstant;
@@ -22,18 +21,7 @@ void setupEye() {
                           pushConstant.eyeViewMatrixRow2,
                           vec4(0, 0, 0, 1));
 
-    eye.projectionMatrix = mat4(0);
-    eye.projectionMatrix[0][0] = pushConstant.eyeProjectionMatrixFactors1[0];
-    eye.projectionMatrix[1][1] = pushConstant.eyeProjectionMatrixFactors1[1];
-    eye.projectionMatrix[2][2] = pushConstant.eyeProjectionMatrixFactors1[2];
-    eye.projectionMatrix[2][3] = pushConstant.eyeProjectionMatrixFactors1[3];
-    eye.projectionMatrix[0][2] = pushConstant.eyeProjectionMatrixFactors2[0];
-    eye.projectionMatrix[1][2] = pushConstant.eyeProjectionMatrixFactors2[1];
-    // @fixme This divides by the Z coordinates, making the thing a perspective projection.
-    // eye.projectionMatrix[3][2] = 1;
-    // @fixme This is for an infinite orthographic projection however.
-    eye.projectionMatrix[2][3] = 1;
-    eye.projectionMatrix[3][3] = 1;
+    eye.projectionMatrix = pushConstant.eyeProjectionMatrix;
 
     // @note GLSL matrices are expressed in columns, thus we need to transpose
     // to be clean.

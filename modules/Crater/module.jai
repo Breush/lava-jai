@@ -220,7 +220,7 @@ _window_add_event :: (window : *Window, event : *Event) {
             return;
         }
 
-        if (window.pointerPositionToReset) {
+        if !window.pointerPositionToReset {
             event.mousePointer.dx = event.mousePointer.x - cast(s16) window.mousePosition.x;
             event.mousePointer.dy = event.mousePointer.y - cast(s16) window.mousePosition.y;
         } else {

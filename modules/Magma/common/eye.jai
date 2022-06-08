@@ -34,12 +34,9 @@ Eye :: struct {
     };
 }
 
-EyeShaderObject :: struct {                  // 72 bytes
-    viewMatrixRow0 : Chamber.vec4;           // 16 viewMatrixRow[0]
-    viewMatrixRow1 : Chamber.vec4;           // 16 viewMatrixRow[1]
-    viewMatrixRow2 : Chamber.vec4;           // 16 viewMatrixRow[2]
-    projectionMatrixFactors1 : Chamber.vec4; // 16 [0][0] [1][1] [2][2] [2][3]
-    projectionMatrixFactors2 : Chamber.vec2; // 8 [0][2] [1][2]
+EyeShaderObject :: struct {                  // 116 bytes
+    viewMatrix : Chamber.mat3x4;             // 48
+    projectionMatrix : Chamber.mat4;         // 64
     lastChangeFrame : u32;                   // @todo Temporary, waiting for motion buffer.
 }
 
@@ -52,19 +49,8 @@ eye_init :: (eye : *Eye, extent : Chamber.uvec2) {
 }
 
 eye_commit :: (eye : *Eye) {
-    eye.shaderObject.viewMatrixRow0.std = eye.viewMatrix.v[0];
-    eye.shaderObject.viewMatrixRow1.std = eye.viewMatrix.v[1];
-    eye.shaderObject.viewMatrixRow2.std = eye.viewMatrix.v[2];
-
-    // For symmetric projections
-    eye.shaderObject.projectionMatrixFactors1.x = eye.projectionMatrix.coef[0][0];
-    eye.shaderObject.projectionMatrixFactors1.y = eye.projectionMatrix.coef[1][1];
-    eye.shaderObject.projectionMatrixFactors1.z = eye.projectionMatrix.coef[2][2];
-    eye.shaderObject.projectionMatrixFactors1.w = eye.projectionMatrix.coef[2][3];
-
-    // Extended for non-symmetric projections
-    eye.shaderObject.projectionMatrixFactors2.x = eye.projectionMatrix.coef[0][2];
-    eye.shaderObject.projectionMatrixFactors2.y = eye.projectionMatrix.coef[1][2];
+    eye.shaderObject.viewMatrix = eye.viewMatrix.mat4x3;
+    eye.shaderObject.projectionMatrix = eye.projectionMatrix;
 
     // @note Can't know the frame index here, the renderer will insert it.
     eye.shaderObject.lastChangeFrame = 0xFFFF_FFFF;
@@ -79,10 +65,10 @@ eye_commit :: (eye : *Eye) {
     bottomLeftNearLocal := projectionMatrixInverse * Chamber.vec4.{-1, 1, 1, 1};
     bottomRightNearLocal := projectionMatrixInverse * Chamber.vec4.{1, 1, 1, 1};
 
-    topLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, -1, 0, 1};
-    topRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, -1, 0, 1};
-    bottomLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, 1, 0, 1};
-    bottomRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, 1, 0, 1};
+    topLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, -1, 0.0001, 1}; // @note Can't use z=0, otherwise topLeftFarLocal.w is set to 0
+    topRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, -1, 0.0001, 1};
+    bottomLeftFarLocal := projectionMatrixInverse * Chamber.vec4.{-1, 1, 0.0001, 1};
+    bottomRightFarLocal := projectionMatrixInverse * Chamber.vec4.{1, 1, 0.0001, 1};
 
     // W component can be zeroed with orthographic projections.
     if topLeftNearLocal.w != 0 then topLeftNearLocal /= topLeftNearLocal.w;
@@ -103,8 +89,6 @@ eye_commit :: (eye : *Eye) {
     topRightFar := (viewMatrixInverse * topRightFarLocal).xyz;
     bottomLeftFar := (viewMatrixInverse * bottomLeftFarLocal).xyz;
     bottomRightFar := (viewMatrixInverse * bottomRightFarLocal).xyz;
-
-    origin := viewMatrixInverse.v[3].xyz;
 
     eye.frustum.forward.std = normalize(cross(topLeftNear - bottomLeftNear, bottomRightNear - bottomLeftNear));
     eye.frustum.leftNormal.std = normalize(cross(topLeftFar - topLeftNear, bottomLeftNear - topLeftNear));

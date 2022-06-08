@@ -67,6 +67,10 @@ input_axis_bind :: (input : *Input, axisName : string, kind : Input.AxisKind) {
     Basic.array_add_if_unique(*axis.kinds, kind);
 }
 
+input_axis_unbind :: (input : *Input, axisName : string) {
+    Hash.table_remove(*input.axes, axisName);
+}
+
 input_axis_changed :: (input : *Input, axisName : string) -> bool {
     axis := table_find_pointer(input.axes, axisName);
     if axis == null then return false;

@@ -95,7 +95,8 @@ material_cleanup :: (material : *Material, resetMemory := true) {
 
 material_set :: (material : *Material, uniformName : string, texture : *Texture) {
     uniform := table_find_pointer(material.uniforms, uniformName);
-    Basic.assert(uniform != null && uniform.kind == .Texture);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .Texture, "Shader's '%' uniform named '%' is not a texture.", material.shader.id, uniformName);
 
     uniform.texture = texture;
     impl_material_uniform_commit(material, uniform);
@@ -103,7 +104,8 @@ material_set :: (material : *Material, uniformName : string, texture : *Texture)
 
 material_set :: (material : *Material, uniformName : string, value : bool) {
     uniform := table_find_pointer(<<material.shader.uniformsFrame, uniformName);
-    Basic.assert(uniform != null && uniform.kind == .BlockField);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
 
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 
@@ -113,7 +115,8 @@ material_set :: (material : *Material, uniformName : string, value : bool) {
 
 material_set :: (material : *Material, uniformName : string, value : $T) {
     uniform := table_find_pointer(<<material.shader.uniformsFrame, uniformName);
-    Basic.assert(uniform != null && uniform.kind == .BlockField, "Material of shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
 
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 
