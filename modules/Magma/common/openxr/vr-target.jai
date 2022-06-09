@@ -195,7 +195,7 @@ vr_target_sync :: (vrTarget : *VrTarget) -> bool {
         orientation.z = view.pose.orientation.y;
         orientation.w = view.pose.orientation.w;
 
-        matrix := make_rotation_matrix4(orientation);
+        matrix := rotation_matrix(Chamber.mat4, orientation);
         matrix.coef[0][3] = -view.pose.position.z;
         matrix.coef[1][3] = -view.pose.position.x;
         matrix.coef[2][3] = view.pose.position.y;

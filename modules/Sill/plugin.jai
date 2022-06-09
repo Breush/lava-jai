@@ -28,11 +28,11 @@
 
 get_plugin :: () -> *Compiler.Metaprogram_Plugin {
     p := Basic.New(Compiler.Metaprogram_Plugin);
-    p.message = message;
+    p.message = sill_plugin_message;
     return p;
 }
 
-message :: (p : *Compiler.Metaprogram_Plugin, message : *Compiler.Message) {
+sill_plugin_message :: (p : *Compiler.Metaprogram_Plugin, message : *Compiler.Message) {
     if message.kind == .TYPECHECKED {
         messageTypechecked := cast(*Compiler.Message_Typechecked) message;
         for decl : messageTypechecked.declarations {
