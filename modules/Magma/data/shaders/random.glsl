@@ -1,4 +1,4 @@
-#include "./constants.glsl" // PI
+#include "$/constants.glsl" // PI
 
 // ----- Hashing
 
