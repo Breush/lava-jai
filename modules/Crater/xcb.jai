@@ -44,8 +44,8 @@ impl_window_init :: (window : *Window) -> bool {
                       cast(u16) Xcb.WindowClass.InputOutput, window.xcbScreen.rootVisual, valueMask, *valueList[0]);
 
     // Enable window destroyed notifications
-    window.xcbProtocolsReply = Xcb.helper_get_intern_atom(window.xcbConnection, true, "WM_PROTOCOLS");
-    window.xcbDeleteWindowReply = Xcb.helper_get_intern_atom(window.xcbConnection, false, "WM_DELETE_WINDOW");
+    window.xcbProtocolsReply = Xcb.xcb_helper_get_intern_atom(window.xcbConnection, true, "WM_PROTOCOLS");
+    window.xcbDeleteWindowReply = Xcb.xcb_helper_get_intern_atom(window.xcbConnection, false, "WM_DELETE_WINDOW");
     Xcb.change_property(window.xcbConnection, cast(u8) Xcb.PropMode.Replace, window.xcbId, window.xcbProtocolsReply.atom,
                         cast(u32) Xcb.AtomEnum.AtomAtom, 32, 1, *window.xcbDeleteWindowReply.atom);
 
@@ -115,12 +115,17 @@ impl_window_update_pointer_hidden :: (window : *Window) {
 #scope_file
 
 setup_xcb :: (window : *Window) -> bool {
-    screenIndex : int;
+    screenIndex : s32;
     window.xcbConnection = Xcb.connect(null, *screenIndex);
 
     // Find the correct screen
     setup := Xcb.get_setup(window.xcbConnection);
-    window.xcbScreen = Xcb.setup_get_screen(setup, screenIndex);
+
+    if screenIndex >= 0 {
+        screenIterator := Xcb.setup_roots_iterator(setup);
+        for 1..screenIndex Xcb.screen_next(*screenIterator);
+        window.xcbScreen = screenIterator.data;
+    }
 
     if window.xcbScreen == null {
         context.logger("Could not find XCB screen.\n", null, .{common_flags=Log_Flags.ERROR});
