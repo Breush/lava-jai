@@ -7,18 +7,23 @@ Xcb :: #import "Xcb";
 Xkb :: #import "Xkb";
 
 WindowImpl :: struct {
-    xcbId : u32;
+    xcbId : Xcb.Window;
     xcbConnection : *Xcb.Connection;
     xcbScreen : *Xcb.Screen;
     xcbProtocolsReply : *Xcb.InternAtomReply;
     xcbDeleteWindowReply : *Xcb.InternAtomReply;
-    xcbEmptyCursor : u32;
+    xcbArgb32PictforminfoId : type_of(Xcb.Render.Pictforminfo.id);
+    xcbCursors : [#run type_info(PointerStyle).values.count]Xcb.Cursor;
 
     xkbContext : *Xkb.Context;
     xkbKeymap : *Xkb.Keymap;
     xkbState : *Xkb.State;
     xkbComposeTable : *Xkb.ComposeTable;
     xkbComposeState : *Xkb.ComposeState;
+
+    systemCursorThemeSize : u32;
+    systemCursorThemeName : string;
+    systemCursorThemePath : string;
 
     // To prevent extra key inputs when focusing the window the first time.
     keyPressedAtLeastOnce : bool;
@@ -56,6 +61,51 @@ impl_window_init :: (window : *Window) -> bool {
     // Show the final window
     Xcb.map_window(window.xcbConnection, window.xcbId);
     Xcb.flush(window.xcbConnection);
+
+    // Find ARGB32 format id
+    ARGB32_DIRECTFORMAT :: Xcb.Render.Directformat.{16, 0xFF, 8, 0xFF, 0, 0xFF, 24, 0xFF};
+    pfCookie := Xcb.Render.query_pict_formats(window.xcbConnection);
+    pfReply := Xcb.Render.query_pict_formats_reply(window.xcbConnection, pfCookie, null);
+    pfIterator := Xcb.Render.query_pict_formats_formats_iterator(pfReply);
+    while pfIterator.rem > 0 {
+        if pfIterator.data.type == cast(u8) Xcb.Render.PictType.Direct && pfIterator.data.depth == 32 &&
+            memcmp(*pfIterator.data.direct, *ARGB32_DIRECTFORMAT, size_of(Xcb.Render.Directformat)) == 0 {
+            window.xcbArgb32PictforminfoId = pfIterator.data.id;
+            break;
+        }
+        Xcb.Render.pictforminfo_next(*pfIterator);
+    }
+    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, pfReply, null);
+
+    // Finding the cursor theme path
+    rmCookie := Xcb.get_property(window.xcbConnection, 0, window.xcbScreen.root, cast(u32) Xcb.AtomEnum.AtomResourceManager, cast(u32) Xcb.AtomEnum.AtomString, 0, 16 * 1024); // Arbitrary size...
+    rmReply := Xcb.get_property_reply(window.xcbConnection, rmCookie, null);
+    rmValue : string;
+    rmValue.data = Xcb.get_property_value(rmReply);
+    rmValue.count = Xcb.get_property_value_length(rmReply);
+
+    for String.split(rmValue, cast(u8) #char "\n") {
+        if String.starts_with(it, "Xcursor.size:") {
+            Basic.advance(*it, "Xcursor.size:".count);
+            window.systemCursorThemeSize = cast(u32) String.parse_int(*it);
+        } else if String.starts_with(it, "Xcursor.theme:") {
+            Basic.advance(*it, "Xcursor.theme:".count);
+            window.systemCursorThemeName = Basic.sprint(String.trim_left(it));
+        }
+    }
+    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, rmReply, null);
+
+    BASE_CURSOR_THEME_PATHS :: string.["~/.icons", "/usr/share/icons", "/usr/share/pixmaps"];
+    for baseCursorThemePath : BASE_CURSOR_THEME_PATHS {
+        themeIndexPath := Basic.tprint("%/%/index.theme", baseCursorThemePath, window.systemCursorThemeName);
+        fileContent, fileExists := File.read_entire_file(themeIndexPath);
+
+        if fileExists { // @todo Could be a File.exists, but not provided in modules yet...
+            Basic.free(fileContent);
+            window.systemCursorThemePath = Basic.sprint("%/%", baseCursorThemePath, window.systemCursorThemeName);
+            break;
+        }
+    }
 
     return true;
 }
@@ -112,7 +162,33 @@ impl_window_update_pointer_hidden :: (window : *Window) {
     Xcb.flush(window.xcbConnection);
 }
 
+impl_window_update_pointer_style :: (window : *Window) {
+    cursor := window.xcbCursors[window.pointerStyle];
+
+    if cursor == Xcb.NONE {
+        if #complete window.pointerStyle == {
+            case .Default;
+                // Nothing to do.
+            case .Hidden;
+                cursor = Xcb.generate_id(window.xcbConnection);
+                pixmap := _create_pixmap_from_bitmap(window, 1, 1, u32.[0]);
+                Xcb.create_cursor(window.xcbConnection, cursor, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0);
+                Xcb.free_pixmap(window.xcbConnection, pixmap);
+            case .HandPointer;
+                cursor = _read_system_cursor(window, "pointer");
+        }
+
+        window.xcbCursors[window.pointerStyle] = cursor;
+    }
+
+    Xcb.change_window_attributes(window.xcbConnection, window.xcbId, cast(u32) Xcb.Cw.Cursor, *cursor);
+    Xcb.flush(window.xcbConnection);
+}
+
 #scope_file
+
+String :: #import "String";
+File :: #import "File";
 
 setup_xcb :: (window : *Window) -> bool {
     screenIndex : s32;
@@ -385,4 +461,115 @@ _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     }
 
     return .Unknown;
+}
+
+_create_pixmap_from_bitmap :: (window : *Window, width : u32, height : u32, bitmap : []u32) -> Xcb.Pixmap {
+    pixmap := Xcb.generate_id(window.xcbConnection);
+    Xcb.create_pixmap(window.xcbConnection, 32, pixmap, window.xcbId, cast(u16) width, cast(u16) height);
+
+    gc := Xcb.generate_id(window.xcbConnection);
+    Xcb.create_gc(window.xcbConnection, gc, pixmap, 0, null);
+    Xcb.put_image(window.xcbConnection, cast(u8) Xcb.ImageFormat.Z_pixmap, pixmap, gc,
+                    cast(u16) width, cast(u16) height,
+                    /* x */ 0, /* y */ 0, /* leftPad */ 0, /* depth */ 32,
+                    cast(u32) bitmap.count * 4, cast(*u8) bitmap.data);
+    Xcb.free_gc(window.xcbConnection, gc);
+
+    return pixmap;
+}
+
+_read_system_cursor :: (window : *Window, cursorName : string) -> Xcb.Cursor {
+    // We were not able to find the cursor theme.
+    if window.systemCursorThemePath.count == 0 then {
+        // @note We *could* fallback to X11 cursors, but they are so ugly it feels like a bad idea.
+        // Better do nothing then...
+        Basic.log("Unable to find the XCB cursor theme.", flags = .WARNING);
+        return Xcb.NONE;
+    }
+
+    // @note All this file parsing is designed to be ran on a little-endian machine.
+    // Which is also the encoding of the cursors files.
+    CursorHeader :: struct {
+        magic : u32;
+        headerSize : u32;
+        version : u32;
+        ntoc : u32;
+    }
+
+    CursorTableOfContent :: struct {
+        type : u32;
+        subType : u32;
+        position : u32;
+    }
+
+    CursorChunkImage :: struct {
+        header : struct {
+            headerSize : u32;
+            type : u32;
+            subType : u32;
+            version : u32;
+        }
+        width : u32;
+        height : u32;
+        xHotspot : u32;
+        yHotspot : u32;
+        delay : u32;
+    }
+
+    CursorType :: enum u32 {
+        Image :: 0xFFFD_0002;
+    }
+
+    file := Basic.tprint("%/cursors/%", window.systemCursorThemePath, cursorName);
+    fileContent, ok := File.read_entire_file(file);
+    if !ok {
+        // @todo We could follow inheritence of themes. Do that by parsing index.theme.
+        Basic.log("File % does not exists.", file, flags = .WARNING);
+        return Xcb.NONE;
+    }
+    defer Basic.free(fileContent);
+
+    cursorContent := fileContent;
+    header := cast(*CursorHeader) cursorContent.data;
+    if header.magic != 0x72756358 {
+        Basic.log("File % is not a cursor file as expected.", file, flags = .WARNING);
+        return Xcb.NONE;
+    }
+    Basic.advance(*cursorContent, header.headerSize);
+
+    tocs : []CursorTableOfContent;
+    tocs.data = cast(*CursorTableOfContent) cursorContent.data;
+    tocs.count = header.ntoc;
+
+    matchingToc : *CursorTableOfContent;
+    for *toc : tocs {
+        if toc.type == cast(u32) CursorType.Image &&
+            toc.subType == window.systemCursorThemeSize {
+            matchingToc = toc;
+            break;
+        }
+    }
+    if matchingToc == null {
+        Basic.log("File % does not contain cursor for size %.", window.systemCursorThemeSize, flags = .WARNING);
+        return Xcb.NONE;
+    }
+    Basic.advance(*cursorContent, matchingToc.position - header.headerSize);
+
+    chunkImage := cast(*CursorChunkImage) cursorContent.data;
+    Basic.advance(*cursorContent, size_of(CursorChunkImage));
+
+    pixels : []u32;
+    pixels.data = cast(*u32) cursorContent.data;
+    pixels.count = chunkImage.width * chunkImage.height;
+
+    // @todo Handle animated cursors if Xcb.Render is recent enough.
+    pixmap := _create_pixmap_from_bitmap(window, chunkImage.width, chunkImage.height, pixels);
+    picture := Xcb.generate_id(window.xcbConnection);
+    cursor := Xcb.generate_id(window.xcbConnection);
+    Xcb.Render.create_picture(window.xcbConnection, picture, pixmap, window.xcbArgb32PictforminfoId, 0, null);
+    Xcb.Render.create_cursor(window.xcbConnection, cursor, picture, cast(u16) chunkImage.xHotspot, cast(u16) chunkImage.yHotspot);
+    Xcb.Render.free_picture(window.xcbConnection, picture);
+    Xcb.free_pixmap(window.xcbConnection, pixmap);
+
+    return cursor;
 }

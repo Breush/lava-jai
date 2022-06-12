@@ -80,8 +80,17 @@ impl_window_center_pointer :: (window : *Window) {
     SetCursorPos(point.x, point.y);
 }
 
-impl_window_update_pointer_hidden :: (window : *Window) {
-    Windows.ShowCursor(cast(s32) !window.pointerHidden);
+impl_window_update_pointer_style :: (window : *Window) {
+    Windows.ShowCursor(cast(s32) (window.pointerStyle != .Hidden));
+
+    cursor : *void;
+    if #complete window.pointerStyle == {
+        case .Default;      cursor = Windows.LoadCursorW(null, Windows.IDC_ARROW);
+        case .Hidden;       return;
+        case .HandPointer;  cursor = Windows.LoadCursorW(null, Windows.IDC_HAND);
+    }
+
+    Windows.SetCursor(cursor);
 }
 
 #scope_file
@@ -236,6 +245,5 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
     return .Unknown;
 }
 
-DPI :: #import "DPI";
 Windows :: #import "Windows";
 WindowsUtf8 :: #import "Windows_Utf8";

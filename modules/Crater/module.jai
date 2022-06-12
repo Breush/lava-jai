@@ -12,7 +12,7 @@ Window :: struct {
     opened : bool;
 
     pointerAutoCentered := false;
-    pointerHidden := false;
+    pointerStyle : PointerStyle;
 
     using details : struct {
         // To prevent big deltas when moving the mouse the first time.
@@ -105,7 +105,15 @@ Key :: enum {
 
 MouseButton :: enum {
     Unknown :: 0;
-    Left; Middle; Right;
+    Left;
+    Middle;
+    Right;
+}
+
+PointerStyle :: enum {
+    Default :: 0;
+    Hidden;
+    HandPointer;   // Usually for links and buttons.
 }
 
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
@@ -191,9 +199,10 @@ window_pointer_auto_centered :: (window : *Window, autoCentered := true) {
     window.mousePosition.y = window.videoMode.height / 2;
 }
 
-window_pointer_hidden :: (window : *Window, hidden := true) {
-    window.pointerHidden = hidden;
-    impl_window_update_pointer_hidden(window);
+window_pointer_style :: (window : *Window, pointerStyle : PointerStyle) {
+    if window.pointerStyle == pointerStyle then return;
+    window.pointerStyle = pointerStyle;
+    impl_window_update_pointer_style(window);
 }
 
 #scope_module
