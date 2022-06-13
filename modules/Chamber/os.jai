@@ -43,3 +43,24 @@ os_application_data_storage_path :: () -> string {
 
     return path;
 }
+
+os_open_browser :: (url : string) -> (ok : bool) {
+    #if OS == .LINUX {
+        strategies := string.["xdg-open", "sensible-browser", "x-www-browser"];
+    } else #if OS == .WINDOWS {
+        strategies := string.["start"];
+    } else #if OS == .MACOS {
+        strategies := string.["open"];
+    }
+
+    for strategy : strategies {
+        launched, exitCode := Process.os_run_command(strategy, url, capture_and_return_output = true);
+        if launched && exitCode == 0 then return true;
+    }
+
+    return false;
+}
+
+#scope_file
+
+Process :: #import "Process";

@@ -5,6 +5,7 @@ UiComponent :: struct {
     // Main configuration.
     anchor := Anchor.Center;
     extent := Chamber.vec2.{1, 1}; // Renderered extent, after all transform applied.
+    disabled := false;
 
     // Updated each input.
     hovered : bool;
@@ -35,7 +36,7 @@ UiComponent :: struct {
 
 UiCallbackFlags :: enum_flags {
     Hover;
-    NoHover;
+    NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
     Child;
     Click;      // Trigger only. Why trigger only?
     NoClick;    // Trigger only. Why trigger only?
@@ -113,6 +114,8 @@ ui_send_update :: (iUi : *UiComponent, flags : UiCallbackFlags, stopPropagation 
 }
 
 ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
+    if iUi.disabled then return false;
+
     // @todo No notion of flats and 2D in the engine for now.
     relativePosition : Chamber.vec3;
     relativePosition.xy = position;
@@ -141,22 +144,13 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
     }
 
     hovered := relativePosition.x >= -iUi.extent.x / 2.0 &&
-               relativePosition.x <=  iUi.extent.x / 2.0 &&
+               relativePosition.x <  iUi.extent.x / 2.0 &&
                relativePosition.y >= -iUi.extent.y / 2.0 &&
-               relativePosition.y <=  iUi.extent.y / 2.0;
-
-    // @fixme That's getting messy... We're triggering unhovered above.
-    if iUi.hovered != hovered {
-        iUi.hovered = hovered;
-        flags := ifx hovered then UiCallbackFlags.Hover else .NoHover;
-        ui_send_trigger(iUi, flags, event, stopPropagation);
-    }
+               relativePosition.y <  iUi.extent.y / 2.0;
 
     if hovered {
         ui_send_update(iUi, .Hover, stopPropagation);
-    } else {
-        ui_send_update(iUi, .NoHover, stopPropagation);
     }
 
-    return iUi.hovered;
+    return hovered;
 }

@@ -588,7 +588,7 @@ encode_utf8 :: (val: u16, result: *u8) -> len: u8 {
     }
 }
 
-#scope_module
+#scope_file
 
 #import "Basic";
 #import "File";

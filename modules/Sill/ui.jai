@@ -17,6 +17,14 @@ ui_register_component :: (ui : *Ui, uiComponent : *UiComponent) {
 }
 
 ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
+    // An unregistred UI component that was hovered should call the no-hover callback.
+    if uiComponent.hovered {
+        stopPropagation : bool;
+        uiComponent.hovered = false;
+        ui_send_update(uiComponent, UiCallbackFlags.NoHover, *stopPropagation);
+        ui_send_trigger(uiComponent, UiCallbackFlags.NoHover, .{}, *stopPropagation);
+    }
+
     Basic.array_unordered_remove_by_value(*ui.uiComponents, uiComponent, stop_after_first = true);
 }
 
@@ -60,15 +68,22 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
             if <<stopPropagation then break;
         }
 
-        for oldHoveredUiComponent : oldHoveredUiComponents {
-            if !Basic.array_find(ui.hoveredUiComponents, oldHoveredUiComponent) {
-                ui_send_trigger(oldHoveredUiComponent, .NoHover, event, stopPropagation);
-            }
+        // Triggering no-hover + hover callbacks.
+        // We want no-hover first.
+        for uiComponent : oldHoveredUiComponents {
+            if Basic.array_find(ui.hoveredUiComponents, uiComponent) then continue;
+            uiComponent.hovered = false;
+            ui_send_trigger(uiComponent, .NoHover, event, stopPropagation);
+        }
+        for uiComponent : ui.hoveredUiComponents {
+            if uiComponent.hovered then continue;
+            uiComponent.hovered = true;
+            ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
         }
     } else if event.kind == .MouseButtonPressed {
         ui.focusedUiComponent = null;
-        for hoveredUiComponent : ui.hoveredUiComponents {
-            ui_send_trigger(hoveredUiComponent, .Click, event, stopPropagation);
+        for uiComponent : ui.hoveredUiComponents {
+            ui_send_trigger(uiComponent, .Click, event, stopPropagation);
             if <<stopPropagation then break;
         }
     } else if event.kind == .TextEntered {
