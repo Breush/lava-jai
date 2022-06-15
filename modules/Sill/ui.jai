@@ -81,10 +81,17 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
             ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
         }
     } else if event.kind == .MouseButtonPressed {
+        oldFocusedUiComponent := ui.focusedUiComponent;
         ui.focusedUiComponent = null;
+
         for uiComponent : ui.hoveredUiComponents {
             ui_send_trigger(uiComponent, .Click, event, stopPropagation);
             if <<stopPropagation then break;
+        }
+
+        if oldFocusedUiComponent != ui.focusedUiComponent {
+            if oldFocusedUiComponent then ui_send_trigger(oldFocusedUiComponent, .NoFocus, event, stopPropagation);
+            if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .Focus, event, stopPropagation);
         }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {

@@ -42,6 +42,8 @@ UiCallbackFlags :: enum_flags {
     NoClick;    // Trigger only. Why trigger only?
     Key;        // Trigger only. Why trigger only?
     Text;       // Trigger only.
+    Focus;      // Trigger only.
+    NoFocus;    // Trigger only.
 }
 
 UiTrigger :: struct {
