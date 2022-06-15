@@ -262,6 +262,7 @@ _init_swapchain :: (windowTarget : *WindowTarget) -> bool {
     swapchainCI.presentMode = presentMode;
     swapchainCI.clipped = Vk.TRUE;
     swapchainCI.preTransform = .Identity;
+    swapchainCI.oldSwapchain = windowTarget.swapchain;
 
     _CHECK(Vk.create_swapchain_khr(windowTarget.engine.device, *swapchainCI, null, *windowTarget.swapchain),
            "Unable to create swapchain.");
@@ -334,7 +335,5 @@ _cleanup_swapchain :: (windowTarget : *WindowTarget) {
 
 _recreate_swapchain :: (windowTarget : *WindowTarget) {
     Vk.device_wait_idle(windowTarget.engine.device);
-
-    _cleanup_swapchain(windowTarget);
     _init_swapchain(windowTarget);
 }

@@ -126,15 +126,9 @@ _init_pipeline :: (shader : *Shader) -> bool {
 
     extent := renderer_get_extent(shader.renderer, 0); // @todo Let user choose which output.
 
+    // Will be dynamic
     viewport : Vk.Viewport;
-    viewport.width = cast(float32) extent.width;
-    viewport.height = cast(float32) extent.height;
-    viewport.minDepth = 0.;
-    viewport.maxDepth = 1.;
-
     scissor : Vk.Rect2D;
-    scissor.extent.width = extent.width;
-    scissor.extent.height = extent.height;
 
     viewportStateCI : Vk.PipelineViewportStateCreateInfo;
     viewportStateCI.sType = .PipelineViewportStateCreateInfo;
@@ -191,6 +185,17 @@ _init_pipeline :: (shader : *Shader) -> bool {
     colorBlendStateCI.attachmentCount = 1;
     colorBlendStateCI.pAttachments = *colorBlendAttachmentState;
 
+    // ---
+
+    dynamicStates : [2]Vk.DynamicState;
+    dynamicStates[0] = .Viewport;
+    dynamicStates[1] = .Scissor;
+
+    dynamicStateCI : Vk.PipelineDynamicStateCreateInfo;
+    dynamicStateCI.sType = .PipelineDynamicStateCreateInfo;
+    dynamicStateCI.dynamicStateCount = dynamicStates.count;
+    dynamicStateCI.pDynamicStates = dynamicStates.data;
+
     // ----- Pipeline
 
     pipelineCI : Vk.GraphicsPipelineCreateInfo;
@@ -204,7 +209,7 @@ _init_pipeline :: (shader : *Shader) -> bool {
     pipelineCI.pMultisampleState = *multisampleStateCI;
     pipelineCI.pDepthStencilState = *depthStencilStateCI;
     pipelineCI.pColorBlendState = *colorBlendStateCI;
-    pipelineCI.pDynamicState = null;
+    pipelineCI.pDynamicState = *dynamicStateCI;
     pipelineCI.layout = shader.pipelineLayout;
     pipelineCI.renderPass = _renderer_get_render_pass(shader.renderer);
     pipelineCI.subpass = 0;

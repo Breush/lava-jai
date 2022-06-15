@@ -180,7 +180,6 @@ window_poll_event :: (window : *Window) -> Event {
         }
     }
 
-    // @fixme This is not popped from the right side.
     return Basic.pop(*window.events);
 }
 
@@ -240,7 +239,8 @@ _window_add_event :: (window : *Window, event : *Event) {
         window.mousePosition.y = event.mousePointer.y;
     }
 
-    Basic.array_add(*window.events, <<event);
+    // @note Adding the event at the start so that we pop the right event.
+    Basic.array_insert_at(*window.events, <<event, 0);
 }
 
 _center_pointer :: (window : *Window) {
@@ -259,7 +259,7 @@ _center_pointer :: (window : *Window) {
         window.pointerPositionToReset = false;
     }
 
-    Basic.array_add(*window.events, event);
+    Basic.array_insert_at(*window.events, event, 0);
 }
 
 Basic :: #import "Basic";

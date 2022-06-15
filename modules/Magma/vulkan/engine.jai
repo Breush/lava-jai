@@ -108,6 +108,25 @@ impl_engine_cleanup :: (engine : *Engine) {
     Hash.uninit(*engine.shaderModuleMap);
 }
 
+impl_engine_draw :: (engine : *Engine) -> bool {
+    if engine.device == null then return true;
+    if engine.targets.count == 0 then return true;
+
+    engine.frameIndex = (engine.frameIndex + 1) % Engine.FRAME_INDEX_COUNT;
+
+    for target : engine.targets {
+        if !_target_draw(target, engine.frameIndex) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+impl_engine_wait_idle :: (engine : *Engine) {
+    Vk.device_wait_idle(engine.device);
+}
+
 impl_engine_register :: (engine : *Engine, target : *Target) {
     registeredResourcesNeedPostInit := (engine.device == null);
 
@@ -130,21 +149,6 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
     } else if engine.device != null {
         _target_post_init(target);
     }
-}
-
-impl_engine_draw :: (engine : *Engine) -> bool {
-    if engine.device == null then return true;
-    if engine.targets.count == 0 then return true;
-
-    engine.frameIndex = (engine.frameIndex + 1) % Engine.FRAME_INDEX_COUNT;
-
-    for target : engine.targets {
-        if !_target_draw(target, engine.frameIndex) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chamber.ShaderKind, $parseUniforms := false) -> *ShaderModule {

@@ -28,7 +28,7 @@ destroy_entity :: (entity : *Entity, destroyChildren := false, warnParent := tru
         }
     }
     if warnParent {
-        entity_set_parent(entity, null, warnParent = true);
+        entity_set_parent(entity, null, warnOldParent = warnParent);
     }
 }
 
@@ -42,15 +42,30 @@ entity_get_component :: (entity : *Entity, $componentType : Type) -> *componentT
     return null;
 }
 
-entity_add_child :: (entity : *Entity, child : *Entity) {
-    Basic.array_add(*entity.children, child);
+entity_add_child :: (entity : *Entity, child : *Entity, warnChild := true) {
+    isNewChild := Basic.array_add_if_unique(*entity.children, child);
+    if !isNewChild then return;
+
     entity.childrenChanged = true;
-    entity_set_parent(child, entity, warnParent = false);
+    if warnChild {
+        entity_set_parent(child, entity, warnNewParent = false);
+    }
 }
 
-entity_set_parent :: (entity : *Entity, parent : *Entity, warnParent := true) {
-    if entity.parent != null {
-        // @todo Should warn previous parent if any.
+entity_remove_child :: (entity : *Entity, child : *Entity, warnChild := true) {
+    Basic.array_unordered_remove_by_value(*entity.children, child, stop_after_first = true);
+    entity.childrenChanged = true;
+    if warnChild {
+        entity_set_parent(child, null, warnOldParent = false);
+    }
+}
+
+entity_set_parent :: (entity : *Entity, parent : *Entity, warnOldParent := true, warnNewParent := true) {
+    if warnOldParent && entity.parent != null {
+        entity_remove_child(entity.parent, entity, warnChild = false);
     }
     entity.parent = parent;
+    if warnNewParent && parent != null {
+        entity_add_child(parent, entity, warnChild = false);
+    }
 }

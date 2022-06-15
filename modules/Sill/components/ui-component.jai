@@ -121,8 +121,8 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
     relativePosition.xy = position;
 
     // Transform the position into the screen space.
-    relativePosition.x -= iUi.entity.engine.windowExtent.width / 2.0; // @todo Should it depend on the renderer?
-    relativePosition.y -= iUi.entity.engine.windowExtent.height / 2.0;
+    relativePosition.x -= iUi.entity.engine.options.windowExtent.width / 2.0; // @todo Should it depend on the renderer?
+    relativePosition.y -= iUi.entity.engine.options.windowExtent.height / 2.0;
 
     unscaledTransform := iUi.transform.worldTransform;
     unscaledTransform.factor = 1.0;

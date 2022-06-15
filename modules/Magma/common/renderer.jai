@@ -176,6 +176,11 @@ forward_renderer_get_extent :: (forwardRenderer : *ForwardRenderer, eyeIndex : u
     return .{};
 }
 
+forward_renderer_extent :: (forwardRenderer : *ForwardRenderer, extent : Chamber.uvec2) {
+    forwardRenderer.eye.extent = extent;
+    impl_forward_renderer_update_from_eye(forwardRenderer);
+}
+
 // ----- Ray tracing
 
 RayTracingRenderer :: struct {

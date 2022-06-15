@@ -17,8 +17,10 @@ EngineBase :: struct {
     #as input : Input; // @fixme Spread these #as, they are awesome. One could just care about the engine afterwards...
     ui : Ui;
 
-    windowExtent : Chamber.uvec2;
-    closingMainWindow : bool; // Set to true to close the main window.
+    // User control.
+    options : EngineOptions;
+    closingMainWindow : bool;           // Set to true to close the main window.
+    windowSizeChangedTimer : float64;   // We also delay the Event.WindowSizeChanged so that only one is sent through the event handler.
 
     // @note We delay entity destruction so that other entities updates
     // can schedule destruction of any entity.
@@ -34,10 +36,22 @@ Engine :: struct ($_Meta : Type) {
     allocator : Allocator;
 }
 
-create_engine :: ($_Meta : Type, postProcessing := false, rayTracing := false) -> *Engine(_Meta) {
+EngineOptions :: struct {
+    windowTitle := "sill";
+    windowExtent := Chamber.uvec2.{1600, 900};
+    eventHandler : #type (event : Crater.Event);
+    logFps := false;
+
+    // Features, create renderers/targets accordingly.
+    postProcessing := false;
+    rayTracing := false;
+}
+
+create_engine :: ($_Meta : Type, options := EngineOptions.{}) -> *Engine(_Meta) {
     engine := Basic.New(Engine(_Meta));
+    engine.options = options;
     Basic.remember_allocators(engine);
-    engine_init(engine, postProcessing, rayTracing);
+    engine_init(engine);
     return engine;
 }
 
@@ -52,17 +66,19 @@ destroy_engine :: (engine : *Engine) {
 }
 
 // @todo Enable VR on option, currently doing so as long as available.
-engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := false) {
-    Basic.log("Engine init.", flags=.VERBOSE_ONLY);
+engine_init :: (engine : *EngineBase) {
+    Basic.log("Engine init.", flags = .VERBOSE_ONLY);
 
     // Windowing
-    engine.window = Crater.create_window(.{width=1600, height=900}, "sill");
-    engine.windowExtent = Crater.window_get_extent(engine.window);
+    videoMode : Crater.VideoMode;
+    videoMode.width = cast(u16) engine.options.windowExtent.width;
+    videoMode.height = cast(u16) engine.options.windowExtent.height;
+    engine.window = Crater.create_window(videoMode, engine.options.windowTitle);
 
     // Rendering
     renderEngineOptions : Magma.Engine.Options;
     renderEngineOptions.features |= .Vr;
-    if rayTracing {
+    if engine.options.rayTracing {
         renderEngineOptions.features |= .RayTracing;
     }
 
@@ -92,13 +108,13 @@ engine_init :: (engine : *EngineBase, postProcessing := false, rayTracing := fal
     }
 
     if classicRendererRequired {
-        if rayTracing {
-            engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, engine.windowExtent);
+        if engine.options.rayTracing {
+            engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, engine.options.windowExtent);
         } else {
-            engine.renderer = Magma.create_forward_renderer(engine.scene, engine.windowExtent);
+            engine.renderer = Magma.create_forward_renderer(engine.scene, engine.options.windowExtent);
         }
 
-        if postProcessing {
+        if engine.options.postProcessing {
             engine.postProcessRenderer = Magma.create_post_process_renderer(engine.scene, Magma.renderer_get_output(engine.renderer));
             Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.postProcessRenderer));
         } else {
@@ -133,7 +149,7 @@ engine_run :: (engine : *Engine) {
         elapsedTime := currentTime - previousTime;
         previousTime = currentTime;
 
-        if false { // @todo Make it available on option
+        if engine.options.logFps {
             fpsFrameRenderedCount += 1;
             fpsElapsedTime += elapsedTime;
             fpsAverageElapsedTime += elapsedTime;
@@ -153,7 +169,7 @@ engine_run :: (engine : *Engine) {
         while (updateTimeLag >= updateTime) {
             Basic.reset_temporary_storage();
             _input_reset(*engine.input);
-            _engine_handle_input_events(engine);
+            _engine_handle_events(engine, updateTime);
             _engine_update_entities(engine, updateTime);
             _ui_update(*engine.ui);
             updateTimeLag -= updateTime;
@@ -185,23 +201,39 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
     }
 }
 
-_engine_handle_input_events :: (engine : *EngineBase) {
+_engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
     event := Crater.window_poll_event(engine.window);
+
+    // Craft a delayed WindowSizeChanged event, so that the user handler only gets one.
+    if engine.windowSizeChangedTimer > 0.0 {
+        engine.windowSizeChangedTimer -= updateTime;
+        if engine.options.eventHandler && engine.windowSizeChangedTimer <= 0.0 {
+            event : Crater.Event;
+            event.kind = .WindowSizeChanged;
+            event.windowSize.width = cast(u16) engine.options.windowExtent.width;
+            event.windowSize.height = cast(u16) engine.options.windowExtent.height;
+            engine.options.eventHandler(event);
+        }
+    }
 
     while event.kind != Crater.Event.Kind.None {
         if event.kind == Crater.Event.Kind.WindowClosed {
             engine.closingMainWindow = true;
             return;
         }
-        else if event.kind == Crater.Event.Kind.KeyPressed &&
-                event.key.which == Crater.Key.Escape {
-            engine.closingMainWindow = true;
+        else if event.kind == Crater.Event.Kind.WindowSizeChanged {
+            Magma.engine_wait_idle(engine.renderEngine);
+            engine.windowSizeChangedTimer = 0.150;
+            engine.options.windowExtent = Crater.window_get_extent(engine.window);
             return;
         }
 
         stopPropagation := false;
         _ui_handle_event(*engine.ui, event, *stopPropagation);
-        if !stopPropagation then _input_handle_event(*engine.input, event);
+        if !stopPropagation {
+            _input_handle_event(*engine.input, event);
+            if engine.options.eventHandler then engine.options.eventHandler(event);
+        }
 
         event = Crater.window_poll_event(engine.window);
     }

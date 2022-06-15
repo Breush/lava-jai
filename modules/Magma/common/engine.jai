@@ -114,6 +114,10 @@ engine_draw :: (engine : *Engine) {
     impl_engine_draw(engine);
 }
 
+engine_wait_idle :: (engine : *Engine) {
+    impl_engine_wait_idle(engine);
+}
+
 engine_register :: (engine : *Engine, scene : *Scene) {
     Basic.array_add(*engine.scenes, scene);
 }

@@ -38,14 +38,7 @@ impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
 
     material_cleanup(*forwardRenderer.materialFallback);
     shader_cleanup(*forwardRenderer.shaderFallback);
-
-    for *extraFrameObject : forwardRenderer.extraFrameObjects {
-        _image_holder_cleanup(*extraFrameObject.imageHolder);
-        Vk.destroy_image_view(engine.device, extraFrameObject.imageView, null);
-        _image_holder_cleanup(*extraFrameObject.depthImageHolder);
-        Vk.destroy_image_view(engine.device, extraFrameObject.depthImageView, null);
-        Vk.destroy_framebuffer(forwardRenderer.scene.engine.device, extraFrameObject.framebuffer, null);
-    }
+    _cleanup_extra_frame_objects(forwardRenderer);
 
     Vk.destroy_render_pass(engine.device, forwardRenderer.renderPass, null);
 }
@@ -53,6 +46,11 @@ impl_forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer) {
 impl_forward_renderer_get_output_extent :: (forwardRenderer : *ForwardRenderer, outputIndex : u8) -> Chamber.uvec2 {
     Basic.assert(outputIndex == 0);
     return forwardRenderer.eye.extent;
+}
+
+impl_forward_renderer_update_from_eye :: (forwardRenderer : *ForwardRenderer) {
+    _cleanup_extra_frame_objects(forwardRenderer);
+    _init_extra_frame_objects(forwardRenderer);
 }
 
 _forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
@@ -73,6 +71,7 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     renderPassBeginInfo.sType = .RenderPassBeginInfo;
     renderPassBeginInfo.renderPass = forwardRenderer.renderPass;
     renderPassBeginInfo.framebuffer = forwardRenderer.extraFrameObjects[frameIndex].framebuffer;
+    // @fixme Could use the render area and viewports and avoid the ComposePostProcess
     renderPassBeginInfo.renderArea.extent.width = forwardRenderer.eye.extent.width;
     renderPassBeginInfo.renderArea.extent.height = forwardRenderer.eye.extent.height;
 
@@ -83,6 +82,19 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     renderPassBeginInfo.pClearValues = clearColors.data;
 
     Vk.cmd_begin_render_pass(commandBuffer, *renderPassBeginInfo, Vk.SubpassContents.Inline);
+
+    // Dynamic viewport
+    viewport : Vk.Viewport;
+    viewport.width = cast(float32) forwardRenderer.eye.extent.width;
+    viewport.height = cast(float32) forwardRenderer.eye.extent.height;
+    viewport.minDepth = 0.;
+    viewport.maxDepth = 1.;
+    Vk.cmd_set_viewport(commandBuffer, 0, 1, *viewport);
+
+    scissor : Vk.Rect2D;
+    scissor.extent.width = forwardRenderer.eye.extent.width;
+    scissor.extent.height = forwardRenderer.eye.extent.height;
+    Vk.cmd_set_scissor(commandBuffer, 0, 1, *scissor);
 
     // Push constant for the eye
     eyePushConstantStages := Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
@@ -261,4 +273,17 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
     }
 
     return true;
+}
+
+_cleanup_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) {
+    engine := forwardRenderer.scene.engine;
+
+    Vk.device_wait_idle(forwardRenderer.scene.engine.device);
+    for *extraFrameObject : forwardRenderer.extraFrameObjects {
+        _image_holder_cleanup(*extraFrameObject.imageHolder);
+        Vk.destroy_image_view(engine.device, extraFrameObject.imageView, null);
+        _image_holder_cleanup(*extraFrameObject.depthImageHolder);
+        Vk.destroy_image_view(engine.device, extraFrameObject.depthImageView, null);
+        Vk.destroy_framebuffer(forwardRenderer.scene.engine.device, extraFrameObject.framebuffer, null);
+    }
 }

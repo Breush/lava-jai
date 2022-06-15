@@ -64,6 +64,19 @@ _post_process_renderer_render :: (postProcessRenderer : *PostProcessRenderer, fr
 
     Vk.cmd_begin_render_pass(commandBuffer, *renderPassBeginInfo, Vk.SubpassContents.Inline);
 
+    // Dynamic viewport
+    viewport : Vk.Viewport;
+    viewport.width = cast(float32) extent.width;
+    viewport.height = cast(float32) extent.height;
+    viewport.minDepth = 0.;
+    viewport.maxDepth = 1.;
+    Vk.cmd_set_viewport(commandBuffer, 0, 1, *viewport);
+
+    scissor : Vk.Rect2D;
+    scissor.extent.width = extent.width;
+    scissor.extent.height = extent.height;
+    Vk.cmd_set_scissor(commandBuffer, 0, 1, *scissor);
+
     descriptorSet := postProcessRenderer.extraFrameObjects[frameIndex].descriptorSet;
     Vk.cmd_bind_descriptor_sets(commandBuffer, .Graphics, postProcessRenderer.pipelineLayout, PostProcessRenderer.SOURCE_DESCRIPTOR_SET_INDEX,
                                 1, *descriptorSet, 0, null);
