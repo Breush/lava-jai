@@ -175,7 +175,9 @@ impl_window_update_pointer_style :: (window : *Window) {
                 Xcb.create_cursor(window.xcbConnection, cursor, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0);
                 Xcb.free_pixmap(window.xcbConnection, pixmap);
             case .HandPointer;
-                cursor = _read_system_cursor(window, "pointer");
+                cursor = _read_system_cursor(window, "hand2");
+            case .Text;
+                cursor = _read_system_cursor(window, "xterm");
         }
 
         window.xcbCursors[window.pointerStyle] = cursor;

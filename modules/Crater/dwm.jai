@@ -88,6 +88,7 @@ impl_window_update_pointer_style :: (window : *Window) {
         case .Default;      cursor = Windows.LoadCursorW(null, Windows.IDC_ARROW);
         case .Hidden;       return;
         case .HandPointer;  cursor = Windows.LoadCursorW(null, Windows.IDC_HAND);
+        case .Text;         cursor = Windows.LoadCursorW(null, Windows.IDC_IBEAM);
     }
 
     Windows.SetCursor(cursor);

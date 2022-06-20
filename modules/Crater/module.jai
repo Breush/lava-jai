@@ -113,7 +113,8 @@ MouseButton :: enum {
 PointerStyle :: enum {
     Default :: 0;
     Hidden;
-    HandPointer;   // Usually for links and buttons.
+    HandPointer;    // Usually for links and buttons.
+    Text;           // I-beam, usually for horizontal text.
 }
 
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
