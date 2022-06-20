@@ -5,7 +5,7 @@ MeshImpl :: struct {
     vertexBufferHolder : BufferHolder;
     indexBufferHolder : BufferHolder;
 
-    blasHolder : AsHolder;
+    blasHolder : AsHolder; // @todo Could reduce the size of meshes by not storing this when RayTracing is not active.
 }
 
 impl_mesh_init :: (mesh : *Mesh) {

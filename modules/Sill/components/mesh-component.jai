@@ -5,7 +5,6 @@ MeshNode :: struct {
 
     // Local data, in parent space.
     transform : Chamber.trs;
-    _matrix : Chamber.mat3x4;
 }
 
 MeshComponent :: struct {
@@ -55,6 +54,15 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
     }
 }
 
+// Utility function for ease, better tweak manually the nodes and primitives
+// arrays if you know the size in advance.
+mesh_make_primitive :: (iMesh : *MeshComponent) -> *Magma.Mesh {
+    mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+    node := Basic.array_add(*iMesh.nodes);
+    Basic.array_add(*node.primitives, mesh);
+    return mesh;
+}
+
 mesh_commit_nodes :: (iMesh : *MeshComponent, instantly := false) {
     iMesh._nodesTransformsDirty = !instantly;
 
@@ -70,7 +78,7 @@ mesh_commit_nodes :: (iMesh : *MeshComponent, instantly := false) {
 
 mesh_make_plane :: (iMesh : *MeshComponent,
                     extent := Chamber.uvec2.{1, 1}) {
-    mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+    mesh := mesh_make_primitive(iMesh);
 
     // Positions
     positions := Chamber.vec3.[
@@ -119,16 +127,11 @@ mesh_make_plane :: (iMesh : *MeshComponent,
 
     Magma.mesh_commit_vertices(mesh);
     Magma.mesh_commit_indices(mesh);
-
-    // Node transform
-    iNode := Basic.array_add(*iMesh.nodes);
-
-    Basic.array_add(*iNode.primitives, mesh);
 }
 
 mesh_make_cube :: (iMesh : *MeshComponent,
                    extent := Chamber.uvec3.{1, 1, 1}) {
-    mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+    mesh := mesh_make_primitive(iMesh);
 
     // Positions
     positions := Chamber.vec3.[
@@ -222,11 +225,6 @@ mesh_make_cube :: (iMesh : *MeshComponent,
 
     Magma.mesh_commit_vertices(mesh);
     Magma.mesh_commit_indices(mesh);
-
-    // Node transform
-    iNode := Basic.array_add(*iMesh.nodes);
-
-    Basic.array_add(*iNode.primitives, mesh);
 }
 
 // Returns false on error.
@@ -277,8 +275,8 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
 #scope_file
 
 _update_node_transforms :: (nodes : []MeshNode, node : *MeshNode, parentMatrix : Chamber.mat3x4) {
-    node._matrix = Chamber.make_matrix(node.transform);
-    matrix := parentMatrix * node._matrix;
+    nodeMatrix := Chamber.make_matrix(node.transform);
+    matrix := parentMatrix * nodeMatrix;
 
     for primitive : node.primitives {
         primitive.instance.matrix = matrix;

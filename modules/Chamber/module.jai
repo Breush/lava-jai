@@ -1,7 +1,10 @@
+#load "linear-algebra/mat.jai";
+#load "linear-algebra/quat.jai";
+#load "linear-algebra/ray.jai";
+#load "linear-algebra/vec.jai";
 #load "glb-parser.jai";
 #load "json.jai";
 #load "lib-extensions.jai";
-#load "linear-algebra.jai";
 #load "os.jai";
 #load "string-utilities.jai";
 #load "spirv.jai";
@@ -145,6 +148,10 @@ max :: (a : $T, b : T) -> T #expand {
     return ifx a >= b then a else b;
 }
 
+to_radians :: (degrees : float32) -> float32 {
+    return degrees * #run cast(float32) (PI / 180.);
+}
+
 mix :: (from : $T, to : T, factor : float32) -> T {
     return from * (1 - factor) + to * factor;
 }
@@ -195,6 +202,7 @@ _CHECK_NON_FATAL :: (result : $R, message : string, loc := #caller_location) #ex
 
 #scope_module
 
+Math :: #import "Math";
 Basic :: #import "Basic";
 
 #scope_file

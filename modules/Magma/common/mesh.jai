@@ -134,6 +134,35 @@ mesh_translate :: (mesh : *Mesh, delta : Chamber.vec3) {
     mesh_commit_instance(mesh);
 }
 
+// Returns 0 if the mesh is not intersected.
+mesh_distance_from :: (mesh : *Mesh, ray : Chamber.Ray, pickPrecision : Chamber.PickPrecision) -> float {
+    if mesh.disabled then return 0.0;
+
+    distance := Chamber.ray_intersect_sphere(ray, mesh.boundingSphere);
+    if distance == 0.0 then return 0.0;
+    if pickPrecision == .BoundingSphere then return distance;
+
+    // Reset because we're not sure of hitting geometry.
+    distance = 0.0;
+
+    i := 0;
+    while i < mesh.indices.count {
+        p0 := Chamber.multiply(mesh.transform, mesh.vertices[mesh.indices[i + 0]].position);
+        p1 := Chamber.multiply(mesh.transform, mesh.vertices[mesh.indices[i + 1]].position);
+        p2 := Chamber.multiply(mesh.transform, mesh.vertices[mesh.indices[i + 2]].position);
+
+        t := Chamber.ray_intersect_triangle(ray, p0, p1, p2);
+        if t > 0.0 && (distance == 0.0 || t < distance) {
+            distance = t;
+            if pickPrecision == .MeshFirstHit then break;
+        }
+
+        i += 3;
+    }
+
+    return distance;
+}
+
 #scope_file
 
 _updateGeometryAabb :: (mesh : *Mesh) {
