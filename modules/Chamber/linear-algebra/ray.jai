@@ -4,9 +4,10 @@ Ray :: struct {
 }
 
 PickPrecision :: enum {
-    BoundingSphere; // Fast but imprecise.
-    MeshFirstHit;   // Slow but imprecise.
-    MeshClosestHit; // Very slow but precise.
+    Collider;           // Fast.
+    MeshBoundingSphere; // Fast but imprecise.
+    MeshFirstHit;       // Slow but somewhat precise.
+    MeshClosestHit;     // Very slow but precise.
 }
 
 // Outputs the parametrization of the intersection of the ray with the triangle.
@@ -64,4 +65,35 @@ ray_intersect_sphere :: inline (ray : Ray, sphere : Sphere) -> float {
     if centerDistanceToProjection > sphere.radius then return 0.0;
 
     return tCenter + factor * Math.sqrt(sphere.radius * sphere.radius - centerDistanceToProjection * centerDistanceToProjection);
+}
+
+// Outputs the parametrization of the intersection of the ray with the axis-aligned box.
+// Returns 0.0 when not intersecting.
+ray_intersect_aab :: inline (ray : Ray, boxCenter : $T1/interface vec3Interface, boxExtent : $T2/interface vec3Interface) -> float {
+    tMin := -50000.0;
+    tMax :=  50000.0;
+
+    t0 := (boxCenter.x - boxExtent.x / 2.0 - ray.origin.x) / ray.direction.x;
+    t1 := (boxCenter.x + boxExtent.x / 2.0 - ray.origin.x) / ray.direction.x;
+    if t0 > t1 then t0, t1 = t1, t0;
+    tMin = Basic.max(tMin, t0);
+    tMax = Basic.min(tMax, t1);
+    if tMin > tMax then return 0.0;
+
+    t0 = (boxCenter.y - boxExtent.y / 2.0 - ray.origin.y) / ray.direction.y;
+    t1 = (boxCenter.y + boxExtent.y / 2.0 - ray.origin.y) / ray.direction.y;
+    if t0 > t1 then t0, t1 = t1, t0;
+    tMin = Basic.max(tMin, t0);
+    tMax = Basic.min(tMax, t1);
+    if tMin > tMax then return 0.0;
+
+    t0 = (boxCenter.z - boxExtent.z / 2.0 - ray.origin.z) / ray.direction.z;
+    t1 = (boxCenter.z + boxExtent.z / 2.0 - ray.origin.z) / ray.direction.z;
+    if t0 > t1 then t0, t1 = t1, t0;
+    tMin = Basic.max(tMin, t0);
+    tMax = Basic.min(tMax, t1);
+    if tMin > tMax then return 0.0;
+
+    if tMin <= 0.0 then return 0.0;
+    return tMin;
 }

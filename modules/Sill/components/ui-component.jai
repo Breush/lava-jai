@@ -12,13 +12,13 @@ UiComponent :: struct {
     relativeMousePointerPosition : Chamber.vec2;
 
     // Handlers allow to customize the default behaviors.
-    // - checkHoveredHandler is called whenever the entity is considered hovered.
+    // - checkHoveredHandler is always called, with the evaluation of whenever the entity is considered hovered or not.
     //   One can use iUi.relativeMousePointerPosition to get the mouse position within the entity.
     //   One can therefore return whether it is really hovered or not.
     checkHoveredHandler : CheckHoveredHandlerType;
     checkHoveredHandlerUserData : *void;
 
-    CheckHoveredHandlerType :: #type (userData : *void) -> bool;
+    CheckHoveredHandlerType :: #type (hovered : bool, userData : *void) -> bool;
 
     // Updates are called after each user inputs.
     // While trigger callbacks are called when it changes.
@@ -97,7 +97,7 @@ ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData 
     callback.userData = userData;
 }
 
-ui_check_hovered_handler :: (iUi : *UiComponent, function : (userData : *$T) -> bool, userData : *T = null) {
+ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, userData : *$T) -> bool, userData : *T = null) {
     iUi.checkHoveredHandler = cast(UiComponent.CheckHoveredHandlerType) function;
     iUi.checkHoveredHandlerUserData = userData;
 }
@@ -168,8 +168,8 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
                relativePosition.y >= -iUi.extent.y / 2.0 &&
                relativePosition.y <  iUi.extent.y / 2.0;
 
-    if hovered && iUi.checkHoveredHandler != null {
-        hovered = iUi.checkHoveredHandler(iUi.checkHoveredHandlerUserData);
+    if iUi.checkHoveredHandler != null {
+        hovered = iUi.checkHoveredHandler(hovered, iUi.checkHoveredHandlerUserData);
     }
 
     if hovered {

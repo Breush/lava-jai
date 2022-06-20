@@ -137,10 +137,15 @@ mesh_translate :: (mesh : *Mesh, delta : Chamber.vec3) {
 // Returns 0 if the mesh is not intersected.
 mesh_distance_from :: (mesh : *Mesh, ray : Chamber.Ray, pickPrecision : Chamber.PickPrecision) -> float {
     if mesh.disabled then return 0.0;
+    if pickPrecision != .MeshBoundingSphere &&
+       pickPrecision != .MeshFirstHit &&
+       pickPrecision != .MeshClosestHit {
+        return 0.0;
+    }
 
     distance := Chamber.ray_intersect_sphere(ray, mesh.boundingSphere);
     if distance == 0.0 then return 0.0;
-    if pickPrecision == .BoundingSphere then return distance;
+    if pickPrecision == .MeshBoundingSphere then return distance;
 
     // Reset because we're not sure of hitting geometry.
     distance = 0.0;

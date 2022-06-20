@@ -120,6 +120,8 @@ multiply :: (transform : trf, v : $T/interface vec3Interface) -> vec3 {
     return result;
 }
 
+operator* :: #procedure_of_call(multiply(trf.{}, trf.{}));
+
 make_scaling_mat3 :: (scaling : vec3) -> mat3 {
     matrix : mat3 = Matrix3_Identity;
     matrix.coef[0][0] = scaling.x;
