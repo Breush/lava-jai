@@ -11,6 +11,15 @@ UiComponent :: struct {
     hovered : bool;
     relativeMousePointerPosition : Chamber.vec2;
 
+    // Handlers allow to customize the default behaviors.
+    // - checkHoveredHandler is called whenever the entity is considered hovered.
+    //   One can use iUi.relativeMousePointerPosition to get the mouse position within the entity.
+    //   One can therefore return whether it is really hovered or not.
+    checkHoveredHandler : CheckHoveredHandlerType;
+    checkHoveredHandlerUserData : *void;
+
+    CheckHoveredHandlerType :: #type (userData : *void) -> bool;
+
     // Updates are called after each user inputs.
     // While trigger callbacks are called when it changes.
     updateCallbacks : [..]Callback(UpdateCallbackType);
@@ -37,7 +46,7 @@ UiComponent :: struct {
 UiCallbackFlags :: enum_flags {
     Hover;
     NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
-    Child;
+    Child;      // @fixme Does not feel like our job.
     Click;      // Trigger only. Why trigger only?
     NoClick;    // Trigger only. Why trigger only?
     Key;        // Trigger only. Why trigger only?
@@ -88,8 +97,17 @@ ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData 
     callback.userData = userData;
 }
 
-ui_set_focused :: (iUi : *UiComponent) {
-    _ui_set_focused(*iUi.entity.engine.ui, iUi);
+ui_check_hovered_handler :: (iUi : *UiComponent, function : (userData : *$T) -> bool, userData : *T = null) {
+    iUi.checkHoveredHandler = cast(UiComponent.CheckHoveredHandlerType) function;
+    iUi.checkHoveredHandlerUserData = userData;
+}
+
+ui_set_focused :: (iUi : *UiComponent, focused := true) {
+    if focused {
+        _ui_set_focused(*iUi.entity.engine.ui, iUi);
+    } else {
+        _ui_set_focused(*iUi.entity.engine.ui, null);
+    }
 }
 
 ui_send_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
@@ -149,6 +167,10 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
                relativePosition.x <  iUi.extent.x / 2.0 &&
                relativePosition.y >= -iUi.extent.y / 2.0 &&
                relativePosition.y <  iUi.extent.y / 2.0;
+
+    if hovered && iUi.checkHoveredHandler != null {
+        hovered = iUi.checkHoveredHandler(iUi.checkHoveredHandlerUserData);
+    }
 
     if hovered {
         ui_send_update(iUi, .Hover, stopPropagation);

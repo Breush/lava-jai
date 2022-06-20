@@ -6,6 +6,9 @@ Ui :: struct {
     focusedUiComponent : *UiComponent;
     hoveredUiComponents : [..]*UiComponent;
 
+    setFocusedLocked : bool;
+    focusedUiComponentDuringLock : *UiComponent;
+
     mousePointerPosition : Chamber.vec2;
 
     componentsDepthDirty : bool;
@@ -81,18 +84,13 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
             ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
         }
     } else if event.kind == .MouseButtonPressed {
-        oldFocusedUiComponent := ui.focusedUiComponent;
-        ui.focusedUiComponent = null;
-
+        _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
             ui_send_trigger(uiComponent, .Click, event, stopPropagation);
             if <<stopPropagation then break;
         }
-
-        if oldFocusedUiComponent != ui.focusedUiComponent {
-            if oldFocusedUiComponent then ui_send_trigger(oldFocusedUiComponent, .NoFocus, event, stopPropagation);
-            if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .Focus, event, stopPropagation);
-        }
+        _ui_lock_set_focused(ui, false);
+        _ui_do_set_focused(ui, ui.focusedUiComponentDuringLock);
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
             ui_send_trigger(ui.focusedUiComponent, .Text, event, stopPropagation);
@@ -105,5 +103,25 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
 }
 
 _ui_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
+    if !ui.setFocusedLocked {
+        _ui_do_set_focused(ui, uiComponent);
+    } else {
+        ui.focusedUiComponentDuringLock = uiComponent;
+    }
+}
+
+#scope_file
+
+_ui_lock_set_focused :: (ui : *Ui, locked := true) {
+    ui.setFocusedLocked = locked;
+    if ui.setFocusedLocked then ui.focusedUiComponentDuringLock = null;
+}
+
+_ui_do_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
+    if ui.focusedUiComponent == uiComponent then return;
+
+    stopPropagation : bool;
+    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .NoFocus, .{}, *stopPropagation);
     ui.focusedUiComponent = uiComponent;
+    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .Focus, .{}, *stopPropagation);
 }
