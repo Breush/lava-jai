@@ -63,12 +63,18 @@ MetaEntity :: struct {
     // @note During compilation, we're not sure whether this is a component or not.
     // This will finally be determined during _check_dependencies.
     StructMember :: struct {
-        isComponent : bool;
+        Kind :: enum {
+            Unknown :: 0;
+            Component;
+            Entity;
+        }
+
+        kind : Kind;
         location : Source_Code_Location;
         typeName : string;    // "SomeComponent"
         fieldName : string;   // "some"
 
-        // Fields below became valid when isComponent is known to be true.
+        // Fields below became valid when kind is known to be Component.
         // SomeComponent's dependencies ids are mapped to MyCustomEntity's components ids.
         id : string;   // "some", same as fieldName
         dependencies : [..]struct {
@@ -109,21 +115,23 @@ DONE
 _generated := false;
 
 // Will pass through pointers to get the base type.
-_get_type_module_and_identifier :: (codeTypeInst : *Compiler.Code_Type_Instantiation) -> (string, string) {
+_get_type_module_and_identifier :: (codeTypeInst : *Compiler.Code_Type_Instantiation) -> (string, string, pointerCount : u32) {
+    pointerCount : u32;
     typeInst := codeTypeInst;
-    if typeInst == null then return "", "";
+    if typeInst == null then return "", "", pointerCount;
 
     while typeInst.pointer_to != null {
         typeInst = typeInst.pointer_to;
+        pointerCount += 1;
     }
 
     type := typeInst.type_valued_expression;
-    if type == null then return "", "";
+    if type == null then return "", "", pointerCount;
 
     while type.kind == .BINARY_OPERATOR {
         type = (cast(*Compiler.Code_Binary_Operator) type).right;
     }
-    if type.kind != .IDENT then return "", "";
+    if type.kind != .IDENT then return "", "", pointerCount;
 
     typeIdent := cast(*Compiler.Code_Ident) type;
 
@@ -134,7 +142,7 @@ _get_type_module_and_identifier :: (codeTypeInst : *Compiler.Code_Type_Instantia
         module = typeIdent.resolved_declaration.location.enclosing_load.enclosing_import.module_name;
     }
 
-    return module, typeIdent.name;
+    return module, typeIdent.name, pointerCount;
 }
 
 _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
@@ -191,8 +199,8 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
             continue;
         }
 
-        _, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
-        if typeIdentifier == "" then continue;
+        _, typeIdentifier, pointerCount := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
+        if typeIdentifier == "" || pointerCount > 0 then continue;
 
         // @note We don't know for sure that this is a component for now,
         // as the type might not exist.
@@ -244,9 +252,14 @@ _add_meta_component :: (name : string, members : []*Compiler.Code_Scope_Entry) {
 
 _find_meta_component :: (name : string) -> *MetaComponent {
     for *metaComponent : metaComponentList {
-        if metaComponent.structName == name {
-            return metaComponent;
-        }
+        if metaComponent.structName == name then return metaComponent;
+    }
+    return null;
+}
+
+_find_meta_entity :: (name : string) -> *MetaEntity {
+    for *metaEntity : metaEntityList {
+        if metaEntity.structName == name then return metaEntity;
     }
     return null;
 }
@@ -264,29 +277,32 @@ _check_dependencies :: () {
     // tagged within meta-structures.
     for *metaEntity : metaEntityList {
         for *structMember : metaEntity.structMembers {
-            metaComponent := _find_meta_component(structMember.typeName);
-            if !metaComponent then continue;
-            structMember.isComponent = true; // We found a meta-component, yeah!
-            structMember.id = structMember.fieldName; // Just for simplicity of saying "component.id" later on.
+            if _find_meta_component(structMember.typeName) {
+                structMember.kind = .Component; // We found a meta-component, yeah!
+                structMember.id = structMember.fieldName; // Just for simplicity of saying "component.id" later on.
+            } else if _find_meta_entity(structMember.typeName) {
+                structMember.kind = .Entity;
+                structMember.id = structMember.fieldName;
+            }
         }
 
-        for *component : metaEntity.structMembers {
-            if !component.isComponent then continue;
+        for *structMember : metaEntity.structMembers {
+            if structMember.kind != .Component then continue;
 
-            metaComponent := _find_meta_component(component.typeName);
+            metaComponent := _find_meta_component(structMember.typeName);
             for dependency : metaComponent.dependencies {
                 if !dependency.isComponent then continue;
 
                 entityDependeeComponent := _find_meta_entity_struct_member(metaEntity, dependency.structName);
-                if (entityDependeeComponent == null) || !entityDependeeComponent.isComponent {
+                if (entityDependeeComponent == null) || entityDependeeComponent.kind != .Component {
                     message := Basic.sprint("[SillMeta] Component % of entity % cannot resolve its dependency to %.",
-                                            component.typeName, metaEntity.structName, dependency.structName);
-                    Compiler.compiler_report(message, component.location);
+                                            structMember.typeName, metaEntity.structName, dependency.structName);
+                    Compiler.compiler_report(message, structMember.location);
                     continue;
                 }
 
-                Basic.array_add(*component.dependencies, .{});
-                otherDependency := Basic.peek_pointer(component.dependencies);
+                Basic.array_add(*structMember.dependencies, .{});
+                otherDependency := Basic.peek_pointer(structMember.dependencies);
                 otherDependency.id = dependency.id;
                 otherDependency.targetComponentId = entityDependeeComponent.id;
             }
@@ -351,13 +367,16 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "        entity.engine = engine;\n");
         Basic.print_to_builder(*builder, "        entity.type = %;\n", metaEntity.structName);
         Basic.print_to_builder(*builder, "        entity.typeInfo = type_info(%);\n", metaEntity.structName);
-        for component : metaEntity.structMembers {
-            if !component.isComponent then continue;
-            Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", component.id);
-            for componentDependency : component.dependencies {
-                Basic.print_to_builder(*builder, "        entity.%.% = *entity.%;\n", component.id, componentDependency.id,  componentDependency.targetComponentId);
+        for structMember : metaEntity.structMembers {
+            if structMember.kind == .Component {
+                Basic.print_to_builder(*builder, "        entity.%.entity = entity;\n", structMember.id);
+                for componentDependency : structMember.dependencies {
+                    Basic.print_to_builder(*builder, "        entity.%.% = *entity.%;\n", structMember.id, componentDependency.id,  componentDependency.targetComponentId);
+                }
+                Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", structMember.id);
+            } else if structMember.kind == .Entity {
+                Basic.print_to_builder(*builder, "        entity_init(*entity.%, engine);\n", structMember.id);
             }
-            Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", component.id);
         }
         Basic.append(*builder, "    }\n");
     }
@@ -367,9 +386,12 @@ _generate :: (workspace : s64) {
         if metaEntity.hasOnCleanup {
             Basic.append(*builder, "        entity.on_cleanup(entity);\n");
         }
-        for component : metaEntity.structMembers {
-            if !component.isComponent then continue;
-            Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", component.id);
+        for structMember : metaEntity.structMembers {
+            if structMember.kind == .Component {
+                Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", structMember.id);
+            } else if structMember.kind == .Entity {
+                Basic.print_to_builder(*builder, "        entity_cleanup(*entity.%);\n", structMember.id);
+            }
         }
         Basic.append(*builder, "        Basic.array_free(entity.children);\n");
         Basic.append(*builder, "    }\n");
@@ -377,9 +399,12 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.structName);
-        for component : metaEntity.structMembers {
-            if !component.isComponent then continue;
-            Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", component.id);
+        for structMember : metaEntity.structMembers {
+            if structMember.kind == .Component {
+                Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", structMember.id);
+            } else if structMember.kind == .Entity {
+                Basic.print_to_builder(*builder, "        entity_update(*entity.%, dt);\n", structMember.id);
+            }
         }
         Basic.append(*builder, "    }\n");
     }

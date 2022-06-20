@@ -61,6 +61,8 @@ entity_remove_child :: (entity : *Entity, child : *Entity, warnChild := true) {
 }
 
 entity_set_parent :: (entity : *Entity, parent : *Entity, warnOldParent := true, warnNewParent := true) {
+    if entity.parent == parent then return;
+
     if warnOldParent && entity.parent != null {
         entity_remove_child(entity.parent, entity, warnChild = false);
     }
