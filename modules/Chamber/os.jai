@@ -54,8 +54,8 @@ os_open_browser :: (url : string) -> (ok : bool) {
     }
 
     for strategy : strategies {
-        launched, exitCode := Process.os_run_command(strategy, url, capture_and_return_output = true);
-        if launched && exitCode == 0 then return true;
+        processResult := Process.run_command(strategy, url, capture_and_return_output = true);
+        if processResult.exit_code == 0 then return true;
     }
 
     return false;

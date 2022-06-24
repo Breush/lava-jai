@@ -161,7 +161,7 @@ align_up :: (value : u32, alignment : u32) -> u32 {
 }
 
 debug :: (args : ..Any, loc := #caller_location) {
-    format := "%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+%+";
+    format := "%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0";
     if args.count == 0 || 2 * args.count > format.count then return;
 
     format.count = 2 * args.count;

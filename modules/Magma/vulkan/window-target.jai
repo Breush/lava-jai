@@ -78,14 +78,14 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     frameObject := *windowTarget.frameObjects[frameIndex];
 
     // Swapchain image
-    result := Vk.acquire_next_image_khr(windowTarget.engine.device, windowTarget.swapchain, ~0,
+    result := Vk.acquire_next_image_khr(windowTarget.engine.device, windowTarget.swapchain, 5_000_000_000,
                                         frameObject.imageAvailableSemaphore, null, *windowTarget.swapchainImageIndex);
 
     if result == Vk.Result.ErrorOutOfDateKhr {
         _recreate_swapchain(windowTarget);
         return true;
     } else {
-        _CHECK(result, "Unable to acquire next swapchain image.");
+        _CHECK(result, Basic.tprint("Unable to acquire next swapchain image: %", result));
     }
 
     if !_renderer_render(windowTarget.rendererOutput.renderer, frameIndex) then return false;
