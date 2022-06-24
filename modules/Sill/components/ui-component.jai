@@ -6,10 +6,10 @@ UiComponent :: struct {
     anchor := Anchor.Center;
     extent := Chamber.vec2.{1, 1}; // Renderered extent, after all transform applied.
     disabled := false;
+    draggable := false;
 
     // Updated each input.
     hovered : bool;
-    relativeMousePointerPosition : Chamber.vec2;
 
     // Handlers allow to customize the default behaviors.
     // - checkHoveredHandler is always called, with the evaluation of whenever the entity is considered hovered or not.
@@ -48,11 +48,13 @@ UiCallbackFlags :: enum_flags {
     NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
     Child;      // @fixme Does not feel like our job.
     Click;      // Trigger only. Why trigger only?
-    ContextClick; // Right click. Trigger only. Why trigger only?
     Key;        // Trigger only. Why trigger only?
     Text;       // Trigger only.
     Focus;      // Trigger only.
     NoFocus;    // Trigger only.
+    Drag;       // Trigger only.
+    Dragging;
+    NoDrag;     // Trigger only.
 }
 
 UiTrigger :: struct {
@@ -133,12 +135,10 @@ ui_send_update :: (iUi : *UiComponent, flags : UiCallbackFlags, stopPropagation 
     }
 }
 
-ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
-    if iUi.disabled then return false;
-
-    // @todo No notion of flats and 2D in the engine for now.
+ui_relative_mouse_pointer_position :: (iUi : *UiComponent) -> Chamber.vec2 {
     relativePosition : Chamber.vec3;
-    relativePosition.xy = position;
+    relativePosition.x = cast(float) iUi.entity.engine.window.mousePosition.x;
+    relativePosition.y = cast(float) iUi.entity.engine.window.mousePosition.y;
 
     // Transform the position into the screen space.
     relativePosition.x -= iUi.entity.engine.options.windowExtent.width / 2.0; // @todo Should it depend on the renderer?
@@ -149,7 +149,13 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
     unscaledTransform = Chamber.inverse(unscaledTransform);
 
     relativePosition = Chamber.multiply(unscaledTransform, relativePosition);
-    iUi.relativeMousePointerPosition.std = relativePosition.xy;
+    return relativePosition.xy;
+}
+
+ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
+    if iUi.disabled then return false;
+
+    relativePosition := ui_relative_mouse_pointer_position(iUi);
 
     // Make the hover check as if it was a center anchor.
     if iUi.anchor == {

@@ -5,6 +5,10 @@ Ui :: struct {
 
     focusedUiComponent : *UiComponent;
     hoveredUiComponents : [..]*UiComponent;
+    draggedUiComponents : [..]*UiComponent;
+
+    draggingState : DraggingState;
+    draggingMouseButton : Crater.MouseButton;
 
     setFocusedLocked : bool;
     focusedUiComponentDuringLock : *UiComponent;
@@ -12,6 +16,12 @@ Ui :: struct {
     mousePointerPosition : Chamber.vec2;
 
     componentsDepthDirty : bool;
+}
+
+DraggingState :: enum {
+    None :: 0;
+    Pending; // Button is pressed, mouse has not moved yet.
+    Moving;  // Button is pressed, mouse has moved.
 }
 
 ui_register_component :: (ui : *Ui, uiComponent : *UiComponent) {
@@ -34,6 +44,7 @@ ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
 _ui_cleanup :: (ui : *Ui) {
     Basic.array_free(ui.uiComponents);
     Basic.array_free(ui.hoveredUiComponents);
+    Basic.array_free(ui.draggedUiComponents);
 }
 
 _ui_update :: (ui : *Ui) {
@@ -50,45 +61,40 @@ _ui_update :: (ui : *Ui) {
 
 _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
     if event.kind == .MousePointerMoved {
-        ui.mousePointerPosition.x = cast(float) event.mousePointer.x;
-        ui.mousePointerPosition.y = cast(float) event.mousePointer.y;
-
-        // @todo Handle dragging.
-
-        // Check if we're hovering anything
-        // @note Will update all hovered components,
-        // setting false to no-more hovered and keeping true
-        // if already hovered.
-        oldHoveredUiComponents : [..]*UiComponent;
-        oldHoveredUiComponents.allocator = Basic.temp;
-        Basic.array_copy(*oldHoveredUiComponents, ui.hoveredUiComponents);
-
-        ui.hoveredUiComponents.count = 0;
-        for uiComponent : ui.uiComponents {
-            if ui_check_hovered(uiComponent, ui.mousePointerPosition, event, stopPropagation) {
-                Basic.array_add(*ui.hoveredUiComponents, uiComponent);
-            }
-            if <<stopPropagation then break;
-        }
-
-        // Triggering no-hover + hover callbacks.
-        // We want no-hover first.
-        for uiComponent : oldHoveredUiComponents {
-            if Basic.array_find(ui.hoveredUiComponents, uiComponent) then continue;
-            uiComponent.hovered = false;
-            ui_send_trigger(uiComponent, .NoHover, event, stopPropagation);
-        }
-        for uiComponent : ui.hoveredUiComponents {
-            if uiComponent.hovered then continue;
-            uiComponent.hovered = true;
-            ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
-        }
+        _update_dragged_ui_components(ui, event, stopPropagation);
+        if ui.draggingState == .Moving then return;
+        _update_hovered_ui_components(ui, event, stopPropagation);
     } else if event.kind == .MouseButtonPressed {
-        if event.mouseButton.which == .Middle then return;
-        flags := ifx event.mouseButton.which == .Left then UiCallbackFlags.Click else .ContextClick;
+        if ui.draggingState != .None then return;
+
+        // @note Will go in dragging state only if at least one the hovered component
+        // is draggable.
+        ui.draggingMouseButton = event.mouseButton.which;
+        ui.draggedUiComponents.count = 0;
+        for uiComponent : ui.hoveredUiComponents {
+            if !uiComponent.draggable then continue;
+            ui.draggingState = .Pending;
+            Basic.array_add(*ui.draggedUiComponents, uiComponent);
+        }
+    } else if event.kind == .MouseButtonReleased {
+        wasDragging := ui.draggingState == .Moving;
+        if ui.draggingState != .None {
+            if ui.draggingMouseButton != event.mouseButton.which then return;
+            ui.draggingState = .None;
+        }
+
+        if wasDragging {
+            for uiComponent : ui.draggedUiComponents {
+                ui_send_trigger(uiComponent, .NoDrag, event, stopPropagation);
+                if <<stopPropagation then break;
+            }
+            _update_hovered_ui_components(ui, event, stopPropagation);
+            return;
+        }
+
         _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
-            ui_send_trigger(uiComponent, flags, event, stopPropagation);
+            ui_send_trigger(uiComponent, .Click, event, stopPropagation);
             if <<stopPropagation then break;
         }
         _ui_lock_set_focused(ui, false);
@@ -113,6 +119,54 @@ _ui_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
 }
 
 #scope_file
+
+_update_dragged_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
+    if ui.draggingState == .Pending {
+        ui.draggingState = .Moving;
+        for uiComponent : ui.draggedUiComponents {
+            ui_send_trigger(uiComponent, .Drag, event, stopPropagation);
+            if <<stopPropagation then break;
+        }
+    }
+
+    if ui.draggingState == .Moving {
+        for uiComponent : ui.draggedUiComponents {
+            ui_send_trigger(uiComponent, .Dragging, event, stopPropagation);
+            if <<stopPropagation then break;
+        }
+    }
+}
+
+// Check if we're hovering anything
+// @note Will update all hovered components,
+// setting false to no-more hovered and keeping true
+// if already hovered.
+_update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
+    oldHoveredUiComponents : [..]*UiComponent;
+    oldHoveredUiComponents.allocator = Basic.temp;
+    Basic.array_copy(*oldHoveredUiComponents, ui.hoveredUiComponents);
+
+    ui.hoveredUiComponents.count = 0;
+    for uiComponent : ui.uiComponents {
+        if ui_check_hovered(uiComponent, ui.mousePointerPosition, event, stopPropagation) {
+            Basic.array_add(*ui.hoveredUiComponents, uiComponent);
+        }
+        if <<stopPropagation then break;
+    }
+
+    // Triggering no-hover + hover callbacks.
+    // We want no-hover first.
+    for uiComponent : oldHoveredUiComponents {
+        if Basic.array_find(ui.hoveredUiComponents, uiComponent) then continue;
+        uiComponent.hovered = false;
+        ui_send_trigger(uiComponent, .NoHover, event, stopPropagation);
+    }
+    for uiComponent : ui.hoveredUiComponents {
+        if uiComponent.hovered then continue;
+        uiComponent.hovered = true;
+        ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
+    }
+}
 
 _ui_lock_set_focused :: (ui : *Ui, locked := true) {
     ui.setFocusedLocked = locked;

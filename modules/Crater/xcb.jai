@@ -30,7 +30,7 @@ WindowImpl :: struct {
 }
 
 EVENT_MASKS :: cast(u32) (Xcb.EventMask.PointerMotion |
-                          Xcb.EventMask.ButtonPress |
+                          Xcb.EventMask.ButtonPress | Xcb.EventMask.ButtonRelease |
                           Xcb.EventMask.KeyPress | Xcb.EventMask.KeyRelease |
                           Xcb.EventMask.StructureNotify);
 
