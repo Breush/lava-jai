@@ -3,6 +3,8 @@ Input :: struct {
     actions : Table(string, Action);
     axes : Table(string, Axis);
 
+    keyStates : [#run type_info(Crater.Key).values.count]bool;
+
     Action :: struct {
         changed : bool;             // Action was updated since last reset.
         previousActiveness : u8;    // Activess at the last reset.
@@ -33,6 +35,10 @@ Input :: struct {
         LeftHandSelect;
         RightHandSelect;
     }
+}
+
+input_state :: (input : *Input, key : Crater.Key) -> bool {
+    return input.keyStates[key];
 }
 
 input_action_bind :: (input : *Input, actionName : string, key : Crater.Key) {
@@ -111,6 +117,7 @@ _input_reset :: (input : *Input) {
 
 _input_handle_event :: (input : *Input, event : Crater.Event) {
     if event.kind == .KeyPressed {
+        input.keyStates[event.key.which] = true;
         for *action : input.actions {
             keyFound, _ := Basic.array_find(action.keys, event.key.which);
             if keyFound {
@@ -121,6 +128,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
     }
     else if event.kind == .KeyReleased {
         for *action : input.actions {
+            input.keyStates[event.key.which] = false;
             if action.activeness == 0 then continue;
             keyFound, _ := Basic.array_find(action.keys, event.key.which);
             if keyFound {

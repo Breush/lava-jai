@@ -84,9 +84,11 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
             ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
         }
     } else if event.kind == .MouseButtonPressed {
+        if event.mouseButton.which == .Middle then return;
+        flags := ifx event.mouseButton.which == .Left then UiCallbackFlags.Click else .ContextClick;
         _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
-            ui_send_trigger(uiComponent, .Click, event, stopPropagation);
+            ui_send_trigger(uiComponent, flags, event, stopPropagation);
             if <<stopPropagation then break;
         }
         _ui_lock_set_focused(ui, false);

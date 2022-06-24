@@ -48,7 +48,7 @@ UiCallbackFlags :: enum_flags {
     NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
     Child;      // @fixme Does not feel like our job.
     Click;      // Trigger only. Why trigger only?
-    NoClick;    // Trigger only. Why trigger only?
+    ContextClick; // Right click. Trigger only. Why trigger only?
     Key;        // Trigger only. Why trigger only?
     Text;       // Trigger only.
     Focus;      // Trigger only.
