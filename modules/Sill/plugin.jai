@@ -58,6 +58,7 @@ MetaEntity :: struct {
     idSnakeCase : string;   // "my_custom"
     structMembers : [..]StructMember;
     hasOnCleanup : bool;
+    noStorage : bool;
 
     // This entity has multiple components defined as "some : SomeComponent;"
     // @note During compilation, we're not sure whether this is a component or not.
@@ -164,9 +165,13 @@ _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
 
         if module == "Sill" {
             if typeIdentifier == "Entity" {
-                _add_meta_entity(codeDeclaration.name, codeStruct.block.members);
+                metaEntity := _add_meta_entity(codeDeclaration.name, codeStruct.block.members);
+                for note : memberCodeDeclaration.notes {
+                    if note.text == "Sill:NoStorage" then metaEntity.noStorage = true;
+                }
                 break;
-            } else if typeIdentifier == "Component" {
+            }
+            else if typeIdentifier == "Component" {
                 _add_meta_component(codeDeclaration.name, codeStruct.block.members);
                 break;
             }
@@ -174,7 +179,7 @@ _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
     }
 }
 
-_add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
+_add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) -> *MetaEntity {
     metaEntity := Basic.array_add(*metaEntityList);
     metaEntity.structName = name;
 
@@ -211,6 +216,8 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) {
 
         Basic.array_add(*metaEntity.structMembers, structMember);
     }
+
+    return metaEntity;
 }
 
 _find_meta_entity_struct_member :: (metaEntity : *MetaEntity, typeName : string) -> *MetaEntity.StructMember {
@@ -324,6 +331,7 @@ _generate :: (workspace : s64) {
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
         // @todo We could make the size of buckets configurable.
+        if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "\n        % : Bucket_Array.Bucket_Array(%, 16);", metaEntity.idCamelCase, metaEntity.structName);
     }
     Basic.append(*builder, "\n    }");
@@ -336,6 +344,7 @@ _generate :: (workspace : s64) {
     Basic.append(*builder, "\n    _destroy_entity :: (entity : *Sill.Entity) {\n");
     Basic.append(*builder, "        if entity.type == {\n");
     for metaEntity : metaEntityList {
+        if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "            case %;\n", metaEntity.structName);
         Basic.print_to_builder(*builder, "                destroy_%_entity(cast(*%) entity);\n", metaEntity.idSnakeCase, metaEntity.structName);
     }
@@ -343,6 +352,7 @@ _generate :: (workspace : s64) {
     Basic.append(*builder, "    }\n");
 
     for metaEntity : metaEntityList {
+        if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        entity, _ := Bucket_Array.find_and_occupy_empty_slot(array);\n");
@@ -411,6 +421,7 @@ _generate :: (workspace : s64) {
 
     Basic.append(*builder, "\n    _cleanup_entities :: (engine : *Sill.Engine) {\n");
     for metaEntity : metaEntityList {
+        if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_cleanup(entity);\n");
         Basic.append(*builder, "        }\n");
@@ -420,6 +431,7 @@ _generate :: (workspace : s64) {
 
     Basic.append(*builder, "\n    _update_entities :: (engine : *Sill.Engine, dt : float64) {\n");
     for metaEntity : metaEntityList {
+        if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
         Basic.append(*builder, "            entity.childrenChanged = false;\n");
