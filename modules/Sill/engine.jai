@@ -14,6 +14,7 @@ EngineBase :: struct {
     vrRightRenderer : *Magma.Renderer;
 }
 
+    #as fonts : Fonts;
     #as input : Input; // @fixme Spread these #as, they are awesome. One could just care about the engine afterwards...
     ui : Ui;
 
@@ -121,11 +122,14 @@ engine_init :: (engine : *EngineBase) {
             Magma.target_bind(engine.windowTarget, Magma.renderer_get_output(engine.renderer));
         }
     }
+
+    _fonts_init(*engine.fonts, engine.renderEngine);
 }
 
 engine_cleanup :: (engine : *Engine, resetMemory := true) {
     _ui_cleanup(*engine.ui);
     _input_cleanup(*engine.input);
+    _fonts_cleanup(*engine.fonts);
     engine.Meta._cleanup_entities(engine);
 
     Basic.array_free(engine.pendingDestroyedEntities);

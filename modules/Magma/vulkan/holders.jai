@@ -23,6 +23,12 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
                        _kind : ImageHolder.Kind,
                        _extent : Chamber.uvec2,
                        _channelsCount : u8 = 0) -> bool {
+    if engine == _engine && kind == _kind && memcmp(*extent, *_extent, size_of(Chamber.uvec2)) == 0 && channelsCount == _channelsCount then return true;
+
+    if engine != null {
+        _image_holder_cleanup(imageHolder);
+    }
+
     engine = _engine;
     kind = _kind;
     extent = _extent;

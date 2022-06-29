@@ -2,8 +2,9 @@
 
 #load "engine.jai";
 #load "entity.jai";
-#load "input.jai";
-#load "ui.jai";
+#load "managers/fonts.jai";
+#load "managers/input.jai";
+#load "managers/ui.jai";
 #load "components/behavior-component.jai";
 #load "components/camera-component.jai";
 #load "components/collider-component.jai";

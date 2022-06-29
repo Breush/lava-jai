@@ -72,12 +72,6 @@ font_load :: (filenames : []string, size : float) -> Font {
     return font;
 }
 
-font_load :: (filename : string, size : float) -> Font {
-    array : [1]string;
-    array[0] = filename;
-    return font_load(array, size);
-}
-
 font_free :: (font : *Font) {
     for info : font.infos {
         Basic.free(info.content);
@@ -89,8 +83,9 @@ font_free :: (font : *Font) {
 
 // @note We're not considering subpixel for now, which would require to redraw each letter
 // on a new buffer. This is definitely possible, but require much more work.
-font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
+font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged : bool {
     glyphInfos : [..]GlyphInfo;
+    pixelsChanged := false;
 
     advance : float;
 
@@ -100,7 +95,9 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
         Unicode.utf8_next_character(*s);
         nextCodepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
 
-        glyphInfo := <<font_glyph_info(font, codepoint);
+        pGlyphInfo, glyphInfoPixelsChanged := font_glyph_info(font, codepoint);
+        pixelsChanged = pixelsChanged || glyphInfoPixelsChanged;
+        glyphInfo := <<pGlyphInfo;
 
         if glyphInfo.fontInfo != null {
             glyphInfo.offset.x += advance;
@@ -115,17 +112,17 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo {
         Basic.array_add(*glyphInfos, glyphInfo);
     }
 
-    return glyphInfos;
+    return glyphInfos, pixelsChanged;
 }
 
-font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo {
+font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo, pixelsChanged : bool {
     glyphInfo := Hash.table_find_pointer(font.glyphInfos, codepoint);
-    if glyphInfo != null then return glyphInfo;
+    if glyphInfo != null then return glyphInfo, false;
 
     glyphInfo = Hash.table_add(*font.glyphInfos, codepoint, .{});
     glyphInfo.codepoint = codepoint;
     glyphInfo.fontInfo, glyphInfo.index = _find_glyph_index(font, codepoint);
-    if glyphInfo.index == 0 then return glyphInfo; // Glyph does not exist in any font.
+    if glyphInfo.index == 0 then return glyphInfo, false; // Glyph does not exist in any font.
 
     // Basic glyph advance
     advance, lsb : s32;
@@ -145,7 +142,7 @@ font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo {
     glyphInfo.offset.x = cast(float) x0;
     glyphInfo.offset.y = cast(float) (glyphInfo.fontInfo.glyphAscent * glyphInfo.fontInfo.glyphScale + y0);
 
-    if glyphInfo.blank return glyphInfo;
+    if glyphInfo.blank return glyphInfo, false;
 
     // Draw the bitmap to the pixels
     glyphStartPosition := cast(s32) font.nextGlyphStartPosition;
@@ -160,7 +157,7 @@ font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo {
     glyphInfo.maxUv.x = cast(float) (glyphStartPosition + width) / cast(float) font.extent.width;
     glyphInfo.maxUv.y = cast(float) height / cast(float) font.extent.height;
 
-    return glyphInfo;
+    return glyphInfo, true;
 }
 
 #scope_file

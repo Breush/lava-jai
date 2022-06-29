@@ -98,19 +98,9 @@ material_set :: (material : *Material, uniformName : string, texture : *Texture)
     Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
     Basic.assert(uniform.kind == .Texture, "Shader's '%' uniform named '%' is not a texture.", material.shader.id, uniformName);
 
+    if uniform.texture == texture then return;
     uniform.texture = texture;
     impl_material_uniform_commit(material, uniform);
-}
-
-material_set :: (material : *Material, uniformName : string, value : bool) {
-    uniform := table_find_pointer(<<material.shader.uniformsFrame, uniformName);
-    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
-    Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
-
-    parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
-
-    <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(u32) value;
-    impl_material_uniform_commit(material, parentUniform);
 }
 
 material_set :: (material : *Material, uniformName : string, value : $T) {
@@ -121,8 +111,13 @@ material_set :: (material : *Material, uniformName : string, value : $T) {
     parentUniform := table_find_pointer(material.uniforms, uniform.blockField.parentName);
 
     #if T == float64 {
+        if <<cast(*float32) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(float32) value then return;
         <<cast(*float32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(float32) value;
+    } else #if T == bool {
+        if <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(u32) value then return;
+        <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(u32) value;
     } else {
+        if <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(T) value then return;
         <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) = value;
     }
 
