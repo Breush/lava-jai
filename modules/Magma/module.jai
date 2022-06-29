@@ -1,9 +1,3 @@
-/*
-    @fixme Magma roadmap:
-    - ComposeRenderer
-    - 2D (UI) renderer
-*/
-
 #module_parameters(VR_ENABLED := false);
 
 #load "common/engine.jai";

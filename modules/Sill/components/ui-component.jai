@@ -69,11 +69,11 @@ UiUpdate :: struct {
 }
 
 component_init :: (iUi : *UiComponent) {
-    ui_register_component(*iUi.entity.engine.ui, iUi);
+    ui_register_component(iUi.entity.engine, iUi);
 }
 
 component_cleanup :: (iUi : *UiComponent) {
-    ui_unregister_component(*iUi.entity.engine.ui, iUi);
+    ui_unregister_component(iUi.entity.engine, iUi);
     Basic.array_reset(*iUi.updateCallbacks);
     Basic.array_reset(*iUi.triggerCallbacks);
 }
@@ -106,9 +106,9 @@ ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, use
 
 ui_set_focused :: (iUi : *UiComponent, focused := true) {
     if focused {
-        _ui_set_focused(*iUi.entity.engine.ui, iUi);
+        _ui_set_focused(iUi.entity.engine, iUi);
     } else {
-        _ui_set_focused(*iUi.entity.engine.ui, null);
+        _ui_set_focused(iUi.entity.engine, null);
     }
 }
 

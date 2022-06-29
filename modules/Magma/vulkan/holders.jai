@@ -511,7 +511,7 @@ _descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, se
     writeSet.descriptorType = .StorageImage;
     writeSet.descriptorCount = 1;
 
-    Vk.device_wait_idle(engine.device); // @fixme :MaterialDescriptorsWaitIdle
+    Vk.device_wait_idle(engine.device); // :MaterialDescriptorsWaitIdle
     Vk.update_descriptor_sets(engine.device, 1, *writeSet, 0, null);
 
     return true;
@@ -531,7 +531,7 @@ _descriptor_holder_update_set :: (using descriptorHolder : *DescriptorHolder, se
     writeSet.descriptorType = .StorageBuffer;
     writeSet.descriptorCount = 1;
 
-    Vk.device_wait_idle(engine.device); // @fixme :MaterialDescriptorsWaitIdle
+    Vk.device_wait_idle(engine.device); // :MaterialDescriptorsWaitIdle
     Vk.update_descriptor_sets(engine.device, 1, *writeSet, 0, null);
 
     return true;

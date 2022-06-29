@@ -186,9 +186,6 @@ _updateGeometryAabb :: (mesh : *Mesh) {
 }
 
 _updateBoundingSphere :: (mesh : *Mesh) {
-    // @todo For 2D, an AABB would be more benificial, as the camera
-    // is often aligned with axes.
-
     mesh.boundingSphere.center = Chamber.multiply(mesh.transform, mesh.geometryAabb.center);
     mesh.boundingSphere.radius = Math.length((mesh.transform.scaling * mesh.geometryAabb.extent) / 2.);
 }

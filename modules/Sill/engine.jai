@@ -15,8 +15,8 @@ EngineBase :: struct {
 }
 
     #as fonts : Fonts;
-    #as input : Input; // @fixme Spread these #as, they are awesome. One could just care about the engine afterwards...
-    ui : Ui;
+    #as input : Input;
+    #as ui : Ui;
 
     // User control.
     options : EngineOptions;
@@ -123,13 +123,13 @@ engine_init :: (engine : *EngineBase) {
         }
     }
 
-    _fonts_init(*engine.fonts, engine.renderEngine);
+    _fonts_init(engine, engine.renderEngine);
 }
 
 engine_cleanup :: (engine : *Engine, resetMemory := true) {
-    _ui_cleanup(*engine.ui);
-    _input_cleanup(*engine.input);
-    _fonts_cleanup(*engine.fonts);
+    _ui_cleanup(engine);
+    _input_cleanup(engine);
+    _fonts_cleanup(engine);
     engine.Meta._cleanup_entities(engine);
 
     Basic.array_free(engine.pendingDestroyedEntities);
@@ -172,10 +172,10 @@ engine_run :: (engine : *Engine) {
         updateTimeLag += elapsedTime;
         while (updateTimeLag >= updateTime) {
             Basic.reset_temporary_storage();
-            _input_reset(*engine.input);
+            _input_reset(engine);
             _engine_handle_events(engine, updateTime);
             _engine_update_entities(engine, updateTime);
-            _ui_update(*engine.ui);
+            _ui_update(engine);
             updateTimeLag -= updateTime;
         }
 
@@ -233,9 +233,9 @@ _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
         }
 
         stopPropagation := false;
-        _ui_handle_event(*engine.ui, event, *stopPropagation);
+        _ui_handle_event(engine, event, *stopPropagation);
         if !stopPropagation {
-            _input_handle_event(*engine.input, event);
+            _input_handle_event(engine, event);
             if engine.options.eventHandler then engine.options.eventHandler(event);
         }
 
@@ -244,7 +244,7 @@ _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
 
     #if VR_ENABLED {
         if (engine.renderEngine.vr.enabled) {
-            _input_handle_vr_events(*engine.input, engine.vrTarget);
+            _input_handle_vr_events(engine, engine.vrTarget);
         }
     }
 }
