@@ -171,6 +171,12 @@ mesh_distance_from :: (mesh : *Mesh, ray : Chamber.Ray, pickPrecision : Chamber.
 #scope_file
 
 _updateGeometryAabb :: (mesh : *Mesh) {
+    if mesh.vertices.count == 0 {
+        mesh.geometryAabb.center = .{};
+        mesh.geometryAabb.extent = .{};
+        return;
+    }
+
     minRange := mesh.vertices[0].position;
     maxRange := minRange;
     for *vertex : mesh.vertices {

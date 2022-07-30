@@ -61,7 +61,7 @@ input_action_active :: (input : *Input, actionName : string) -> bool {
 
 // Set alsoOnChanged to true to detect auto repeat for the OS.
 input_action_just_activated :: (input : *Input, actionName : string, alsoOnChanged := false) -> bool {
-    action := table_find_pointer(input.actions, actionName);
+    action := table_find_pointer(*input.actions, actionName);
     if action == null then return false;
     if action.activeness == 0 then return false;
     if alsoOnChanged && action.changed then return true;
@@ -78,14 +78,14 @@ input_axis_unbind :: (input : *Input, axisName : string) {
 }
 
 input_axis_changed :: (input : *Input, axisName : string) -> bool {
-    axis := table_find_pointer(input.axes, axisName);
+    axis := table_find_pointer(*input.axes, axisName);
     if axis == null then return false;
     return axis.value != 0.;
 }
 
 // Will return 0. if axis has not changed.
 input_axis_value :: (input : *Input, axisName : string) -> float32 {
-    axis := table_find_pointer(input.axes, axisName);
+    axis := table_find_pointer(*input.axes, axisName);
     if axis == null then return 0.;
     return axis.value;
 }

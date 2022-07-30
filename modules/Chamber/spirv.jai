@@ -169,7 +169,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                 componentType := spvCode[2];
                 componentCount := spvCode[3];
 
-                componentTypeInfo, ok := table_find(typeInfos, componentType);
+                componentTypeInfo, ok := table_find(*typeInfos, componentType);
 
                 typeInfo := table_find_or_add(*typeInfos, result);
                 typeInfo.size = componentCount * componentTypeInfo.size;
@@ -178,8 +178,8 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                 result := spvCode[1];
                 lastMemberType := spvCode[wordCount - 1];
 
-                typeInfo := table_find_pointer(typeInfos, result);
-                lastMemberTypeInfo := table_find_pointer(typeInfos, lastMemberType);
+                typeInfo := table_find_pointer(*typeInfos, result);
+                lastMemberTypeInfo := table_find_pointer(*typeInfos, lastMemberType);
 
                 // @todo We are relying on the fact that members are added in
                 // order in this array. Hopefully, that's true whatever SPV compiler in used.
@@ -207,13 +207,13 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
 
                 // More info about a uniform
                 if storageClass == .Uniform {
-                    name, ok := table_find(idToName, result);
+                    name, ok := table_find(*idToName, result);
                     uniformFrame, uniformName := table_find_entry(spv.uniformsFrame, name);
                     if uniformFrame != null {
                         uniformFrame.kind = .Block;
-                        type := table_find_pointer(typePointerToType, typePointer);
+                        type := table_find_pointer(*typePointerToType, typePointer);
                         if type != null {
-                            typeInfo, ok := table_find(typeInfos, <<type);
+                            typeInfo, ok := table_find(*typeInfos, <<type);
                             for *member : typeInfo.members {
                                 memberName := Basic.copy_string(member.name);
                                 uniformFrame := table_add(*spv.uniformsFrame, memberName, .{});
@@ -225,8 +225,8 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                         }
                     }
                 } else if storageClass == .UniformConstant {
-                    name, ok := table_find(idToName, result);
-                    uniformFrame := table_find_pointer(spv.uniformsFrame, name);
+                    name, ok := table_find(*idToName, result);
+                    uniformFrame := table_find_pointer(*spv.uniformsFrame, name);
                     if uniformFrame != null {
                         uniformFrame.kind = .Texture;
                     }
@@ -239,9 +239,9 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
 
                 if decoration == .Binding ||
                    decoration == .DescriptorSet {
-                    name, ok := table_find(idToName, target);
+                    name, ok := table_find(*idToName, target);
                     if !ok then Basic.log("Unable to find variable name in SPIR-V. Have decorations been stripped?", flags=.ERROR);
-                    uniformFrame := table_find_pointer(spv.uniformsFrame, name);
+                    uniformFrame := table_find_pointer(*spv.uniformsFrame, name);
                     if uniformFrame == null {
                         name = Basic.copy_string(name); // Needed, original shaderCode will be wiped out.
                         uniformFrame = table_add(*spv.uniformsFrame, name, .{});
@@ -262,7 +262,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                 if decoration == .Offset {
                     offset := spvCode[4];
 
-                    typeInfo, ok := table_find(typeInfos, structureType);
+                    typeInfo, ok := table_find(*typeInfos, structureType);
                     for *member : typeInfo.members {
                         if member.index == index {
                             member.offset = offset;

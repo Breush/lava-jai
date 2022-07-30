@@ -38,7 +38,7 @@ Your entities will be automatically detected as-long-as you inherit from `Sill.E
 
 ```jai
 TreeEntity :: struct {
-    using entity : Sill.Entity;
+    using #as entity : Sill.Entity;
     transform : Sill.TransformComponent;
     mesh : Sill.MeshComponent;
 }

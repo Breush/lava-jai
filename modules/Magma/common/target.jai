@@ -78,7 +78,7 @@ target_bind :: (target : *Target, rendererOutput : RendererOutput, bindIndex : u
 // -----
 
 WindowTarget :: struct {
-    using target : Target;
+    using #as target : Target;
     target.kind = Target.Kind.Window;
 
     extent : Chamber.uvec2;

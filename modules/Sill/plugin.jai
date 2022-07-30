@@ -6,7 +6,7 @@
  *
  * ```
  * Player :: struct {
- *     using entity : Sill.Entity;
+ *     using #as entity : Sill.Entity;
  *     transform : TransformComponent;  // Provides a way to move the entity around. It is a requirement of MeshComponent.
  *     mesh : MeshComponent;            // Provides a way to attach a mesh to the entity.
  * }

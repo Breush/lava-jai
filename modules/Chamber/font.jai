@@ -116,7 +116,7 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
 }
 
 font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo, pixelsChanged : bool {
-    glyphInfo := Hash.table_find_pointer(font.glyphInfos, codepoint);
+    glyphInfo := Hash.table_find_pointer(*font.glyphInfos, codepoint);
     if glyphInfo != null then return glyphInfo, false;
 
     glyphInfo = Hash.table_add(*font.glyphInfos, codepoint, .{});

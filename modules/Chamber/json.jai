@@ -81,7 +81,7 @@ json_free :: (using val: JsonValue) {
 operator [] :: (json_val: JsonValue, key: string) -> JsonValue {
     assert(json_val.type == .OBJECT);
     table := <<json_val.object;
-    val, success := table_find(table, key);
+    val, success := table_find(*table, key);
     if !success then {
         val.type = .INVALID;
     }
@@ -474,7 +474,7 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
         key, remainder, success = parse_string(remainder);
         if !success    return result, remainder, false;
 
-        existing := table_find_pointer(result, key);
+        existing := table_find_pointer(*result, key);
         if existing        return result, remainder, false;
 
         remainder = trim_whitespaces(remainder);

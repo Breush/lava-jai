@@ -166,7 +166,7 @@ _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chambe
     }
 
     shaderModuleId := Basic.tprint("%.%", shaderId, macroDefinition);
-    shaderModule := Hash.table_find_pointer(engine.shaderModuleMap, shaderModuleId);
+    shaderModule := Hash.table_find_pointer(*engine.shaderModuleMap, shaderModuleId);
     if shaderModule != null then return shaderModule;
     shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderModuleId, .{});
 

@@ -24,7 +24,7 @@ table_find_entry :: (table : Table, key : table.Key_Type) -> *table.Value_Type, 
 }
 
 table_find_or_add :: (table : *Table, key : table.Key_Type) -> *table.Value_Type {
-    value := table_find_pointer(<<table, key);
+    value := table_find_pointer(table, key);
     if value == null {
         _value : table.Value_Type;
         value = table_add(table, key, _value);

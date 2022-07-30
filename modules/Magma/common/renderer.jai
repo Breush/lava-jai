@@ -19,7 +19,7 @@ Renderer :: struct {
 
     shaders : [..]*Shader;
 
-    using rendererImpl : RendererImpl;
+    using #as rendererImpl : RendererImpl;
 
     allocator : Allocator;
 }
@@ -141,7 +141,7 @@ renderer_output_get_extent :: (output : RendererOutput) -> Chamber.uvec2 {
     that we cannot afford in VR environment for instance.
 */
 ForwardRenderer :: struct {
-    using renderer : Renderer;
+    using #as renderer : Renderer;
     using forwardRendererImpl : ForwardRendererImpl;
 
     eye : Eye;
@@ -184,7 +184,7 @@ forward_renderer_extent :: (forwardRenderer : *ForwardRenderer, extent : Chamber
 // ----- Ray tracing
 
 RayTracingRenderer :: struct {
-    using renderer : Renderer;
+    using #as renderer : Renderer;
     using rayTracingRendererImpl : RayTracingRendererImpl;
 
     eye : Eye;
@@ -230,7 +230,7 @@ ray_tracing_renderer_get_extent :: (rayTracingRenderer : *RayTracingRenderer, ey
     at the creation of the post-process renderer.
 */
 PostProcessRenderer :: struct {
-    using renderer : Renderer;
+    using #as renderer : Renderer;
     using postProcessRendererImpl : PostProcessRendererImpl;
 
     rendererOutput : RendererOutput;

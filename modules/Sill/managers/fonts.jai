@@ -21,7 +21,7 @@ fonts_register :: (iFont : *Fonts, fontId : string, filename : string, size : fl
 }
 
 fonts_glyph_infos :: (iFont : *Fonts, fontId : string, text : string) -> [..]Chamber.GlyphInfo {
-    fontInfo := table_find_pointer(iFont.infos, fontId);
+    fontInfo := table_find_pointer(*iFont.infos, fontId);
     glyphInfos, pixelsChanged := Chamber.font_glyph_infos(*fontInfo.font, text);
     if pixelsChanged {
         Magma.texture_load_from_memory(fontInfo.texture, fontInfo.font.pixels, fontInfo.font.extent);
@@ -30,7 +30,7 @@ fonts_glyph_infos :: (iFont : *Fonts, fontId : string, text : string) -> [..]Cha
 }
 
 fonts_info :: (iFont : *Fonts, fontId : string) -> *Fonts.Info {
-    return table_find_pointer(iFont.infos, fontId);
+    return table_find_pointer(*iFont.infos, fontId);
 }
 
 #scope_module

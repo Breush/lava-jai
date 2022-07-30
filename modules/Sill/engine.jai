@@ -29,7 +29,7 @@ EngineBase :: struct {
 }
 
 Engine :: struct ($_Meta : Type) {
-    using base : EngineBase;
+    using #as base : EngineBase;
 
     Meta :: _Meta;
     entities : _Meta.Entities;

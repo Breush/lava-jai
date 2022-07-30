@@ -98,10 +98,10 @@ impl_window_init :: (window : *Window) -> bool {
     BASE_CURSOR_THEME_PATHS :: string.["~/.icons", "/usr/share/icons", "/usr/share/pixmaps"];
     for baseCursorThemePath : BASE_CURSOR_THEME_PATHS {
         themeIndexPath := Basic.tprint("%/%/index.theme", baseCursorThemePath, window.systemCursorThemeName);
-        fileContent, fileExists := File.read_entire_file(themeIndexPath);
+        fileHandle, fileExists := File.file_open(themeIndexPath, log_errors=false);
 
-        if fileExists { // @todo Could be a File.exists, but not provided in modules yet...
-            Basic.free(fileContent);
+        if fileExists {
+            File.file_close(*fileHandle);
             window.systemCursorThemePath = Basic.sprint("%/%", baseCursorThemePath, window.systemCursorThemeName);
             break;
         }
