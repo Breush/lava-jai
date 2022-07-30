@@ -1,7 +1,7 @@
 ImageHolder :: struct {
     Kind :: enum {
         Unknown :: 0;
-        Texture;            // R8G8B8A8Unorm - Color | Sampled | TransferDst
+        Texture;            // R8G8B8A8Unorm - Color | Sampled | TransferDst @fixme Normal maps etc ARE unorm, but not the other ones
         RendererOut;        // R8G8B8A8Srgb  - Color | Sampled | TransferSrc
         RendererOutStorage; // R8G8B8A8Unorm - Storage | Sampled | TransferSrc
         StorageR8;          // R8Unorm       - Storage
@@ -216,6 +216,8 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
     cpuIo = _cpuIo;
     size = _size;
 
+    if size == 0 then return false;
+
     if (cpuIo == .PersistentStaging) {
         stagingBufferHolder = Basic.New(BufferHolder);
         _buffer_holder_init(stagingBufferHolder, engine, Basic.tprint("%.stagingBufferHolder", name), .Staging, .Direct, size);
@@ -316,6 +318,8 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : $T) -> bool {
 }
 
 _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSize : Vk.DeviceSize) -> bool {
+    if dataSize == 0 then return false;
+
     if cpuIo == .Direct {
         targetData : *void;
         Vk.map_memory(engine.device, deviceMemory, 0, size, 0, *targetData);
