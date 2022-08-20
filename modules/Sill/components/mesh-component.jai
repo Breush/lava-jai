@@ -18,7 +18,7 @@ MeshComponent :: struct {
 
 component_init :: (iMesh : *MeshComponent) {
     transform_on_world_transform_changed(iMesh.transform,
-                                         xx (iMesh : *MeshComponent) { iMesh._nodesTransformsDirty = true; },
+                                         (committed : bool, iMesh : *MeshComponent) { mesh_commit_nodes(iMesh, instantly = committed); },
                                          iMesh);
 }
 

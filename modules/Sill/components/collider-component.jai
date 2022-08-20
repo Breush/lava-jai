@@ -16,7 +16,7 @@ ColliderComponent :: struct {
 
 component_init :: (iCollider : *ColliderComponent) {
     transform_on_world_transform_changed(iCollider.transform,
-                                         xx (iCollider : *ColliderComponent) { iCollider._shapesTransformsDirty = true; },
+                                         (committed : bool, iCollider : *ColliderComponent) { collider_commit_shapes(iCollider, ); },
                                          iCollider);
 }
 

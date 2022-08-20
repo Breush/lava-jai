@@ -9,7 +9,9 @@ TransformComponent :: struct {
         userData : *void;
     };
 
-    WorldTransformChangedCallbackType :: #type (userData : *void);
+    // committed means that the user specifically said the transform is finished
+    // modifying, so no need to cache.
+    WorldTransformChangedCallbackType :: #type (committed : bool, userData : *void);
 }
 
 component_init :: (iTransform : *TransformComponent) {
@@ -57,7 +59,7 @@ transform_scale :: (iTransform : *TransformComponent, scaleFactor : float32) {
 }
 
 transform_commit :: (iTransform : *TransformComponent) {
-    _update_world_transform(iTransform);
+    _update_world_transform(iTransform, committed = true);
 }
 
 transform_origin_target :: (iTransform : *TransformComponent, origin : Chamber.vec3, target : Chamber.vec3, referenceUp := Chamber.vec3.{0, 0, 1}) {
@@ -67,16 +69,16 @@ transform_origin_target :: (iTransform : *TransformComponent, origin : Chamber.v
     _update_world_transform(iTransform);
 }
 
-transform_on_world_transform_changed :: (iTransform : *TransformComponent, function : TransformComponent.WorldTransformChangedCallbackType, userData : *void) {
+transform_on_world_transform_changed :: (iTransform : *TransformComponent, function : (committed : bool, userData : *$T), userData : *T = null) {
     Basic.array_add(*iTransform.worldTransformChangedCallbacks, .{});
     callback := Basic.peek_pointer(iTransform.worldTransformChangedCallbacks);
-    callback.function = function;
+    callback.function = cast(TransformComponent.WorldTransformChangedCallbackType) function;
     callback.userData = userData;
 }
 
 #scope_file
 
-_update_world_transform :: (iTransform : *TransformComponent) {
+_update_world_transform :: (iTransform : *TransformComponent, committed := false) {
     if iTransform.entity.parent != null {
         // @note The world transform updates are done instantly, so it should be up-to-date.
         iParentTransform := entity_get_component(iTransform.entity.parent, TransformComponent);
@@ -91,15 +93,12 @@ _update_world_transform :: (iTransform : *TransformComponent) {
 
     // Update children position
     for child : iTransform.entity.children {
-        _update_world_transform(entity_get_component(child, TransformComponent));
+        _update_world_transform(entity_get_component(child, TransformComponent), committed);
     }
 
-    _call_world_transform_changed_callbacks(iTransform);
-}
-
-_call_world_transform_changed_callbacks :: (iTransform : *TransformComponent) {
+    // Call callbacks
     for callback : iTransform.worldTransformChangedCallbacks {
-        callback.function(callback.userData);
+        callback.function(committed, callback.userData);
     }
 }
 

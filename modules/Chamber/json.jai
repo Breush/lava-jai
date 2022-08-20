@@ -41,15 +41,21 @@ json_parse_string :: (content: string) -> JsonValue, success: bool {
 }
 
 json_parse_file :: (filename: string) -> JsonValue, success: bool {
-    file_data, success := read_entire_file(filename);
+    file, success := file_open(filename, log_errors = false);
     result: JsonValue;
+    if !success {
+        report_error("Couldn’t open file %", filename);
+        return result, false;
+    }
+    defer file_close(*file);
+
+    fileData := read_entire_file(file);
     if !success {
         report_error("Couldn’t read file %", filename);
         return result, false;
     }
-    defer free(file_data);
 
-    result, success = json_parse_string(file_data);
+    result, success = json_parse_string(fileData);
     return result, success;
 }
 

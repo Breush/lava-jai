@@ -7,7 +7,7 @@ CameraComponent :: struct {
 
 component_init :: (iCamera : *CameraComponent) {
     transform_on_world_transform_changed(iCamera.transform,
-                                         xx (iCamera : *CameraComponent) { _camera_update_from_transform(iCamera); },
+                                         (committed : bool, iCamera : *CameraComponent) { _camera_update_from_transform(iCamera); },
                                          iCamera);
 
     iCamera.eye = Magma.renderer_get_eye(iCamera.entity.engine.renderer, 0);
