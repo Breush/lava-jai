@@ -60,6 +60,7 @@ Event :: struct {
     }
 
     MouseWheelData :: struct {
+        dx : float32;
         dy : float32;
     }
 

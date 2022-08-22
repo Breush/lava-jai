@@ -166,6 +166,14 @@ _on_message :: (hWnd : Windows.HWND, msg : u32, wParam : Windows.WPARAM, lParam 
             event.mouseWheel.dy = cast(float) cast,trunc(s16) (wParam >> 16) / WHEEL_DELTA;
             _window_add_event(window, *event);
 
+        case Windows.WM_MOUSEHWHEEL;
+            WHEEL_DELTA :: 120;
+
+            event : Event;
+            event.kind = .MouseWheelScrolled;
+            event.mouseWheel.dx = cast(float) cast,trunc(s16) (wParam >> 16) / WHEEL_DELTA;
+            _window_add_event(window, *event);
+
         case Windows.WM_CHAR;
             utf32 := cast(u32) wParam;
             if utf32 > 31 && utf32 != 127 {

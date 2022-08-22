@@ -380,11 +380,14 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
         else if buttonPressEvent.detail <= 5 {
             event : Event;
             event.kind = .MouseWheelScrolled;
-            if buttonPressEvent.detail == 4 {
-                event.mouseWheel.dy = 1.;
-            } else {
-                event.mouseWheel.dy = -1.;
-            }
+            event.mouseWheel.dy = ifx buttonPressEvent.detail == 4 then 1. else -1.;
+            _window_add_event(window, *event);
+        }
+        // Horizontal mouse wheel buttons
+        else if buttonPressEvent.detail <= 7 {
+            event : Event;
+            event.kind = .MouseWheelScrolled;
+            event.mouseWheel.dx = ifx buttonPressEvent.detail == 6 then 1. else -1.;
             _window_add_event(window, *event);
         }
 
