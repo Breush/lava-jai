@@ -223,6 +223,7 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
     case #char "Z"; return .Z;
     case Windows.VK_BACK; return .Backspace;
     case Windows.VK_TAB; return .Tab;
+    case Windows.VK_RETURN; return .Return;
     case Windows.VK_ESCAPE; return .Escape;
     case Windows.VK_F1; return .F1;
     case Windows.VK_F2; return .F2;

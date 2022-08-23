@@ -408,6 +408,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
 
 _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     if keysym == {
+    case Xkb.KEY_Return; return .Return;
     case Xkb.KEY_space; return .Space;
     case Xkb.KEY_a; #through; case Xkb.KEY_A; return .A;
     case Xkb.KEY_b; #through; case Xkb.KEY_B; return .B;

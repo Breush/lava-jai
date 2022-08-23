@@ -100,7 +100,7 @@ Key :: enum {
     ControlLeft; ControlRight;
     ShiftLeft; ShiftRight;
     Delete;
-    Tab; Space; Backspace;
+    Tab; Space; Backspace; Return;
     Home; End;
 }
 
