@@ -11,7 +11,7 @@
 Mesh :: struct {
     scene : *Scene;
 
-    disabled : bool;
+    disabled : MeshDisabledFlags;
 
     vertices : [..]VertexInput;
     indices : [..]u16;
@@ -30,6 +30,14 @@ Mesh :: struct {
     using meshImpl : MeshImpl;
 
     allocator : Allocator;
+}
+
+MeshDisabledFlags :: enum_flags u8 {
+    None            :: 0x0;
+    User            :: 0x1;
+    Application     :: 0x2;
+    Internal        :: 0x4; // Reserved, unused.
+    GameEngine      :: 0x8; // Used in Sill.
 }
 
 VertexInput :: struct {

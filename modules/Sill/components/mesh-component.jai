@@ -40,6 +40,9 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
 }
 
 component_update :: (iMesh : *MeshComponent, dt : float64) {
+    if iMesh.entity.disabledChanged then _update_nodes_disabled(iMesh.nodes, iMesh.entity.disabled);
+    if iMesh.entity.disabled then return;
+
     if iMesh._nodesTransformsDirty {
         mesh_commit_nodes(iMesh, instantly = true);
     }
@@ -285,6 +288,15 @@ _update_node_transforms :: (nodes : []MeshNode, node : *MeshNode, parentMatrix :
 
     for child : node.children {
         _update_node_transforms(nodes, *nodes[child], matrix);
+    }
+}
+
+_update_nodes_disabled :: (nodes : []MeshNode, disabled : bool) {
+    for *node : nodes {
+        for primitive : node.primitives {
+            if disabled then primitive.disabled |= .GameEngine;
+            else primitive.disabled &= ~.GameEngine;
+        }
     }
 }
 

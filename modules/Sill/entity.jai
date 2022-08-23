@@ -11,7 +11,9 @@ Entity :: struct {
     name : string;
     children : [..]*Entity; // Do not add directly, use entity_add_child.
     parent : *Entity;       // Do not edit directly.
+    disabled : bool;        // Do not edit directly.
 
+    disabledChanged : bool;
     childrenChanged : bool;
 }
 
@@ -70,4 +72,10 @@ entity_set_parent :: (entity : *Entity, parent : *Entity, warnOldParent := true,
     if warnNewParent && parent != null {
         entity_add_child(parent, entity, warnChild = false);
     }
+}
+
+entity_set_disabled :: (entity : *Entity, disabled := true) {
+    if entity.disabled == disabled then return;
+    entity.disabled = disabled;
+    entity.disabledChanged = true;
 }

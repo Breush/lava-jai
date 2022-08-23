@@ -9,6 +9,7 @@ ColliderComponent :: struct {
     BoxShape :: struct {
         transform : Chamber.trf;
         extent : Chamber.vec3;
+        disabled : bool;
 
         worldTransform : Chamber.trf; @ReadOnly
     }
@@ -29,6 +30,8 @@ component_cleanup :: (iCollider : *ColliderComponent, resetMemory := true) {
 }
 
 component_update :: (iCollider : *ColliderComponent, dt : float64) {
+    if iCollider.entity.disabled then return;
+
     if iCollider._shapesTransformsDirty {
         collider_commit_shapes(iCollider, instantly = true);
     }
@@ -45,9 +48,11 @@ collider_commit_shapes :: (iCollider : *ColliderComponent, instantly := false) {
 }
 
 collider_distance_from :: (iCollider : *ColliderComponent, ray : Chamber.Ray) -> float {
-    distance := 0.0;
+    if iCollider.entity.disabled then return 0.0;
 
+    distance := 0.0;
     for *boxShape : iCollider.boxShapes {
+        if boxShape.disabled then continue;
         // @fixme Need to really transform the ray into the box's local space,
         // and not just use the translation.
         distance = ray_intersect_aab(ray, boxShape.worldTransform.translation, boxShape.worldTransform.factor * boxShape.extent);

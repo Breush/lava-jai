@@ -434,6 +434,7 @@ _generate :: (workspace : s64) {
         if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
+        Basic.append(*builder, "            entity.disabledChanged = false;\n");
         Basic.append(*builder, "            entity.childrenChanged = false;\n");
         Basic.append(*builder, "        }\n");
     }
