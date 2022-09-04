@@ -73,7 +73,7 @@ Event :: struct {
     }
 
     TextData :: struct {
-        str : string~s8;    // Points to the utf8 data below
+        str : string/*~s8 @fixme Jai compiler bug */;    // Points to the utf8 data below
         utf8 : [5]u8;       // UTF-8, zero-terminated
         utf32 : u32;        // UTF-32
     }
@@ -83,7 +83,7 @@ Event :: struct {
         windowSize : WindowSizeData;     // On WindowSizeChanged
         mousePointer : MousePointerData; // On MousePointerMoved
         mouseWheel : MouseWheelData;     // On MouseWheelScrolled
-        mouseButton : MouseButtonData;       // On MouseButtonPressed, MouseButtonReleased
+        mouseButton : MouseButtonData;   // On MouseButtonPressed, MouseButtonReleased
         key : KeyData;                   // On KeyPressed, KeyReleased
         text : TextData;                 // On TextEntered
     }
@@ -114,7 +114,9 @@ MouseButton :: enum {
 PointerStyle :: enum {
     Default :: 0;
     Hidden;
-    HandPointer;    // Usually for links and buttons.
+    Hand;           // Usually for draggable elements.
+    HandPointing;   // Usually for links and buttons.
+    HandGrabbing;   // Usually while dragging elements.
     Text;           // I-beam, usually for horizontal text.
 }
 

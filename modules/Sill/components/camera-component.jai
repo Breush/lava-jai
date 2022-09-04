@@ -1,5 +1,5 @@
 CameraComponent :: struct {
-    using component : Component;
+    using #as component : Component;
     transform : *TransformComponent;
 
     eye : *Magma.Eye;

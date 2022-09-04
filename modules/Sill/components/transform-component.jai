@@ -1,5 +1,5 @@
 TransformComponent :: struct {
-    using component : Component;
+    using #as component : Component;
 
     using transform : Chamber.trf;
     worldTransform : Chamber.trf;

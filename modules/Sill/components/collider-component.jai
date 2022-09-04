@@ -1,5 +1,5 @@
 ColliderComponent :: struct {
-    using component : Component;
+    using #as component : Component;
     transform : *TransformComponent;
 
     boxShapes : [..]BoxShape;

@@ -1,5 +1,5 @@
 UiComponent :: struct {
-    using component : Component;
+    using #as component : Component;
     transform : *TransformComponent; // @todo Should be used to mark componentsDepthDirty
 
     // Main configuration.

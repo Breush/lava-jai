@@ -157,7 +157,7 @@ _check_declaration :: (codeDeclaration : *Compiler.Code_Declaration) {
 
         // Checking the struct "inherits" from something.
         memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
-        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING == 0 then continue;
+        if memberCodeDeclaration.flags & .IS_MARKED_AS_AS == 0 then continue;
 
         // Checking if the base struct is Entity from the Sill module.
         module, typeIdentifier := _get_type_module_and_identifier(memberCodeDeclaration.type_inst);
@@ -199,7 +199,7 @@ _add_meta_entity :: (name : string, members : []*Compiler.Code_Scope_Entry) -> *
         memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
         metaEntity.hasOnCleanup = metaEntity.hasOnCleanup || (memberCodeDeclaration.name == "on_cleanup");
 
-        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING != 0 ||
+        if memberCodeDeclaration.flags & .IS_MARKED_AS_AS != 0 ||
            memberCodeDeclaration.flags & .IS_IMPORTED != 0 {
             continue;
         }
@@ -237,7 +237,7 @@ _add_meta_component :: (name : string, members : []*Compiler.Code_Scope_Entry) {
         if member.kind != .DECLARATION then continue;
 
         memberCodeDeclaration := cast(*Compiler.Code_Declaration) member;
-        if memberCodeDeclaration.flags & .IS_MARKED_AS_USING ||
+        if memberCodeDeclaration.flags & .IS_MARKED_AS_AS ||
            memberCodeDeclaration.flags & .IS_IMPORTED {
             continue;
         }

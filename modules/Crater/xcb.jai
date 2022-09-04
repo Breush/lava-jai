@@ -2,6 +2,7 @@
 
 Posix :: #import "POSIX";
 Unicode :: #import "Unicode";
+FileUtilities :: #import "File_Utilities";
 
 Xcb :: #import "Xcb";
 Xkb :: #import "Xkb";
@@ -95,15 +96,25 @@ impl_window_init :: (window : *Window) -> bool {
     }
     context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, rmReply, null);
 
-    BASE_CURSOR_THEME_PATHS :: string.["~/.icons", "/usr/share/icons", "/usr/share/pixmaps"];
-    for baseCursorThemePath : BASE_CURSOR_THEME_PATHS {
+    baseCursorThemePath : [..]string;
+    defer Basic.array_free(baseCursorThemePath);
+    Basic.array_copy(*baseCursorThemePath, string.["/usr/share/icons", "/usr/share/pixmaps"]);
+    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.icons", Chamber.os_user_path()));
+    for baseCursorThemePath : baseCursorThemePath {
         themeIndexPath := Basic.tprint("%/%/index.theme", baseCursorThemePath, window.systemCursorThemeName);
-        fileHandle, fileExists := File.file_open(themeIndexPath, log_errors=false);
-
-        if fileExists {
-            File.file_close(*fileHandle);
+        if FileUtilities.file_exists(themeIndexPath) {
             window.systemCursorThemePath = Basic.sprint("%/%", baseCursorThemePath, window.systemCursorThemeName);
             break;
+        }
+    }
+
+    if window.systemCursorThemePath.count == 0 then {
+        // @note We *could* fallback to X11 cursors, but they are so ugly it feels like a bad idea.
+        // Better do nothing then...
+        Basic.log("Unable to find the XCB cursor theme.", flags = .WARNING);
+        Basic.log("Searched paths for the XCB cursor theme:", flags = .VERBOSE_ONLY);
+        for baseCursorThemePath : baseCursorThemePath {
+            Basic.log("  - %", baseCursorThemePath, flags = .VERBOSE_ONLY);
         }
     }
 
@@ -174,8 +185,12 @@ impl_window_update_pointer_style :: (window : *Window) {
                 pixmap := _create_pixmap_from_bitmap(window, 1, 1, u32.[0]);
                 Xcb.create_cursor(window.xcbConnection, cursor, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0);
                 Xcb.free_pixmap(window.xcbConnection, pixmap);
-            case .HandPointer;
+            case .Hand;
+                cursor = _read_system_cursor(window, "hand1");
+            case .HandPointing;
                 cursor = _read_system_cursor(window, "hand2");
+            case .HandGrabbing;
+                cursor = _read_system_cursor(window, "dnd-none");
             case .Text;
                 cursor = _read_system_cursor(window, "xterm");
         }
@@ -487,9 +502,6 @@ _create_pixmap_from_bitmap :: (window : *Window, width : u32, height : u32, bitm
 _read_system_cursor :: (window : *Window, cursorName : string) -> Xcb.Cursor {
     // We were not able to find the cursor theme.
     if window.systemCursorThemePath.count == 0 then {
-        // @note We *could* fallback to X11 cursors, but they are so ugly it feels like a bad idea.
-        // Better do nothing then...
-        Basic.log("Unable to find the XCB cursor theme.", flags = .WARNING);
         return Xcb.NONE;
     }
 

@@ -1,5 +1,5 @@
 BehaviorComponent :: struct {
-    using component : Component;
+    using #as component : Component;
 
     updateCallbacks : [..]struct {
         function : UpdateCallbackType;

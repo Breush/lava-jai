@@ -1,3 +1,12 @@
+MeshComponent :: struct {
+    using #as component : Component;
+    transform : *TransformComponent;
+
+    nodes : [..]MeshNode;
+
+    _nodesTransformsDirty : bool;
+}
+
 MeshNode :: struct {
     primitives : [..]*Magma.Mesh;
     children : [..]s64; // Index based on `MeshComponent.nodes`.
@@ -5,15 +14,6 @@ MeshNode :: struct {
 
     // Local data, in parent space.
     transform : Chamber.trs;
-}
-
-MeshComponent :: struct {
-    using component : Component;
-    transform : *TransformComponent;
-
-    nodes : [..]MeshNode;
-
-    _nodesTransformsDirty : bool;
 }
 
 component_init :: (iMesh : *MeshComponent) {

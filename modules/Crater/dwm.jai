@@ -87,7 +87,9 @@ impl_window_update_pointer_style :: (window : *Window) {
     if #complete window.pointerStyle == {
         case .Default;      cursor = Windows.LoadCursorW(null, Windows.IDC_ARROW);
         case .Hidden;       return;
-        case .HandPointer;  cursor = Windows.LoadCursorW(null, Windows.IDC_HAND);
+        case .Hand;         cursor = Windows.LoadCursorW(null, Windows.IDC_HAND);
+        case .HandPointing; cursor = Windows.LoadCursorW(null, Windows.IDC_HAND); // @todo Add custom cursors for these non-standard ones.
+        case .HandGrabbing; cursor = Windows.LoadCursorW(null, Windows.IDC_HAND);
         case .Text;         cursor = Windows.LoadCursorW(null, Windows.IDC_IBEAM);
     }
 
