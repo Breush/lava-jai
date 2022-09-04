@@ -8,12 +8,13 @@ Ui :: struct {
     draggedUiComponents : [..]*UiComponent;
 
     draggingState : DraggingState;
-    draggingMouseButton : Crater.MouseButton;
+    dragEvent : Crater.Event;
 
     setFocusedLocked : bool;
     focusedUiComponentDuringLock : *UiComponent;
 
     mousePointerPosition : Chamber.vec2;
+    pressedMouseButtons : [4]bool; // Map a mouse button (1, 2 or 3) to whether it is pressed or not.
 
     componentsDepthDirty : bool;
 }
@@ -65,32 +66,48 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         if ui.draggingState == .Moving then return;
         _update_hovered_ui_components(ui, event, stopPropagation);
     } else if event.kind == .MouseButtonPressed {
-        if ui.draggingState != .None then return;
+        // Go out of dragging state if an other button
+        // is pressed while dragging.
+        if ui.draggingState != .None {
+            _ui_stop_dragging(ui, event, stopPropagation);
+            return;
+        }
 
-        // @note Will go in dragging state only if at least one the hovered component
+        _ui_lock_set_focused(ui);
+        for uiComponent : ui.hoveredUiComponents {
+            ui_send_trigger(uiComponent, .ClickStart, event, stopPropagation);
+            if <<stopPropagation then break;
+        }
+        _ui_lock_set_focused(ui, false);
+        _ui_do_set_focused(ui, ui.focusedUiComponentDuringLock);
+
+        // Will go in dragging state only if at least one the hovered component
         // is draggable.
-        ui.draggingMouseButton = event.mouseButton.which;
+        ui.dragEvent = event;
         ui.draggedUiComponents.count = 0;
         for uiComponent : ui.hoveredUiComponents {
             if !uiComponent.draggable then continue;
             ui.draggingState = .Pending;
             Basic.array_add(*ui.draggedUiComponents, uiComponent);
         }
+
+        ui.pressedMouseButtons[event.mouseButton.which] = true;
     } else if event.kind == .MouseButtonReleased {
         wasDragging := ui.draggingState == .Moving;
         if ui.draggingState != .None {
-            if ui.draggingMouseButton != event.mouseButton.which then return;
+            if ui.dragEvent.mouseButton.which != event.mouseButton.which then return;
             ui.draggingState = .None;
         }
 
         if wasDragging {
-            for uiComponent : ui.draggedUiComponents {
-                ui_send_trigger(uiComponent, .NoDrag, event, stopPropagation);
-                if <<stopPropagation then break;
-            }
-            _update_hovered_ui_components(ui, event, stopPropagation);
+            _ui_stop_dragging(ui, event, stopPropagation, sendDrop = true);
             return;
         }
+
+        // Don't emit a Click if the mouse is not known pressed,
+        // which occurs when combining dragging and clicking with multiple buttons.
+        if !ui.pressedMouseButtons[event.mouseButton.which] then return;
+        ui.pressedMouseButtons[event.mouseButton.which] = false;
 
         _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
@@ -124,7 +141,7 @@ _update_dragged_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
     if ui.draggingState == .Pending {
         ui.draggingState = .Moving;
         for uiComponent : ui.draggedUiComponents {
-            ui_send_trigger(uiComponent, .Drag, event, stopPropagation);
+            ui_send_trigger(uiComponent, .DragStart, ui.dragEvent, stopPropagation);
             if <<stopPropagation then break;
         }
     }
@@ -180,4 +197,21 @@ _ui_do_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
     if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .NoFocus, .{}, *stopPropagation);
     ui.focusedUiComponent = uiComponent;
     if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .Focus, .{}, *stopPropagation);
+}
+
+_ui_stop_dragging :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool, sendDrop := false) {
+    // Don't consider strange behaviors, and remove any pressed button.
+    // This allows us to cancel a drag by clicking another button,
+    // without creating a Click event for that other button.
+    for *pressedMouseButton : ui.pressedMouseButtons {
+        <<pressedMouseButton = false;
+    }
+
+    ui.draggingState = .None;
+    for uiComponent : ui.draggedUiComponents {
+        if sendDrop then ui_send_trigger(uiComponent, .DragDrop, event, stopPropagation);
+        ui_send_trigger(uiComponent, .DragStop, event, stopPropagation);
+        if <<stopPropagation then break;
+    }
+    _update_hovered_ui_components(ui, event, stopPropagation);
 }

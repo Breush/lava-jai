@@ -13,7 +13,7 @@ UiComponent :: struct {
 
     // Handlers allow to customize the default behaviors.
     // - checkHoveredHandler is always called, with the evaluation of whenever the entity is considered hovered or not.
-    //   One can use iUi.relativeMousePointerPosition to get the mouse position within the entity.
+    //   One can use ui_relative_mouse_pointer_position() to get the mouse position within the entity.
     //   One can therefore return whether it is really hovered or not.
     checkHoveredHandler : CheckHoveredHandlerType;
     checkHoveredHandlerUserData : *void;
@@ -47,14 +47,16 @@ UiCallbackFlags :: enum_flags {
     Hover;
     NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
     Child;      // @fixme Does not feel like our job.
-    Click;      // Trigger only. Why trigger only?
+    ClickStart; // Next event might be a Click or a DragStart.
+    Click;      // Emitted while released a mouse button, when an element is draggable, this occurs only if the user did not move the mouse since the ClickStart.
     Key;        // Trigger only. Why trigger only?
     Text;       // Trigger only.
     Focus;      // Trigger only.
     NoFocus;    // Trigger only.
-    Drag;       // Trigger only.
-    Dragging;
-    NoDrag;     // Trigger only.
+    DragStart;  // User started moving the mouse while holding a click on a draggable ui-component.
+    Dragging;   // On each mouse move after a DragStart and before a DragStop.
+    DragDrop;   // User dropped the draggable element that was dragged. Always called before DragStop.
+    DragStop;   // User stopped dragging, either by canceling it with another mouse button or by dropping.
 }
 
 UiTrigger :: struct {
@@ -153,7 +155,7 @@ ui_relative_mouse_pointer_position :: (iUi : *UiComponent) -> Chamber.vec2 {
 }
 
 ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
-    if iUi.disabled then return false;
+    if iUi.entity.disabled || iUi.disabled then return false;
 
     relativePosition := ui_relative_mouse_pointer_position(iUi);
 
