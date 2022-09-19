@@ -146,11 +146,9 @@ ui_relative_mouse_pointer_position :: (iUi : *UiComponent) -> Chamber.vec2 {
     relativePosition.x -= iUi.entity.engine.options.windowExtent.width / 2.0; // @todo Should it depend on the renderer?
     relativePosition.y -= iUi.entity.engine.options.windowExtent.height / 2.0;
 
-    unscaledTransform := iUi.transform.worldTransform;
-    unscaledTransform.factor = 1.0;
-    unscaledTransform = Chamber.inverse(unscaledTransform);
-
-    relativePosition = Chamber.multiply(unscaledTransform, relativePosition);
+    inverseTransform := iUi.transform.worldTransform;
+    inverseTransform = Chamber.inverse(inverseTransform);
+    relativePosition = Chamber.multiply(inverseTransform, relativePosition);
     return relativePosition.xy;
 }
 
