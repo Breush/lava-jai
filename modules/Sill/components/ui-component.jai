@@ -19,14 +19,8 @@ UiComponent :: struct {
     checkHoveredHandlerUserData : *void;
 
     CheckHoveredHandlerType :: #type (hovered : bool, userData : *void) -> bool;
-
-    // Updates are called after each user inputs.
-    // While trigger callbacks are called when it changes.
-    updateCallbacks : [..]Callback(UpdateCallbackType);
-    triggerCallbacks : [..]Callback(TriggerCallbackType);
-
-    UpdateCallbackType :: #type (update : UiUpdate, userData : *void);
     TriggerCallbackType :: #type (trigger : UiTrigger, userData : *void);
+    triggerCallbacks : [..]Callback(TriggerCallbackType);
 
     Callback :: struct($CallbackType : Type) {
         function : CallbackType;
@@ -44,29 +38,25 @@ UiComponent :: struct {
 }
 
 UiCallbackFlags :: enum_flags {
-    Hover;
-    NoHover;    // Trigger only. @fixme We could send an update with the status, but it seems overkill.
-    Child;      // @fixme Does not feel like our job.
-    ClickStart; // Next event might be a Click or a DragStart.
-    Click;      // Emitted while released a mouse button, when an element is draggable, this occurs only if the user did not move the mouse since the ClickStart.
-    Key;        // Trigger only. Why trigger only?
-    Text;       // Trigger only.
-    Focus;      // Trigger only.
-    NoFocus;    // Trigger only.
+    HoverStart;
+    Hovering;
+    HoverStop;
+    ClickStart; // Next event related to the mouse button is either a ClickStop or a DragStart.
+    ClickStop;  // Emitted while released a mouse button, when an element is draggable, this occurs only if the user did not move the mouse since the ClickStart.
+    Key;
+    Text;
+    FocusStart;
+    FocusStop;
     DragStart;  // User started moving the mouse while holding a click on a draggable ui-component.
     Dragging;   // On each mouse move after a DragStart and before a DragStop.
     DragDrop;   // User dropped the draggable element that was dragged. Always called before DragStop.
     DragStop;   // User stopped dragging, either by canceling it with another mouse button or by dropping.
+    Child;      // @fixme Does not feel like our job.
 }
 
 UiTrigger :: struct {
     flags : UiCallbackFlags;
     event : Crater.Event;
-    stopPropagation : *bool;
-}
-
-UiUpdate :: struct {
-    flags : UiCallbackFlags;
     stopPropagation : *bool;
 }
 
@@ -76,21 +66,13 @@ component_init :: (iUi : *UiComponent) {
 
 component_cleanup :: (iUi : *UiComponent) {
     ui_unregister_component(iUi.entity.engine, iUi);
-    Basic.array_reset(*iUi.updateCallbacks);
     Basic.array_reset(*iUi.triggerCallbacks);
 }
 
 component_update :: (iUi : *UiComponent, dt : float64) {
     if iUi.entity.childrenChanged {
-        ui_send_update(iUi, .Child, null);
+        ui_send_trigger(iUi, .Child, .{}, null);
     }
-}
-
-ui_on_update :: (iUi : *UiComponent, function : (update : UiUpdate, userData : *$T), flags : UiCallbackFlags = 0xFF, userData : *T = null) {
-    callback := Basic.array_add(*iUi.updateCallbacks);
-    callback.function = cast(UiComponent.UpdateCallbackType)  function;
-    callback.flags = flags;
-    callback.userData = userData;
 }
 
 ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFF, userData : *T = null)
@@ -122,17 +104,6 @@ ui_send_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.
     for callback : iUi.triggerCallbacks {
         if callback.flags & flags {
             callback.function(trigger, callback.userData);
-        }
-    }
-}
-
-ui_send_update :: (iUi : *UiComponent, flags : UiCallbackFlags, stopPropagation : *bool) {
-    update : UiUpdate = ---;
-    update.flags = flags;
-    update.stopPropagation = stopPropagation;
-    for callback : iUi.updateCallbacks {
-        if callback.flags & flags {
-            callback.function(update, callback.userData);
         }
     }
 }
@@ -179,7 +150,7 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
     }
 
     if hovered {
-        ui_send_update(iUi, .Hover, stopPropagation);
+        ui_send_trigger(iUi, .Hovering, event, stopPropagation);
     }
 
     return hovered;

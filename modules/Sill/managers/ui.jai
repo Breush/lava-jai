@@ -35,8 +35,7 @@ ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
     if uiComponent.hovered {
         stopPropagation : bool;
         uiComponent.hovered = false;
-        ui_send_update(uiComponent, UiCallbackFlags.NoHover, *stopPropagation);
-        ui_send_trigger(uiComponent, UiCallbackFlags.NoHover, .{}, *stopPropagation);
+        ui_send_trigger(uiComponent, .HoverStop, .{}, *stopPropagation);
     }
 
     Basic.array_unordered_remove_by_value(*ui.uiComponents, uiComponent, stop_after_first = true);
@@ -104,14 +103,14 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
             return;
         }
 
-        // Don't emit a Click if the mouse is not known pressed,
+        // Don't emit a ClickStop if the mouse is not known pressed,
         // which occurs when combining dragging and clicking with multiple buttons.
         if !ui.pressedMouseButtons[event.mouseButton.which] then return;
         ui.pressedMouseButtons[event.mouseButton.which] = false;
 
         _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
-            ui_send_trigger(uiComponent, .Click, event, stopPropagation);
+            ui_send_trigger(uiComponent, .ClickStop, event, stopPropagation);
             if <<stopPropagation then break;
         }
         _ui_lock_set_focused(ui, false);
@@ -171,17 +170,17 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
         if <<stopPropagation then break;
     }
 
-    // Triggering no-hover + hover callbacks.
-    // We want no-hover first.
+    // Triggering hover-start/stop callbacks.
+    // We want hover-stop first.
     for uiComponent : oldHoveredUiComponents {
         if Basic.array_find(ui.hoveredUiComponents, uiComponent) then continue;
         uiComponent.hovered = false;
-        ui_send_trigger(uiComponent, .NoHover, event, stopPropagation);
+        ui_send_trigger(uiComponent, .HoverStop, event, stopPropagation);
     }
     for uiComponent : ui.hoveredUiComponents {
         if uiComponent.hovered then continue;
         uiComponent.hovered = true;
-        ui_send_trigger(uiComponent, .Hover, event, stopPropagation);
+        ui_send_trigger(uiComponent, .HoverStart, event, stopPropagation);
     }
 }
 
@@ -194,15 +193,15 @@ _ui_do_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
     if ui.focusedUiComponent == uiComponent then return;
 
     stopPropagation : bool;
-    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .NoFocus, .{}, *stopPropagation);
+    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .FocusStop, .{}, *stopPropagation);
     ui.focusedUiComponent = uiComponent;
-    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .Focus, .{}, *stopPropagation);
+    if ui.focusedUiComponent then ui_send_trigger(ui.focusedUiComponent, .FocusStart, .{}, *stopPropagation);
 }
 
 _ui_stop_dragging :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool, sendDrop := false) {
     // Don't consider strange behaviors, and remove any pressed button.
     // This allows us to cancel a drag by clicking another button,
-    // without creating a Click event for that other button.
+    // without creating a ClickStop event for that other button.
     for *pressedMouseButton : ui.pressedMouseButtons {
         <<pressedMouseButton = false;
     }
