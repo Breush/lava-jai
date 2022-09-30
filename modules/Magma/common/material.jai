@@ -19,7 +19,7 @@ Material :: struct {
     UniformBlockField :: struct {
         parentName : string;
         offset : u32;
-        size : u32;
+        maxSize : u32;
     }
 
     Uniform :: struct {
@@ -67,6 +67,7 @@ material_init :: (material : *Material, shader : *Shader) {
             } else if uniformFrame.kind == .BlockField {
                 uniform.blockField.offset = uniformFrame.blockField.offset;
                 uniform.blockField.parentName = uniformFrame.blockField.parentName;
+                uniform.blockField.maxSize = uniformFrame.blockField.maxSize;
             }
 
             table_add(*material.uniforms, uniformName, uniform);
@@ -103,23 +104,25 @@ material_set :: (material : *Material, uniformName : string, texture : *Texture)
     impl_material_uniform_commit(material, uniform);
 }
 
-material_set :: (material : *Material, uniformName : string, value : $T) {
+material_set :: (material : *Material, uniformName : string, value : $T, $EffectiveT : Type = void)
+#modify {
+    if T == float64 then EffectiveT = float32;
+    if T == u64 then EffectiveT = u32;
+    if T == s64 then EffectiveT = s32;
+    else if T == bool then EffectiveT = u32;
+    else EffectiveT = T;
+    return true;
+}
+{
     uniform := table_find_pointer(material.shader.uniformsFrame, uniformName);
     Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
     Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
+    Basic.assert(size_of(EffectiveT) <= uniform.blockField.maxSize, "Shader's '%' uniform named '%' can not be filled with a object of type '%' (source too big).", material.shader.id, uniformName, T);
 
     parentUniform := table_find_pointer(*material.uniforms, uniform.blockField.parentName);
 
-    #if T == float64 {
-        if <<cast(*float32) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(float32) value then return;
-        <<cast(*float32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(float32) value;
-    } else #if T == bool {
-        if <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(u32) value then return;
-        <<cast(*u32) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(u32) value;
-    } else {
-        if <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) == value then return;
-        <<cast(*T) (parentUniform.block.buffer.data + uniform.blockField.offset) = value;
-    }
+    if <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(EffectiveT) value then return;
+    <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(EffectiveT) value;
 
     impl_material_uniform_commit(material, parentUniform);
 }

@@ -432,7 +432,7 @@ _glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, cache : *
 }
 
 _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, materialIndex : u64, glb : Glb, cache : *Cache) {
-    cachedMaterial := table_find_pointer(cache.material, materialIndex);
+    cachedMaterial := table_find_pointer(*cache.material, materialIndex);
     if cachedMaterial != null {
         iPrimitive.material = <<cachedMaterial;
         return;
@@ -505,7 +505,7 @@ _glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureR
 
     // @todo We could load textures asynchronously using a Thread_Group
     // @todo Engine-wise texture cache (based on pixels hash).
-    cachedTexture := table_find_pointer(cache.bufferViewToTexture, bufferViewIndex);
+    cachedTexture := table_find_pointer(*cache.bufferViewToTexture, bufferViewIndex);
     if cachedTexture != null {
         Magma.material_set(iMaterial, uniformName, <<cachedTexture);
         return;

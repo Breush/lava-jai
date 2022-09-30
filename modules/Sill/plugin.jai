@@ -328,6 +328,9 @@ _generate :: (workspace : s64) {
     Basic.init_string_builder(*builder);
     defer Basic.reset(*builder);
 
+    Sort :: #import "Sort";
+    Sort.quick_sort(metaEntityList, (a : $T, b : T) -> s64 { return Sort.compare_strings(a.idSnakeCase, b.idSnakeCase); });
+
     Basic.append(*builder, "    Entities :: struct {");
     for metaEntity : metaEntityList {
         // @todo We could make the size of buckets configurable.
@@ -342,13 +345,13 @@ _generate :: (workspace : s64) {
     Basic.reset(*builder);
 
     Basic.append(*builder, "\n    _destroy_entity :: (entity : *Sill.Entity) {\n");
-    Basic.append(*builder, "        if entity.type == {\n");
     for metaEntity : metaEntityList {
         if metaEntity.noStorage then continue;
-        Basic.print_to_builder(*builder, "            case %;\n", metaEntity.structName);
-        Basic.print_to_builder(*builder, "                destroy_%_entity(cast(*%) entity);\n", metaEntity.idSnakeCase, metaEntity.structName);
+        Basic.print_to_builder(*builder, "        if entity.typeInfo == type_info(%) {\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "            destroy_%_entity(cast(*%) entity);\n", metaEntity.idSnakeCase, metaEntity.structName);
+        Basic.append(*builder, "            return;\n");
+        Basic.append(*builder, "        }\n");
     }
-    Basic.append(*builder, "        }\n");
     Basic.append(*builder, "    }\n");
 
     for metaEntity : metaEntityList {
@@ -361,6 +364,7 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
         Basic.print_to_builder(*builder, "\n    destroy_%_entity :: (entity : *%) {\n", metaEntity.idSnakeCase, metaEntity.structName);
+        Basic.append(*builder, "        entity_cleanup(entity);\n");
         Basic.print_to_builder(*builder, "        array := *(cast(*Sill.Engine(SillMeta)) entity.engine).entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        for *bucketedEntity : <<array {\n");
         Basic.append(*builder, "            if entity == bucketedEntity {\n");
@@ -368,14 +372,12 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "                break;\n");
         Basic.append(*builder, "            }\n");
         Basic.append(*builder, "        }\n");
-        Basic.append(*builder, "        entity_cleanup(entity);\n");
         Basic.append(*builder, "    }\n");
     }
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
         Basic.append(*builder, "        entity.engine = engine;\n");
-        Basic.print_to_builder(*builder, "        entity.type = %;\n", metaEntity.structName);
         Basic.print_to_builder(*builder, "        entity.typeInfo = type_info(%);\n", metaEntity.structName);
         for structMember : metaEntity.structMembers {
             if structMember.kind == .Component {

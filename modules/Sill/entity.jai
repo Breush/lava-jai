@@ -5,8 +5,8 @@
 Entity :: struct {
     engine : *EngineBase;
 
-    type : Type;   // The real type behind the scenes.
-    typeInfo : Type_Info_Struct;
+    // The real type behind the scenes.
+    typeInfo : *Type_Info_Struct;
 
     name : string;
     children : [..]*Entity; // Do not add directly, use entity_add_child.

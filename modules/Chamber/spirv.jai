@@ -29,6 +29,7 @@ UniformsFrame :: Table(string, struct {
         blockField : struct {
             parentName : string;
             offset : u32;
+            maxSize : u32;
         }
     }
 });
@@ -214,14 +215,18 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                         type := table_find_pointer(*typePointerToType, typePointer);
                         if type != null {
                             typeInfo, ok := table_find(*typeInfos, <<type);
-                            for *member : typeInfo.members {
+
+                            uniformFrame.block.size = typeInfo.size;
+                            nextOffset := typeInfo.size;
+                            for <*member : typeInfo.members {
                                 memberName := Basic.copy_string(member.name);
                                 uniformFrame := table_add(*spv.uniformsFrame, memberName, .{});
                                 uniformFrame.kind = .BlockField;
                                 uniformFrame.blockField.parentName = <<uniformName;
                                 uniformFrame.blockField.offset = member.offset;
+                                uniformFrame.blockField.maxSize = (nextOffset - member.offset);
+                                nextOffset = member.offset;
                             }
-                            uniformFrame.block.size = typeInfo.size;
                         }
                     }
                 } else if storageClass == .UniformConstant {
