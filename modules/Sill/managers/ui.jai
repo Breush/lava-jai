@@ -186,7 +186,7 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
 
 _ui_lock_set_focused :: (ui : *Ui, locked := true) {
     ui.setFocusedLocked = locked;
-    if ui.setFocusedLocked then ui.focusedUiComponentDuringLock = null;
+    if ui.setFocusedLocked then ui.focusedUiComponentDuringLock = ui.focusedUiComponent;
 }
 
 _ui_do_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {

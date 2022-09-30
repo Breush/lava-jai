@@ -223,10 +223,30 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
     case #char "X"; return .X;
     case #char "Y"; return .Y;
     case #char "Z"; return .Z;
+    case #char "0"; return ._0;
+    case #char "1"; return ._1;
+    case #char "2"; return ._2;
+    case #char "3"; return ._3;
+    case #char "4"; return ._4;
+    case #char "5"; return ._5;
+    case #char "6"; return ._6;
+    case #char "7"; return ._7;
+    case #char "8"; return ._8;
+    case #char "9"; return ._9;
     case Windows.VK_BACK; return .Backspace;
     case Windows.VK_TAB; return .Tab;
     case Windows.VK_RETURN; return .Return;
     case Windows.VK_ESCAPE; return .Escape;
+    case Windows.VK_NUMPAD0; return .Numpad0;
+    case Windows.VK_NUMPAD1; return .Numpad1;
+    case Windows.VK_NUMPAD2; return .Numpad2;
+    case Windows.VK_NUMPAD3; return .Numpad3;
+    case Windows.VK_NUMPAD4; return .Numpad4;
+    case Windows.VK_NUMPAD5; return .Numpad5;
+    case Windows.VK_NUMPAD6; return .Numpad6;
+    case Windows.VK_NUMPAD7; return .Numpad7;
+    case Windows.VK_NUMPAD8; return .Numpad8;
+    case Windows.VK_NUMPAD9; return .Numpad9;
     case Windows.VK_F1; return .F1;
     case Windows.VK_F2; return .F2;
     case Windows.VK_F3; return .F3;
@@ -252,6 +272,8 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
     case Windows.VK_DELETE; return .Delete;
     case Windows.VK_HOME; return .Home;
     case Windows.VK_END; return .End;
+    // @todo A bunch of Crater's keys are not handled here, like Ampersand, but Windows
+    // does not provide this much control.
     }
 
     return .Unknown;
