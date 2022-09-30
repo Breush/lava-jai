@@ -44,4 +44,6 @@ _fonts_cleanup :: (iFont : *Fonts) {
         Chamber.font_free(*fontInfo.font);
         Magma.destroy_texture(fontInfo.texture);
     }
+
+    Hash.uninit(*iFont.infos);
 }

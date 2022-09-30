@@ -101,6 +101,7 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 
 _image_holder_cleanup :: (using imageHolder : *ImageHolder, resetMemory := true) {
     if image != null {
+        Vk.device_wait_idle(engine.device);
         Vk.destroy_image(engine.device, image, null);
         Vk.free_memory(engine.device, deviceMemory, null);
     }

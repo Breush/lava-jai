@@ -21,3 +21,7 @@ message_send :: (message : *Message, data : *void) {
         listener_forward_message(listenerComponent, data);
     }
 }
+
+_message_cleanup :: (message : *Message) {
+    Basic.array_free(message.listenerComponents);
+}

@@ -79,6 +79,10 @@ impl_engine_init :: (engine : *Engine) {
     _init_physical_device(engine);
 }
 
+impl_engine_precleanup :: (engine : *Engine) {
+    Vk.device_wait_idle(engine.device);
+}
+
 impl_engine_cleanup :: (engine : *Engine) {
     texture_cleanup(*engine.textureWhite);
 

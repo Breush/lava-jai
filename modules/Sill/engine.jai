@@ -131,6 +131,7 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
     _ui_cleanup(engine);
     _input_cleanup(engine);
     _fonts_cleanup(engine);
+    _message_cleanup(engine);
     engine.Meta._cleanup_entities(engine);
 
     Basic.array_free(engine.pendingDestroyedEntities);

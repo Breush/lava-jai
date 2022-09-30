@@ -6,7 +6,9 @@
     PATH_SEPARATOR :: #run Basic.assert(false);
 }
 
-os_user_path :: () -> string {
+os_user_path :: (allocator := context.allocator) -> string {
+    Basic.push_allocator(allocator);
+
     path : string;
 
     // Show home if possible.
@@ -27,7 +29,9 @@ os_user_path :: () -> string {
     return path;
 }
 
-os_application_data_storage_path :: () -> string {
+os_application_data_storage_path :: (allocator := context.allocator) -> string {
+    Basic.push_allocator(allocator);
+
     path : string;
 
     #if OS == .LINUX {

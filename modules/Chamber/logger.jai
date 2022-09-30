@@ -22,6 +22,7 @@ init_logger :: () {
 }
 
 cleanup_logger :: () {
+    Basic.free(loggerData.lastMessage);
     File_Utilities.free_permanent(loggerData.ourPath);
     context.logger = loggerData.oldLogger;
     context.logger_data = loggerData.oldLoggerData;
@@ -35,7 +36,7 @@ logger :: (message : string, data : *void, info : Log_Info) {
         return;
     }
 
-    if loggerData.lastMessage == message then return;
+    // if loggerData.lastMessage == message then return;
 
     push_allocator(context.default_allocator);
     if loggerData.lastMessage.count != 0 then Basic.free(loggerData.lastMessage);

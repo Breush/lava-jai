@@ -55,6 +55,7 @@ json_parse_file :: (filename: string) -> JsonValue, success: bool {
         return result, false;
     }
 
+    defer free(fileData);
     result, success = json_parse_string(fileData);
     return result, success;
 }

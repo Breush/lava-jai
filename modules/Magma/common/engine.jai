@@ -50,6 +50,8 @@ create_engine :: (options : Engine.Options = .{}) -> *Engine {
 }
 
 destroy_engine :: (engine : *Engine, destroyResources := true) {
+    impl_engine_precleanup(engine);
+
     if destroyResources {
         for scene : engine.scenes {
             destroy_scene(scene, destroyResources);
@@ -58,7 +60,7 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
             destroy_target(target);
         }
         for texture : engine.textures {
-            destroy_texture(texture);
+            destroy_texture(texture, unregister = false);
         }
     }
 
@@ -129,4 +131,8 @@ engine_register :: (engine : *Engine, target : *Target) {
 
 engine_register :: (engine : *Engine, texture : *Texture) {
     Basic.array_add(*engine.textures, texture);
+}
+
+engine_unregister ::  (engine : *Engine, texture : *Texture) {
+    Basic.array_unordered_remove_by_value(*engine.textures, texture);
 }

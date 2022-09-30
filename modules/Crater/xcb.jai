@@ -99,7 +99,8 @@ impl_window_init :: (window : *Window) -> bool {
     baseCursorThemePath : [..]string;
     defer Basic.array_free(baseCursorThemePath);
     Basic.array_copy(*baseCursorThemePath, string.["/usr/share/icons", "/usr/share/pixmaps"]);
-    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.icons", Chamber.os_user_path()));
+    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.icons", Chamber.os_user_path(Basic.temp)));
+
     for baseCursorThemePath : baseCursorThemePath {
         themeIndexPath := Basic.tprint("%/%/index.theme", baseCursorThemePath, window.systemCursorThemeName);
         if FileUtilities.file_exists(themeIndexPath) {
@@ -151,6 +152,9 @@ impl_window_close :: (window : *Window) {
     // in C code, so we don't want to call any other allocators.
     context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
     context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
+
+    Basic.free(window.systemCursorThemeName);
+    Basic.free(window.systemCursorThemePath);
 }
 
 impl_window_center_pointer :: (window : *Window) {

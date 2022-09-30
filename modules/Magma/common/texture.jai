@@ -15,8 +15,9 @@ create_texture :: (engine : *Engine) -> *Texture {
     return texture;
 }
 
-destroy_texture :: (texture : *Texture) {
+destroy_texture :: (texture : *Texture, unregister := true) {
     texture_cleanup(texture, resetMemory = false);
+    if unregister then engine_unregister(texture.engine, texture);
 
     if texture.allocator.proc != null {
         Basic.free(texture, texture.allocator);
