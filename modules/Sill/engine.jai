@@ -16,6 +16,7 @@ EngineBase :: struct {
 
     #as fonts : Fonts;
     #as input : Input;
+    #as message : Message;
     #as ui : Ui;
 
     // User control.

@@ -4,10 +4,12 @@
 #load "entity.jai";
 #load "managers/fonts.jai";
 #load "managers/input.jai";
+#load "managers/message.jai";
 #load "managers/ui.jai";
 #load "components/behavior-component.jai";
 #load "components/camera-component.jai";
 #load "components/collider-component.jai";
+#load "components/listener-component.jai";
 #load "components/mesh-component.jai";
 #load "components/transform-component.jai";
 #load "components/ui-component.jai";
