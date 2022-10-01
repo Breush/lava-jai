@@ -39,7 +39,11 @@ impl_material_cleanup :: (material : *Material) {
 
 impl_material_uniform_commit :: (material : *Material, uniform : *Material.Uniform) {
     if uniform.kind == .Texture {
-        _material_uniform_commit(material, uniform.binding, uniform.texture);
+        if uniform.texture.value != null {
+            _material_uniform_commit(material, uniform.binding, uniform.texture.value);
+        } else {
+            _material_uniform_commit(material, uniform.binding, uniform.texture.fallback);
+        }
     } else if uniform.kind == .Block {
         _buffer_holder_copy(*uniform.block.bufferHolder, uniform.block.buffer.data, cast(Vk.DeviceSize) uniform.block.buffer.count);
         _material_uniform_commit(material, uniform.binding, uniform.block);
@@ -113,9 +117,10 @@ _init_descriptor_set :: (material : *Material) -> bool {
     // Initialization to default
     for *uniform, uniformKey : material.uniforms {
         if uniform.kind == .Texture {
-            _material_uniform_commit(material, uniform.binding, *engine.textureWhite);
+            uniform.texture.fallback = *engine.textureWhite;
+            uniform.dirty = true;
         } else if uniform.kind == .Block {
-            _material_uniform_commit(material, uniform.binding, uniform.block);
+            uniform.dirty = true;
         }
     }
 

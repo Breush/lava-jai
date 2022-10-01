@@ -46,6 +46,7 @@ EngineImpl :: struct {
     presentQueue : Vk.Queue;
 
     samplerDefault : Vk.Sampler;
+    textureInvisible : Texture; // @note Won't be registered within engine
     textureWhite : Texture; // @note Won't be registered within engine
 
     // General purpose commandPool, for one-time submits.
@@ -84,6 +85,7 @@ impl_engine_precleanup :: (engine : *Engine) {
 }
 
 impl_engine_cleanup :: (engine : *Engine) {
+    texture_cleanup(*engine.textureInvisible);
     texture_cleanup(*engine.textureWhite);
 
     Vk.destroy_sampler(engine.device, engine.samplerDefault, null);
@@ -525,6 +527,9 @@ _init_global_resources :: (engine : *Engine) -> bool {
 
     _CHECK(Vk.create_sampler(engine.device, *samplerCI, null, *engine.samplerDefault),
            "Unable to create sampler.");
+
+    texture_init(*engine.textureInvisible, engine);
+    texture_load_from_memory(*engine.textureInvisible, .[0, 0, 0, 0], .{1, 1});
 
     texture_init(*engine.textureWhite, engine);
     texture_load_from_memory(*engine.textureWhite, .[0xFF, 0xFF, 0xFF, 0xFF], .{1, 1});

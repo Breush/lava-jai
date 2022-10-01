@@ -26,10 +26,14 @@ Material :: struct {
         kind : UniformKind;
         binding : u32;
         union {
-            texture : *Texture;
+            texture : struct {
+                value : *Texture;       // Can be null.
+                fallback : *Texture;    // Never null.
+            }
             block : UniformBlock;
             blockField : UniformBlockField;
         }
+        dirty : bool;
     }
 }
 
@@ -94,14 +98,30 @@ material_cleanup :: (material : *Material, resetMemory := true) {
     }
 }
 
+material_update :: (material : *Material) {
+    for *uniform : material.uniforms {
+        if !uniform.dirty then continue;
+        impl_material_uniform_commit(material, uniform);
+        uniform.dirty = false;
+    }
+}
+
+material_fallback :: (material : *Material, uniformName : string, fallback : *Texture) {
+    uniform := table_find_pointer(*material.uniforms, uniformName);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .Texture, "Shader's '%' uniform named '%' is not a texture.", material.shader.id, uniformName);
+
+    uniform.texture.fallback = fallback;
+}
+
 material_set :: (material : *Material, uniformName : string, texture : *Texture) {
     uniform := table_find_pointer(*material.uniforms, uniformName);
     Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
     Basic.assert(uniform.kind == .Texture, "Shader's '%' uniform named '%' is not a texture.", material.shader.id, uniformName);
 
-    if uniform.texture == texture then return;
-    uniform.texture = texture;
-    impl_material_uniform_commit(material, uniform);
+    if uniform.texture.value == texture then return;
+    uniform.texture.value = texture;
+    uniform.dirty = true;
 }
 
 material_set :: (material : *Material, uniformName : string, value : $T, $EffectiveT : Type = void)
@@ -124,7 +144,7 @@ material_set :: (material : *Material, uniformName : string, value : $T, $Effect
     if <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(EffectiveT) value then return;
     <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(EffectiveT) value;
 
-    impl_material_uniform_commit(material, parentUniform);
+    parentUniform.dirty = true;
 }
 
 #scope_file

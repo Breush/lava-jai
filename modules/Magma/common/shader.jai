@@ -60,6 +60,12 @@ shader_cleanup :: (shader : *Shader, resetMemory := true) {
     }
 }
 
+shader_update :: (shader : *Shader) {
+    for material : shader.materials {
+        material_update(material);
+    }
+}
+
 shader_register :: (shader : *Shader, material : *Material) {
     Basic.array_add(*shader.materials, material);
 }

@@ -54,6 +54,12 @@ renderer_cleanup :: (renderer : *Renderer, resetMemory := true) {
     }
 }
 
+renderer_update :: (renderer : *Renderer) {
+    for shader : renderer.shaders {
+        shader_update(shader);
+    }
+}
+
 renderer_make_orbit_camera :: (renderer : *Renderer, eyeIndex : u32 = 0) -> OrbitCamera {
     orbitCamera : OrbitCamera;
     orbit_camera_init(*orbitCamera, renderer_get_eye(renderer, eyeIndex));

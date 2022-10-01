@@ -67,6 +67,10 @@ scene_register :: (scene : *Scene, renderer : *Renderer) {
 
 // Called by engine_update
 scene_update :: (scene : *Scene) {
+    for renderer : scene.renderers {
+        renderer_update(renderer);
+    }
+
     for mesh : scene.meshes {
         mesh_update(mesh);
     }

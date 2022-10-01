@@ -81,7 +81,7 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     result := Vk.acquire_next_image_khr(windowTarget.engine.device, windowTarget.swapchain, 5_000_000_000,
                                         frameObject.imageAvailableSemaphore, null, *windowTarget.swapchainImageIndex);
 
-    if result == Vk.Result.ErrorOutOfDateKhr {
+    if result == .ErrorOutOfDateKhr || result == .SuboptimalKhr {
         _recreate_swapchain(windowTarget);
         return true;
     } else {
@@ -187,7 +187,7 @@ _present :: (windowTarget : *WindowTarget, frameObject : *WindowTarget.FrameObje
 
     result := Vk.queue_present_khr(windowTarget.engine.presentQueue, *presentInfo);
 
-    if result == Vk.Result.ErrorOutOfDateKhr {
+    if result == .ErrorOutOfDateKhr || result == .SuboptimalKhr {
         return true;
     } else {
         _CHECK(result, "Unable to present.");
