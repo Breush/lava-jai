@@ -5,15 +5,22 @@ MeshImpl :: struct {
     vertexBufferHolder : BufferHolder;
     indexBufferHolder : BufferHolder;
 
+    // @todo Could have a mesh info about it being static or dynamic,
+    // and don't share the instance buffer if it's static.
+    sharedInstanceRef : Scene.InstanceRef;
+
     blasHolder : AsHolder; // @todo Could reduce the size of meshes by not storing this when RayTracing is not active.
 }
 
-impl_mesh_init :: (mesh : *Mesh) {
+impl_mesh_init :: (using mesh : *Mesh) {
+    sharedInstanceRef = _scene_share_instance(scene);
 }
 
 impl_mesh_cleanup :: (mesh : *Mesh) {
     engine := mesh.scene.engine;
     Vk.device_wait_idle(engine.device);
+
+    _scene_unshare_instance(mesh.scene, mesh.sharedInstanceRef);
 
     _buffer_holder_cleanup(*mesh.instanceBufferHolder);
     _buffer_holder_cleanup(*mesh.vertexBufferHolder);
@@ -33,7 +40,7 @@ impl_mesh_update :: (mesh : *Mesh) -> bool {
        (mesh.scene.engine.options.features & .RayTracing){
         if !_rebuild_blas(mesh) then return false;
     }
-    if mesh.instanceDirty {
+    if false && mesh.instanceDirty {
         if !_rebuild_instance_buffer(mesh) then return false;
     }
 
@@ -49,7 +56,8 @@ _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
 
     offsets := cast(Vk.DeviceSize) 0;
     Vk.cmd_bind_vertex_buffers(commandBuffer, 0, 1, *mesh.vertexBufferHolder.buffer, *offsets);
-    Vk.cmd_bind_vertex_buffers(commandBuffer, 1, 1, *mesh.instanceBufferHolder.buffer, *offsets);
+    instanceBuffer, instanceOffset := _scene_instance_buffer_and_offset(mesh.scene, mesh.sharedInstanceRef);
+    Vk.cmd_bind_vertex_buffers(commandBuffer, 1, 1, *instanceBuffer, *instanceOffset);
     Vk.cmd_bind_index_buffer(commandBuffer, mesh.indexBufferHolder.buffer, 0, Vk.IndexType.Uint16);
     Vk.cmd_draw_indexed(commandBuffer, cast(u32) mesh.indices.count, 1, 0, 0, 0);
     mesh.scene.engine.stats.drawCalls += 1;

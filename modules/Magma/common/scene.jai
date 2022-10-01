@@ -6,6 +6,8 @@ Scene :: struct {
     meshes : [..]*Mesh;
     renderers : [..]*Renderer;
 
+    using sceneImpl : SceneImpl;
+
     allocator : Allocator;
 }
 
@@ -67,6 +69,8 @@ scene_register :: (scene : *Scene, renderer : *Renderer) {
 
 // Called by engine_update
 scene_update :: (scene : *Scene) {
+    impl_scene_update(scene);
+
     for renderer : scene.renderers {
         renderer_update(renderer);
     }

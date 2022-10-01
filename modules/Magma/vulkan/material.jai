@@ -144,7 +144,6 @@ _material_uniform_commit :: (material : *Material, binding : u32, texture : *Tex
     writeDescriptorSet.descriptorCount = 1;
     writeDescriptorSet.pImageInfo = *descriptorII;
 
-    Vk.device_wait_idle(engine.device); // :MaterialDescriptorsWaitIdle
     Vk.update_descriptor_sets(engine.device, 1, *writeDescriptorSet, 0, null);
 }
 
@@ -165,7 +164,6 @@ _material_uniform_commit :: (material : *Material, binding : u32, block : Materi
     writeDescriptorSet.descriptorCount = 1;
     writeDescriptorSet.pBufferInfo = *descriptorBI;
 
-    Vk.device_wait_idle(engine.device); // :MaterialDescriptorsWaitIdle
     Vk.update_descriptor_sets(engine.device, 1, *writeDescriptorSet, 0, null);
 }
 

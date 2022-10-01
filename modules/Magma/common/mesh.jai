@@ -112,7 +112,9 @@ mesh_commit_instance :: (mesh : *Mesh, $copyTrs := true) {
     #if copyTrs {
         mesh.instance.matrix = Chamber.make_matrix(mesh.transform);
     } else {
-        mesh.transform = Chamber.make_trs(mesh.instance.matrix);
+        meshTransform := Chamber.make_trs(mesh.instance.matrix);
+        if memcmp(*meshTransform, *mesh.transform, size_of(Chamber.trs)) == 0 then return;
+        mesh.transform = meshTransform;
     }
 
     _updateBoundingSphere(mesh);
