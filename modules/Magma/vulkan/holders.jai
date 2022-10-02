@@ -195,6 +195,7 @@ BufferHolder :: struct {
     kind : Kind;
     cpuIo : CpuIo;
     size : Vk.DeviceSize;
+    capacity : Vk.DeviceSize;
 
     buffer : Vk.Buffer;
     deviceMemory : Vk.DeviceMemory;
@@ -208,6 +209,12 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
                         _size : Vk.DeviceSize) -> bool {
     if engine == _engine && kind == _kind && cpuIo == _cpuIo && size == _size then return true;
 
+
+    if capacity >= _size && engine == _engine && kind == _kind && cpuIo == _cpuIo {
+        size = _size;
+        return true;
+    }
+
     if engine != null {
         _buffer_holder_cleanup(bufferHolder);
     }
@@ -216,6 +223,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
     kind = _kind;
     cpuIo = _cpuIo;
     size = _size;
+    capacity = size;
 
     if size == 0 then return false;
 

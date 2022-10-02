@@ -66,6 +66,8 @@ _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
 #scope_file
 
 _rebuild_vertex_buffer :: (using mesh : *Mesh) -> bool {
+    // @todo Using .Direct instead of .OnDemandStaging for vertex and index buffers
+    // make them really fast for integrated GPUs. Definitely an idea.
     _buffer_holder_init(*vertexBufferHolder, scene.engine, "mesh.vertexBufferHolder",
                         .ShaderVertex, .OnDemandStaging, size_of(VertexInput) * cast(u64) vertices.count);
     _buffer_holder_copy(*vertexBufferHolder, vertices.data, vertexBufferHolder.size);
