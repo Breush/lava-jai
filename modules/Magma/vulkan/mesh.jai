@@ -1,7 +1,6 @@
 #scope_module
 
 MeshImpl :: struct {
-    instanceBufferHolder : BufferHolder;
     vertexBufferHolder : BufferHolder;
     indexBufferHolder : BufferHolder;
 
@@ -22,7 +21,6 @@ impl_mesh_cleanup :: (mesh : *Mesh) {
 
     _scene_unshare_instance(mesh.scene, mesh.sharedInstanceRef);
 
-    _buffer_holder_cleanup(*mesh.instanceBufferHolder);
     _buffer_holder_cleanup(*mesh.vertexBufferHolder);
     _buffer_holder_cleanup(*mesh.indexBufferHolder);
 
@@ -40,15 +38,11 @@ impl_mesh_update :: (mesh : *Mesh) -> bool {
        (mesh.scene.engine.options.features & .RayTracing){
         if !_rebuild_blas(mesh) then return false;
     }
-    if false && mesh.instanceDirty {
-        if !_rebuild_instance_buffer(mesh) then return false;
-    }
 
     return true;
 }
 
 _mesh_post_init :: (mesh : *Mesh) {
-    _rebuild_instance_buffer(mesh);
 }
 
 _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
@@ -78,16 +72,6 @@ _rebuild_index_buffer :: (using mesh : *Mesh) -> bool {
     _buffer_holder_init(*indexBufferHolder, scene.engine, "mesh.indexBufferHolder",
                         .ShaderIndex, .OnDemandStaging, size_of(u16) * cast(u64) indices.count);
     _buffer_holder_copy(*indexBufferHolder, indices.data, indexBufferHolder.size);
-    return true;
-}
-
-_rebuild_instance_buffer :: (using mesh : *Mesh) -> bool {
-    // @todo This "PersistentStaging" should depend if the mesh is static or not.
-    // If the mesh is "static", then .OnDemandStaging might make more sense.
-    _buffer_holder_init(*instanceBufferHolder, scene.engine, "mesh.instanceBufferHolder",
-                        .ShaderVertex, .PersistentStaging, size_of(InstanceInput));
-    _buffer_holder_copy(*instanceBufferHolder, instance);
-
     return true;
 }
 
