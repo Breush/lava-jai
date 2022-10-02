@@ -5,6 +5,9 @@ Scene :: struct {
 
     meshes : [..]*Mesh;
     renderers : [..]*Renderer;
+    // @note Just a tool to let us find it while sorting the meshes in forward-renderer.
+    // If closures get supported in the language, this can be removed.
+    currentRendererMaterialFallback : *Material;
 
     using sceneImpl : SceneImpl;
 

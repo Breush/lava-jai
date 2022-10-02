@@ -114,21 +114,22 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     // move objects around. Which is a bit sad.
     // Maybe we should filter meshes by eye_is_seeing beforehand anyway and have some
     // kind of an insertion sort.
+    forwardRenderer.scene.currentRendererMaterialFallback = *forwardRenderer.materialFallback;
     Sort.quick_sort(forwardRenderer.scene.meshes, (m1 : *Mesh, m2 : *Mesh) -> int {
-        if m1.material == null then return ifx m2.material == null then 0 else 1;
-        if m2.material == null then return -1;
+        material1 := ifx m1.material == null then m1.scene.currentRendererMaterialFallback else m1.material;
+        material2 := ifx m2.material == null then m2.scene.currentRendererMaterialFallback else m2.material;
 
-        if m1.material.shader.options.alphaBlendingEnabled != m2.material.shader.options.alphaBlendingEnabled {
-            return cast(int) m1.material.shader.options.alphaBlendingEnabled - cast(int) m2.material.shader.options.alphaBlendingEnabled;
+        if material1.shader.options.alphaBlendingEnabled != material2.shader.options.alphaBlendingEnabled {
+            return cast(int) material1.shader.options.alphaBlendingEnabled - cast(int) material2.shader.options.alphaBlendingEnabled;
         }
 
-        if m1.material.shader.options.alphaBlendingEnabled {
+        if material1.shader.options.alphaBlendingEnabled {
             // @fixme Should be distance to camera! This does not work outside 2D.
             if m1.boundingSphere.center.z < m2.boundingSphere.center.z then return 1;
             if m1.boundingSphere.center.z > m2.boundingSphere.center.z then return -1;
         }
 
-        return m2.material.shader - m1.material.shader;
+        return material2.shader - material1.shader;
     });
 
     for mesh : forwardRenderer.scene.meshes {
