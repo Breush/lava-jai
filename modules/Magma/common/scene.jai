@@ -49,6 +49,8 @@ scene_init :: (scene : *Scene, engine : *Engine) {
 }
 
 scene_cleanup :: (scene : *Scene, resetMemory := true) {
+    impl_scene_cleanup(scene);
+
     Basic.array_free(scene.renderers);
     Basic.array_free(scene.meshes);
 

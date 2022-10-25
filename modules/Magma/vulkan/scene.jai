@@ -23,6 +23,14 @@ SceneImpl :: struct {
 impl_scene_init :: (scene : *Scene) {
 }
 
+impl_scene_cleanup :: (scene : *Scene) {
+    for *bucket : scene.instancesBuckets {
+        _buffer_holder_cleanup(*bucket.bufferHolder);
+    }
+
+    Basic.array_free(scene.instancesBuckets);
+}
+
 impl_scene_register :: (scene : *Scene, renderer : *Renderer) {
     if scene.engine.device != null {
         _renderer_post_init(renderer);

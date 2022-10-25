@@ -20,13 +20,22 @@ fonts_register :: (iFont : *Fonts, fontId : string, filename : string, size : fl
     fonts_register(iFont, fontId, array, size);
 }
 
-fonts_glyph_infos :: (iFont : *Fonts, fontId : string, text : string) -> [..]Chamber.GlyphInfo {
+fonts_glyph_infos :: (iFont : *Fonts, fontId : string, text : string) -> [..]Chamber.GlyphInfo #must {
     fontInfo := table_find_pointer(*iFont.infos, fontId);
     glyphInfos, pixelsChanged := Chamber.font_glyph_infos(*fontInfo.font, text);
     if pixelsChanged {
         Magma.texture_load_from_memory(fontInfo.texture, fontInfo.font.pixels, fontInfo.font.extent);
     }
     return glyphInfos;
+}
+
+fonts_glyph_preload :: (iFont : *Fonts, fontId : string, text : string) {
+    fontInfo := table_find_pointer(*iFont.infos, fontId);
+    glyphInfos, pixelsChanged := Chamber.font_glyph_infos(*fontInfo.font, text);
+    if pixelsChanged {
+        Magma.texture_load_from_memory(fontInfo.texture, fontInfo.font.pixels, fontInfo.font.extent);
+    }
+    Basic.array_free(glyphInfos);
 }
 
 fonts_info :: (iFont : *Fonts, fontId : string) -> *Fonts.Info {
