@@ -439,6 +439,7 @@ _keysym_to_key :: (keysym : Xkb.Keysym) -> Key {
     case Xkb.KEY_KP_7; return .Numpad7;
     case Xkb.KEY_KP_8; return .Numpad8;
     case Xkb.KEY_KP_9; return .Numpad9;
+    case Xkb.KEY_KP_Enter; return .NumpadEnter;
     case Xkb.KEY_0; return ._0;
     case Xkb.KEY_1; return ._1;
     case Xkb.KEY_2; return ._2;

@@ -91,6 +91,8 @@ mesh_cleanup :: (mesh : *Mesh, resetMemory := true) {
 
 // Called by scene_update.
 mesh_update :: (mesh : *Mesh) {
+    if mesh.disabled then return;
+
     impl_mesh_update(mesh);
 
     mesh.verticesDirty = false;
