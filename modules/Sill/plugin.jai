@@ -418,6 +418,7 @@ _generate :: (workspace : s64) {
                 Basic.print_to_builder(*builder, "        entity_update(*entity.%, dt);\n", structMember.id);
             }
         }
+        Basic.append(*builder, "        entity.childrenChanged = false;\n");
         Basic.append(*builder, "    }\n");
     }
 

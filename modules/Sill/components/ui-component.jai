@@ -37,7 +37,7 @@ UiComponent :: struct {
     }
 }
 
-UiCallbackFlags :: enum_flags {
+UiCallbackFlags :: enum_flags u16 {
     HoverStart;
     Hovering;
     HoverStop;
@@ -75,7 +75,7 @@ component_update :: (iUi : *UiComponent, dt : float64) {
     }
 }
 
-ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFF, userData : *T = null)
+ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFFFF, userData : *T = null)
 {
     callback := Basic.array_add(*iUi.triggerCallbacks);
     callback.function = cast(UiComponent.TriggerCallbackType) function;
