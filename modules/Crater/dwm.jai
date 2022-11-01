@@ -145,9 +145,9 @@ _on_message :: (hWnd : Windows.HWND, msg : u32, wParam : Windows.WPARAM, lParam 
         case Windows.WM_RBUTTONDOWN;
             event : Event;
             event.kind = .MouseButtonPressed;
-            if msg == Windows.WM_LBUTTONUP then event.mouseButton.which = .Left;
-            else if msg == Windows.WM_MBUTTONUP then event.mouseButton.which = .Middle;
-            else if msg == Windows.WM_RBUTTONUP then event.mouseButton.which = .Right;
+            if msg == Windows.WM_LBUTTONDOWN then event.mouseButton.which = .Left;
+            else if msg == Windows.WM_MBUTTONDOWN then event.mouseButton.which = .Middle;
+            else if msg == Windows.WM_RBUTTONDOWN then event.mouseButton.which = .Right;
             _window_add_event(window, *event);
 
         case Windows.WM_LBUTTONUP; #through;
