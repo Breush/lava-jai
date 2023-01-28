@@ -2,7 +2,7 @@ loggerData : struct {
     indentationLevel : u32;
     padding : u32;
     nonFatalOnErrorLocks : u32;
-    ourPath : File_Utilities.Path;
+    ourPath : FileUtilities.Path;
     oldLogger : type_of(Context_Base.logger);
     oldLoggerData : *void;
     lastMessage : string;
@@ -11,19 +11,19 @@ loggerData : struct {
 init_logger :: () {
     {
         push_allocator(temp);
-        loggerData.ourPath = File_Utilities.parse_path(#run Basic.tprint(#filepath, "/.."));
+        loggerData.ourPath = FileUtilities.parse_path(#run Basic.tprint(#filepath, "/.."));
     }
 
     loggerData.oldLogger = context.logger;
     loggerData.oldLoggerData = context.logger_data;
-    loggerData.ourPath = File_Utilities.copy_to_permanent(loggerData.ourPath);
+    loggerData.ourPath = FileUtilities.copy_to_permanent(loggerData.ourPath);
     context.logger = logger;
     context.logger_data = *loggerData;
 }
 
 cleanup_logger :: () {
     Basic.free(loggerData.lastMessage);
-    File_Utilities.free_permanent(loggerData.ourPath);
+    FileUtilities.free_permanent(loggerData.ourPath);
     context.logger = loggerData.oldLogger;
     context.logger_data = loggerData.oldLoggerData;
 }
@@ -48,7 +48,7 @@ logger :: (message : string, data : *void, info : Log_Info) {
     // allocated on a temporary storage by removing all
     // parts that have the same prefix than us.
     file := info.location.fully_pathed_filename;
-    path := File_Utilities.parse_path(file);
+    path := FileUtilities.parse_path(file);
     originalPathWords : []string = path.words;
     if file.count != 0 {
         for word, wordIndex : loggerData.ourPath.words {
@@ -64,7 +64,7 @@ logger :: (message : string, data : *void, info : Log_Info) {
         path.number_of_leading_slashes = 0;
     }
 
-    name := File_Utilities.path_to_string(path);
+    name := FileUtilities.path_to_string(path);
 
     if needFileAndLine {
         name = Basic.tprint("%.jai:%", name, info.location.line_number);

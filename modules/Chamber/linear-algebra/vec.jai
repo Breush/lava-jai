@@ -63,6 +63,11 @@ operator* :: (v : vec3, factor : float32) -> vec3 #symmetric {
     return value;
 }
 
+round :: (v : *vec2) {
+    v.x = Math.floor(v.x + 0.5);
+    v.y = Math.floor(v.y + 0.5);
+}
+
 // Rotate around the Z (0, 0, 1) axis.
 rotate_z :: (v : vec3, angle : float32) -> vec3 {
     cosAngle := cos(angle);

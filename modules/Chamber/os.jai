@@ -1,9 +1,12 @@
 #if OS == .LINUX {
     PATH_SEPARATOR :: "/";
+    STRATEGIES :: string.["xdg-open", "sensible-browser", "x-www-browser"];
 } else #if OS == .WINDOWS {
     PATH_SEPARATOR :: "\\";
+    STRATEGIES :: string.["start"];
 } else {
     PATH_SEPARATOR :: #run Basic.assert(false);
+    STRATEGIES := string.["open"];
 }
 
 os_user_path :: (allocator := context.allocator) -> string {
@@ -16,12 +19,12 @@ os_user_path :: (allocator := context.allocator) -> string {
         POSIX :: #import "POSIX";
         posixPath := POSIX.getenv("HOME");
         if posixPath == null then path = "/";
-        else path =  Basic.sprint("%/", Basic.to_string(posixPath));
+        else path =  Basic.sprint("%/", to_string(posixPath));
     } else #if OS == .WINDOWS {
         Windows :: #import "Windows";
         windowsPath := Windows.getenv("HOMEPATH");
         if windowsPath == null then path = "C:\\"; // @todo Should probably list drives.
-        else path =  Basic.sprint("%\\", Basic.to_string(windowsPath));
+        else path =  Basic.sprint("%\\", to_string(windowsPath));
     } else {
         #run Basic.assert(false);
     }
@@ -49,16 +52,17 @@ os_application_data_storage_path :: (allocator := context.allocator) -> string {
 }
 
 os_open_browser :: (url : string) -> (ok : bool) {
-    #if OS == .LINUX {
-        strategies := string.["xdg-open", "sensible-browser", "x-www-browser"];
-    } else #if OS == .WINDOWS {
-        strategies := string.["start"];
-    } else #if OS == .MACOS {
-        strategies := string.["open"];
+    for strategy : STRATEGIES {
+        processResult := Process.run_command(strategy, url, capture_and_return_output = true);
+        if processResult.exit_code == 0 then return true;
     }
 
-    for strategy : strategies {
-        processResult := Process.run_command(strategy, url, capture_and_return_output = true);
+    return false;
+}
+
+os_open_file_explorer :: (path : string) -> (ok : bool) {
+    for strategy : STRATEGIES {
+        processResult := Process.run_command(strategy, path, capture_and_return_output = true);
         if processResult.exit_code == 0 then return true;
     }
 

@@ -36,6 +36,14 @@ AxisAlignedBox :: struct {
     extent : vec3;
 }
 
+Anchor :: enum {
+    Center :: 0;
+    Top; Bottom;
+    Left; Right;
+    TopLeft; TopRight;
+    BottomLeft; BottomRight;
+}
+
 min :: (a : $T, b : T) -> T #expand {
     return ifx a <= b then a else b;
 }
