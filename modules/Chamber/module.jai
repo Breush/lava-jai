@@ -5,6 +5,7 @@
 #load "glb-parser.jai";
 #load "json.jai";
 #load "lib-extensions.jai";
+#load "download.jai";
 #load "logger.jai";
 #load "os.jai";
 #load "string-utilities.jai";
@@ -54,6 +55,25 @@ align_up :: (value : u32, alignment : u32) -> u32 {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
+copy_files_recursively :: (source : string, dest : string) {
+    Basic.push_allocator(Basic.temp);
+
+    Paths :: struct { source : string; dest : string; };
+    paths : Paths;
+    paths.source = source;
+    paths.dest = dest;
+
+    visitor :: (info : *FileUtilities.File_Visit_Info, paths : Paths) {
+        relativePath := info.full_name;
+        Basic.advance(*relativePath, paths.source.count);
+        outPath := String.join(paths.dest, "/", relativePath);
+        File.make_directory_if_it_does_not_exist(String.path_strip_filename(outPath));
+        FileUtilities.copy_file(info.full_name, outPath);
+    }
+
+    FileUtilities.visit_files(paths.source, true, paths, visitor);
+}
+
 debug :: (args : ..Any, loc := #caller_location) {
     format := "%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0";
     if args.count == 0 || 2 * args.count > format.count then return;
@@ -97,6 +117,8 @@ _CHECK_NON_FATAL :: (result : $R, message : string, loc := #caller_location) #ex
 #scope_module
 
 Basic :: #import "Basic";
-File_Utilities :: #import "File_Utilities";
+File :: #import "File";
+FileUtilities :: #import "File_Utilities";
+Hash :: #import "Hash_Table";
 Math :: #import "Math";
 String :: #import "String";
