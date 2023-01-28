@@ -49,7 +49,8 @@ json_parse_file :: (filename: string) -> JsonValue, success: bool {
     }
     defer file_close(*file);
 
-    fileData := read_entire_file(file);
+    fileData : string;
+    fileData, success = read_entire_file(file);
     if !success {
         report_error("Couldn’t read file %", filename);
         return result, false;
@@ -79,7 +80,7 @@ json_free :: (using val: JsonValue) {
                 free(it_index);
                 json_free(it);
             }
-            uninit(object);
+            deinit(object);
 
             free(object);
     }

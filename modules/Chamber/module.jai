@@ -2,14 +2,15 @@
 #load "linear-algebra/quat.jai";
 #load "linear-algebra/ray.jai";
 #load "linear-algebra/vec.jai";
-#load "glb-parser.jai";
-#load "json.jai";
+#load "file-formats/bos.jai";
+#load "file-formats/glb.jai";
+#load "file-formats/json.jai";
+#load "file-formats/spirv.jai";
 #load "lib-extensions.jai";
 #load "download.jai";
 #load "logger.jai";
 #load "os.jai";
 #load "string-utilities.jai";
-#load "spirv.jai";
 #load "font.jai";
 
 WindowHandle :: struct {

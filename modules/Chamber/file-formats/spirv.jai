@@ -89,7 +89,7 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
 
     status := Shaderc.result_get_compilation_status(compilationResult);
     if status != .Success {
-        Basic.print("Error: %\n", Basic.to_string(Shaderc.result_get_error_message(compilationResult)));
+        Basic.print("Error: %\n", to_string(Shaderc.result_get_error_message(compilationResult)));
         return spvCode;
     }
 
@@ -133,9 +133,9 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
             for typeInfo : typeInfos {
                 Basic.array_free(typeInfo.members);
             }
-            uninit(*typeInfos);
-            uninit(*typePointerToType);
-            uninit(*idToName);
+            deinit(*typeInfos);
+            deinit(*typePointerToType);
+            deinit(*idToName);
         }
 
         while spvCode.count > 0 {
@@ -145,7 +145,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
 
             if opCode == .OpName {
                 target := spvCode[1];
-                name := Basic.to_string(cast(*u8) *spvCode[2]);
+                name := to_string(cast(*u8) *spvCode[2]);
                 table_add(*idToName, target, name);
 
             } else if opCode == .OpMemberName {
@@ -153,7 +153,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
 
                 member : Member;
                 member.index = spvCode[2];
-                member.name = Basic.to_string(cast(*u8) *spvCode[3]);
+                member.name = to_string(cast(*u8) *spvCode[3]);
 
                 typeInfo := table_find_or_add(*typeInfos, type);
                 Basic.array_add(*typeInfo.members, member);
@@ -339,8 +339,8 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
     // otherwise the wrong context will be popped.
     ctx := << userData.ctx;
     push_context ctx {
-        requestedSourceString := Basic.to_string(requestedSource);
-        requestingSourceString := Basic.to_string(requestingSource);
+        requestedSourceString := to_string(requestedSource);
+        requestingSourceString := to_string(requestingSource);
         _, requestingPath := Compiler.get_basename_and_path(requestingSourceString);
 
         shaderPath, shaderCode := _get_entire_shader_file(requestedSourceString, requestingPath, userData.dollarFiles);
