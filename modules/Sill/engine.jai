@@ -43,6 +43,7 @@ EngineOptions :: struct {
     windowExtent := Chamber.uvec2.{1600, 900};
     eventHandler : #type (event : Crater.Event);
     logFps := false;
+    fpsLimit := 0;  // Use 0 to disable.
 
     // Features, create renderers/targets accordingly.
     postProcessing := false;
@@ -155,6 +156,15 @@ engine_run :: (engine : *Engine) {
         elapsedTime := currentTime - previousTime;
         previousTime = currentTime;
 
+        if engine.options.fpsLimit > 0 && elapsedTime < 1.0 / engine.options.fpsLimit {
+            sleepingTime := (1.0 / engine.options.fpsLimit - elapsedTime);
+            Basic.sleep_milliseconds(cast(s32) (sleepingTime * 1000.0));
+
+            currentTime := Basic.get_time();
+            elapsedTime += currentTime - previousTime;
+            previousTime = currentTime;
+        }
+
         if engine.options.logFps {
             fpsFrameRenderedCount += 1;
             fpsElapsedTime += elapsedTime;
@@ -208,6 +218,7 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
 }
 
 _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
+    // @todo Speed: Squash events (for instance mouse moves since last poll)
     event := Crater.window_poll_event(engine.window);
 
     // Craft a delayed WindowSizeChanged event, so that the user handler only gets one.
