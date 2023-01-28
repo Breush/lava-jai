@@ -11,7 +11,7 @@ Fonts :: struct {
 fonts_register :: (iFont : *Fonts, fontId : string, filenames : []string, size : float) {
     fontInfo := Hash.table_add(*iFont.infos, fontId, .{});
     fontInfo.font = Chamber.font_load(filenames, size);
-    fontInfo.texture = Magma.create_texture(iFont.renderEngine);
+    fontInfo.texture = Magma.create_texture(iFont.renderEngine, srgb = false);
 }
 
 fonts_register :: (iFont : *Fonts, fontId : string, filename : string, size : float) {
