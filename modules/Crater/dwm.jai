@@ -4,7 +4,7 @@ WindowImpl :: struct {
 }
 
 // @note Somehow the types and functions below are not defined in shipped module Windows.jai
-user32      :: #foreign_system_library "user32";
+user32      :: #system_library "user32";
 LONG_PTR :: s64;
 SetWindowLongPtrW :: (hwnd : Windows.HWND, nIndex : s32, dwNewLong : LONG_PTR) -> s32 #foreign user32;
 GetWindowLongPtrW :: (hwnd : Windows.HWND, nIndex : s32) -> LONG_PTR #foreign user32;

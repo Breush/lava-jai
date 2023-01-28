@@ -164,10 +164,10 @@ destroy_window :: (window : *Window) {
     }
 }
 
-window_get_extent :: (window : *Window) -> Chamber.uvec2 {
-    extent : Chamber.uvec2;
-    extent.width = cast(u32) window.videoMode.width;
-    extent.height = cast(u32) window.videoMode.height;
+window_get_extent :: (window : *Window, $T := Chamber.uvec2) -> T {
+    extent : T;
+    extent.width = cast(type_of(T.width)) window.videoMode.width;
+    extent.height = cast(type_of(T.height)) window.videoMode.height;
     return extent;
 }
 
