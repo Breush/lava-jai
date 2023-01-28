@@ -112,6 +112,14 @@ renderer_register :: (renderer : *Renderer, shader : *Shader) {
     Basic.array_add(*renderer.shaders, shader);
 }
 
+_renderer_on_shader_modules_changed :: (renderer : *Renderer, shaderIds : []string) {
+    for shader : renderer.shaders {
+        if Basic.array_find(shaderIds, shader.id) {
+            _shader_on_shader_modules_changed(shader);
+        }
+    }
+}
+
 // ----- Renderer output
 
 RendererOutput :: struct {

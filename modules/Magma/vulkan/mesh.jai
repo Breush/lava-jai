@@ -35,7 +35,7 @@ impl_mesh_update :: (mesh : *Mesh) -> bool {
         if !_rebuild_index_buffer(mesh) then return false;
     }
     if (mesh.verticesDirty || mesh.indicesDirty) &&
-       (mesh.scene.engine.options.features & .RayTracing){
+       (mesh.scene.engine.options.features & .RayTracing) {
         if !_rebuild_blas(mesh) then return false;
     }
 

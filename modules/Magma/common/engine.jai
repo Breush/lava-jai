@@ -23,6 +23,7 @@ Engine :: struct {
         }
 
         features : FeatureFlag = .Window;
+        watchShaderFiles := false;
     }
 
     options : Options;
@@ -109,6 +110,10 @@ engine_update :: (engine : *Engine) {
     for target : engine.targets {
         target_update(target);
     }
+
+    if engine.options.watchShaderFiles {
+        FileWatcher.process_changes(*engine.shaderFileWatcher);
+    }
 }
 
 engine_draw :: (engine : *Engine) {
@@ -136,3 +141,7 @@ engine_register :: (engine : *Engine, texture : *Texture) {
 engine_unregister ::  (engine : *Engine, texture : *Texture) {
     Basic.array_unordered_remove_by_value(*engine.textures, texture);
 }
+
+#scope_file
+
+FileWatcher :: #import "File_Watcher";

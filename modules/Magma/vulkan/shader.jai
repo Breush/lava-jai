@@ -21,14 +21,28 @@ impl_shader_cleanup :: (shader : *Shader) {
     Basic.array_free(shader.descriptorSetLayouts);
 }
 
+// @todo Why not in common/shader.jai?
+_shader_on_shader_modules_changed :: (shader : *Shader) {
+    engine := shader.renderer.scene.engine;
+
+    vertShaderModule := _engine_get_shader_module(engine, shader.id, .Vertex);
+    fragShaderModule := _engine_get_shader_module(engine, shader.id, .Fragment, true);
+    if vertShaderModule == null || fragShaderModule == null then return;
+
+    Vk.device_wait_idle(shader.renderer.scene.engine.device);
+    impl_shader_cleanup(shader);
+    shader.shaderImpl = .{};
+    _init_pipeline(shader, vertShaderModule, fragShaderModule);
+}
+
 #scope_file
 
-_init_pipeline :: (shader : *Shader) -> bool {
+_init_pipeline :: (shader : *Shader, vertShaderModule : *ShaderModule = null, fragShaderModule : *ShaderModule = null) -> bool {
     engine := shader.renderer.scene.engine;
 
     // @note Doing that first, because we need the info about the uniforms.
-    vertShaderModule := _engine_get_shader_module(engine, shader.id, .Vertex);
-    fragShaderModule := _engine_get_shader_module(engine, shader.id, .Fragment, true);
+    if vertShaderModule == null then vertShaderModule = _engine_get_shader_module(engine, shader.id, .Vertex);
+    if fragShaderModule == null then fragShaderModule = _engine_get_shader_module(engine, shader.id, .Fragment, true);
     shader.uniformsFrame = *fragShaderModule.uniformsFrame;
 
     // --- Pipeline Layout

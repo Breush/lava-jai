@@ -84,3 +84,9 @@ scene_update :: (scene : *Scene) {
         mesh_update(mesh);
     }
 }
+
+_scene_on_shader_modules_changed :: (scene : *Scene, shadersIds : []string) {
+    for renderer : scene.renderers {
+        _renderer_on_shader_modules_changed(renderer, shadersIds);
+    }
+}
