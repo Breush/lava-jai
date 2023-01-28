@@ -4,7 +4,7 @@ ListenerComponent :: struct {
     using #as component : Component;
 
     MessageCallbackType :: #type (entity : *Entity, message : *void);
-    messageCallback : MessageCallbackType;
+    messageCallbacks : [..]MessageCallbackType;
 }
 
 component_init :: (iListener : *ListenerComponent) {
@@ -13,6 +13,7 @@ component_init :: (iListener : *ListenerComponent) {
 
 component_cleanup :: (iListener : *ListenerComponent, resetMemory := true) {
     message_unregister_component(iListener.entity.engine, iListener);
+    Basic.array_reset(*iListener.messageCallbacks);
     if resetMemory {
         <<iListener = ListenerComponent.{};
     }
@@ -25,17 +26,18 @@ listener_on_message :: (iListener : *ListenerComponent, function : (entity : *$E
 #modify {
     // Check that the entity does inherit.
     typeInfo := cast(*Type_Info_Struct) E;
+    if typeInfo == type_info(Entity) then return true;
     if typeInfo.type != .STRUCT then return false, "First argument of callback must be a struct.";
     if typeInfo.members.count == 0 then return false, "First argument of callback must have at least one member.";
     if typeInfo.members[0].type != type_info(Entity) then return false, "First argument of callback must be an Entity.";
     return true;
 }
 {
-    iListener.messageCallback = xx function;
+    Basic.array_add(*iListener.messageCallbacks, xx function);
 }
 
 listener_forward_message :: (iListener : *ListenerComponent, message : *void) {
-    if iListener.messageCallback != null {
-        iListener.messageCallback(iListener.entity, message);
+    for callback : iListener.messageCallbacks {
+        callback(iListener.entity, message);
     }
 }
