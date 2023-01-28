@@ -54,7 +54,7 @@ font_load :: (filenames : []string, size : float) -> Font {
 
         StbTrueType.init_font(*fontInfo.stb, fontInfo.content.data, 0);
 
-        fontInfo.glyphScale = StbTrueType.scale_for_pixel_height(*fontInfo.stb, size);
+        fontInfo.glyphScale = StbTrueType.scale_for_mapping_em_to_pixels(*fontInfo.stb, size);
         StbTrueType.get_font_v_metrics(*fontInfo.stb, *fontInfo.glyphAscent, null, null);
 
         x0, y0, x1, y1 : s32;
@@ -78,7 +78,7 @@ font_free :: (font : *Font) {
     }
     Basic.array_free(font.infos);
     Basic.array_free(font.pixels);
-    Hash.uninit(*font.glyphInfos);
+    Hash.deinit(*font.glyphInfos);
 }
 
 // @note We're not considering subpixel for now, which would require to redraw each letter
@@ -93,22 +93,25 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
     while s.count != 0 {
         codepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
         Unicode.utf8_next_character(*s);
-        nextCodepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
+
+        nextCodepoint : u32 = 0;
+        if s.count != 0 {
+            nextCodepoint = Unicode.character_utf8_to_utf32(s.data, s.count);
+        }
 
         pGlyphInfo, glyphInfoPixelsChanged := font_glyph_info(font, codepoint);
         pixelsChanged = pixelsChanged || glyphInfoPixelsChanged;
         glyphInfo := <<pGlyphInfo;
 
+        glyphInfo.offset.x += advance;
+
         if glyphInfo.fontInfo != null {
-            glyphInfo.offset.x += advance;
             kernAdvance := StbTrueType.get_codepoint_kern_advance(*glyphInfo.fontInfo.stb, cast,no_check(s32) codepoint, cast,no_check(s32) nextCodepoint);
             advance += (glyphInfo.advance + kernAdvance * glyphInfo.fontInfo.glyphScale);
-
-            // @todo This pseudo-subpixel clean on option?
-            glyphInfo.offset.x = Math.floor(glyphInfo.offset.x + 0.5);
-            glyphInfo.offset.y = Math.floor(glyphInfo.offset.y + 0.5);
         }
 
+        // @todo This pseudo-subpixel clean on option?
+        round(*glyphInfo.offset);
         Basic.array_add(*glyphInfos, glyphInfo);
     }
 
