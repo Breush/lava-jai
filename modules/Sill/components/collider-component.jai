@@ -30,7 +30,7 @@ component_cleanup :: (iCollider : *ColliderComponent, resetMemory := true) {
 }
 
 component_update :: (iCollider : *ColliderComponent, dt : float64) {
-    if iCollider.entity.disabled then return;
+    if iCollider.entity.flags & .Disabled then return;
 
     if iCollider._shapesTransformsDirty {
         collider_commit_shapes(iCollider, instantly = true);
@@ -48,7 +48,7 @@ collider_commit_shapes :: (iCollider : *ColliderComponent, instantly := false) {
 }
 
 collider_distance_from :: (iCollider : *ColliderComponent, ray : Chamber.Ray) -> float {
-    if iCollider.entity.disabled then return 0.0;
+    if iCollider.entity.flags & .Disabled then return 0.0;
 
     distance := 0.0;
     for *boxShape : iCollider.boxShapes {

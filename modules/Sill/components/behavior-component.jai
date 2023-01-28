@@ -27,9 +27,9 @@ component_update :: (iBehavior : *BehaviorComponent, dt : float64) {
     }
 }
 
-behavior_on_update :: (iBehavior : *BehaviorComponent, function : BehaviorComponent.UpdateCallbackType, userData : *void) {
+behavior_on_update :: (iBehavior : *BehaviorComponent, function : (dt : float64, userData : *T), userData : *$T) {
     Basic.array_add(*iBehavior.updateCallbacks, .{});
     callback := Basic.peek_pointer(iBehavior.updateCallbacks);
-    callback.function = function;
+    callback.function = xx function;
     callback.userData = userData;
 }

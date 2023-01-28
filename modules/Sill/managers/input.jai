@@ -101,8 +101,8 @@ _input_cleanup :: (input : *Input) {
         Basic.array_free(axis.kinds);
     }
 
-    uninit(*input.actions);
-    uninit(*input.axes);
+    deinit(*input.actions);
+    deinit(*input.axes);
 }
 
 _input_reset :: (input : *Input) {

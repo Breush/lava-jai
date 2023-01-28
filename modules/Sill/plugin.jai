@@ -102,7 +102,7 @@ metaEntityList : [..]MetaEntity;
 metaComponentList : [..]MetaComponent;
 
 META_STRING :: #string DONE
-SillMeta :: struct {
+SillMeta :: struct #type_info_none {
 %1
 %2
 }
@@ -364,7 +364,7 @@ _generate :: (workspace : s64) {
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
         Basic.print_to_builder(*builder, "\n    destroy_%_entity :: (entity : *%) {\n", metaEntity.idSnakeCase, metaEntity.structName);
-        Basic.append(*builder, "        entity_cleanup(entity);\n");
+        Basic.append(*builder, "        entity_cleanup(entity, warnParent = false);\n");
         Basic.print_to_builder(*builder, "        array := *(cast(*Sill.Engine(SillMeta)) entity.engine).entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        for *bucketedEntity : <<array {\n");
         Basic.append(*builder, "            if entity == bucketedEntity {\n");
@@ -377,6 +377,7 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_init :: (entity : *%, engine : *Sill.EngineBase) {\n", metaEntity.structName);
+        Basic.append(*builder, "        #import \"Sill\";\n");
         Basic.append(*builder, "        entity.engine = engine;\n");
         Basic.print_to_builder(*builder, "        entity.typeInfo = type_info(%);\n", metaEntity.structName);
         for structMember : metaEntity.structMembers {
@@ -385,7 +386,7 @@ _generate :: (workspace : s64) {
                 for componentDependency : structMember.dependencies {
                     Basic.print_to_builder(*builder, "        entity.%.% = *entity.%;\n", structMember.id, componentDependency.id,  componentDependency.targetComponentId);
                 }
-                Basic.print_to_builder(*builder, "        Sill.component_init(*entity.%);\n", structMember.id);
+                Basic.print_to_builder(*builder, "        component_init(*entity.%);\n", structMember.id);
             } else if structMember.kind == .Entity {
                 Basic.print_to_builder(*builder, "        entity_init(*entity.%, engine);\n", structMember.id);
             }
@@ -394,13 +395,15 @@ _generate :: (workspace : s64) {
     }
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%) {\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%, warnParent := true) {\n", metaEntity.structName);
+        Basic.append(*builder, "        #import \"Sill\";\n");
         if metaEntity.hasOnCleanup {
             Basic.append(*builder, "        entity.on_cleanup(entity);\n");
         }
+        Basic.append(*builder, "        if warnParent then entity_set_parent(entity, null, warnOldParent = true);\n");
         for structMember : metaEntity.structMembers {
             if structMember.kind == .Component {
-                Basic.print_to_builder(*builder, "        Sill.component_cleanup(*entity.%);\n", structMember.id);
+                Basic.print_to_builder(*builder, "        component_cleanup(*entity.%);\n", structMember.id);
             } else if structMember.kind == .Entity {
                 Basic.print_to_builder(*builder, "        entity_cleanup(*entity.%);\n", structMember.id);
             }
@@ -411,14 +414,18 @@ _generate :: (workspace : s64) {
 
     for metaEntity : metaEntityList {
         Basic.print_to_builder(*builder, "\n    entity_update :: (entity : *%, dt : float64) {\n", metaEntity.structName);
+        Basic.append(*builder, "        #import \"Sill\";\n");
         for structMember : metaEntity.structMembers {
             if structMember.kind == .Component {
-                Basic.print_to_builder(*builder, "        Sill.component_update(*entity.%, dt);\n", structMember.id);
-            } else if structMember.kind == .Entity {
+                Basic.print_to_builder(*builder, "        component_update(*entity.%, dt);\n", structMember.id);
+            }
+        }
+        Basic.append(*builder, "        entity.flags &= ~.DisabledChanged;\n");
+        for structMember : metaEntity.structMembers {
+            if structMember.kind == .Entity {
                 Basic.print_to_builder(*builder, "        entity_update(*entity.%, dt);\n", structMember.id);
             }
         }
-        Basic.append(*builder, "        entity.childrenChanged = false;\n");
         Basic.append(*builder, "    }\n");
     }
 
@@ -436,9 +443,8 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
+        Basic.append(*builder, "            if entity.flags & .Destroyed then continue;\n");
         Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
-        Basic.append(*builder, "            entity.disabledChanged = false;\n");
-        Basic.append(*builder, "            entity.childrenChanged = false;\n");
         Basic.append(*builder, "        }\n");
     }
     Basic.append(*builder, "    }\n");

@@ -27,7 +27,11 @@ component_cleanup :: (iTransform : *TransformComponent, resetMemory := true) {
 }
 
 component_update :: (iTransform : *TransformComponent, dt : float64) {
-    // Nothing to do
+    // @todo We're missing updates here, but for now it is not impactful,
+    // and does not worth the performance hit. (i.e. just commit the transform when you modify the parent)
+    // if iTransform.entity.parentChanged {
+    //     _update_world_transform(iTransform);
+    // }
 }
 
 transform_set :: (iTransform : *TransformComponent, transform : Chamber.trf) {

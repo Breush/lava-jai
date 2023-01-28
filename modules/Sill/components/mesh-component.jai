@@ -40,8 +40,8 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
 }
 
 component_update :: (iMesh : *MeshComponent, dt : float64) {
-    if iMesh.entity.disabledChanged then _update_nodes_disabled(iMesh.nodes, iMesh.entity.disabled);
-    if iMesh.entity.disabled then return;
+    if iMesh.entity.flags & .DisabledChanged then _update_nodes_disabled(iMesh.nodes, cast(bool) (iMesh.entity.flags & .Disabled));
+    if iMesh.entity.flags & .Disabled then return;
 
     if iMesh._nodesTransformsDirty {
         mesh_commit_nodes(iMesh, instantly = true);
@@ -59,11 +59,22 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
 
 // Utility function for ease, better tweak manually the nodes and primitives
 // arrays if you know the size in advance.
-mesh_make_primitive :: (iMesh : *MeshComponent) -> *Magma.Mesh {
+mesh_make_primitive :: (iMesh : *MeshComponent) -> *Magma.Mesh, *MeshNode {
     mesh := Magma.create_mesh(iMesh.entity.engine.scene);
     node := Basic.array_add(*iMesh.nodes);
     Basic.array_add(*node.primitives, mesh);
-    return mesh;
+    iMesh._nodesTransformsDirty = true;
+    return mesh, node;
+}
+
+mesh_make_primitives :: (iMesh : *MeshComponent, count : u32) -> []*Magma.Mesh, *MeshNode {
+    node := Basic.array_add(*iMesh.nodes);
+    Basic.array_resize(*node.primitives, count);
+    for *primitive : node.primitives {
+        << primitive = Magma.create_mesh(iMesh.entity.engine.scene);
+    }
+    iMesh._nodesTransformsDirty = true;
+    return node.primitives, node;
 }
 
 mesh_commit_nodes :: (iMesh : *MeshComponent, instantly := false) {
@@ -256,8 +267,8 @@ mesh_load_glb :: (iMesh : *MeshComponent, filePath : string) -> bool {
         }
     }
 
-    uninit(*cache.bufferViewToTexture);
-    uninit(*cache.material);
+    deinit(*cache.bufferViewToTexture);
+    deinit(*cache.material);
 
     // Going from glTF right-handed Y up, Z forward,
     // to ours right-handed Z up, X forward.
@@ -467,7 +478,7 @@ _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, material
     if material["pbrMetallicRoughness"].type != .INVALID {
         pbrMetallicRoughness := material["pbrMetallicRoughness"];
         _glb_set_attribute(iMaterial, "albedo", pbrMetallicRoughness["baseColorFactor"]);
-        _glb_set_texture(iMaterial, "albedoMap", pbrMetallicRoughness["baseColorTexture"], glb, cache);
+        _glb_set_texture(iMaterial, "albedoMap", pbrMetallicRoughness["baseColorTexture"], glb, cache, srgb = true);
         _glb_set_texture(iMaterial, "roughnessMetallicMap", pbrMetallicRoughness["metallicRoughnessTexture"], glb, cache);
 
         // @todo Ok, we're just cheating here, the default values should be decided within the shader.
@@ -493,7 +504,7 @@ _glb_set_attribute :: (iMaterial : *Magma.Material, uniformName : string, valueR
     }
 }
 
-_glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureRef : JsonValue, glb : Glb, cache : *Cache) {
+_glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureRef : JsonValue, glb : Glb, cache : *Cache, srgb := false) {
     if textureRef.type == .INVALID then return;
 
     textureIndex := cast(u64) textureRef["index"].number;
@@ -520,7 +531,7 @@ _glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureR
     pixels.data = pixelsRaw;
     pixels.count = extent.width * extent.height * 4;
 
-    iTexture := Magma.create_texture(iMaterial.shader.renderer.scene.engine);
+    iTexture := Magma.create_texture(iMaterial.shader.renderer.scene.engine, srgb);
     Magma.texture_load_from_memory(iTexture, pixels, extent);
     stbi_image_free(pixelsRaw);
 

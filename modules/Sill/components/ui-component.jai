@@ -27,14 +27,6 @@ UiComponent :: struct {
         userData : *void;
         flags : UiCallbackFlags;
     }
-
-    Anchor :: enum {
-        Center :: 0;
-        Top; Bottom;
-        Left; Right;
-        TopLeft; TopRight;
-        BottomLeft; BottomRight;
-    }
 }
 
 UiCallbackFlags :: enum_flags u16 {
@@ -51,7 +43,9 @@ UiCallbackFlags :: enum_flags u16 {
     Dragging;   // On each mouse move after a DragStart and before a DragStop.
     DragDrop;   // User dropped the draggable element that was dragged. Always called before DragStop.
     DragStop;   // User stopped dragging, either by canceling it with another mouse button or by dropping.
-    Child;      // @fixme Does not feel like our job.
+    Scrolling;
+
+    Stop :: HoverStop | ClickStop | FocusStop | DragStop;
 }
 
 UiTrigger :: struct {
@@ -70,13 +64,12 @@ component_cleanup :: (iUi : *UiComponent) {
 }
 
 component_update :: (iUi : *UiComponent, dt : float64) {
-    if iUi.entity.childrenChanged {
-        ui_send_trigger(iUi, .Child, .{}, null);
+    if iUi.entity.flags & .DisabledChanged {
+        _ui_set_hovered_components_dirty(iUi.entity.engine);
     }
 }
 
-ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFFFF, userData : *T = null)
-{
+ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData : *$T), flags : UiCallbackFlags = 0xFFFF, userData : *T = null) {
     callback := Basic.array_add(*iUi.triggerCallbacks);
     callback.function = cast(UiComponent.TriggerCallbackType) function;
     callback.flags = flags;
@@ -86,6 +79,7 @@ ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData 
 ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, userData : *$T) -> bool, userData : *T = null) {
     iUi.checkHoveredHandler = cast(UiComponent.CheckHoveredHandlerType) function;
     iUi.checkHoveredHandlerUserData = userData;
+    _ui_set_hovered_components_dirty(iUi.entity.engine);
 }
 
 ui_set_focused :: (iUi : *UiComponent, focused := true) {
@@ -97,6 +91,13 @@ ui_set_focused :: (iUi : *UiComponent, focused := true) {
 }
 
 ui_send_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
+    // When an entity is disabled, just send the stop events.
+    if iUi.entity.flags & .Disabled || iUi.disabled {
+        flags &= UiCallbackFlags.Stop;
+    }
+
+    if flags == 0 then return;
+
     trigger : UiTrigger = ---;
     trigger.flags = flags;
     trigger.event = event;
@@ -123,8 +124,8 @@ ui_relative_mouse_pointer_position :: (iUi : *UiComponent) -> Chamber.vec2 {
     return relativePosition.xy;
 }
 
-ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater.Event, stopPropagation : *bool) -> bool {
-    if iUi.entity.disabled || iUi.disabled then return false;
+ui_check_hovered :: (iUi : *UiComponent, event : Crater.Event) -> bool {
+    if iUi.entity.flags & .Disabled || iUi.disabled then return false;
 
     relativePosition := ui_relative_mouse_pointer_position(iUi);
 
@@ -147,10 +148,6 @@ ui_check_hovered :: (iUi : *UiComponent, position : Chamber.vec2, event : Crater
 
     if iUi.checkHoveredHandler != null {
         hovered = iUi.checkHoveredHandler(hovered, iUi.checkHoveredHandlerUserData);
-    }
-
-    if hovered {
-        ui_send_trigger(iUi, .Hovering, event, stopPropagation);
     }
 
     return hovered;

@@ -54,5 +54,5 @@ _fonts_cleanup :: (iFont : *Fonts) {
         Magma.destroy_texture(fontInfo.texture);
     }
 
-    Hash.uninit(*iFont.infos);
+    Hash.deinit(*iFont.infos);
 }
