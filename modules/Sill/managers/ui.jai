@@ -17,6 +17,7 @@ Ui :: struct {
     pressedMouseButtons : [4]bool; // Map a mouse button (1, 2 or 3) to whether it is pressed or not.
 
     componentsDepthDirty : bool;
+    hoveredUiComponentsDirty : bool;
 }
 
 DraggingState :: enum {
@@ -28,6 +29,7 @@ DraggingState :: enum {
 ui_register_component :: (ui : *Ui, uiComponent : *UiComponent) {
     Basic.array_add(*ui.uiComponents, uiComponent);
     ui.componentsDepthDirty = true;
+    ui.hoveredUiComponentsDirty = true;
 }
 
 ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
@@ -52,10 +54,16 @@ _ui_update :: (ui : *Ui) {
         ui.componentsDepthDirty = false;
 
         Sort.quick_sort(ui.uiComponents, (a : *UiComponent, b : *UiComponent) -> int {
-            if a.transform.translation.z < b.transform.translation.z then return -1;
-            if a.transform.translation.z > b.transform.translation.z then return 1;
+            if a.transform.worldTransform.translation.z < b.transform.worldTransform.translation.z then return -1;
+            if a.transform.worldTransform.translation.z > b.transform.worldTransform.translation.z then return 1;
             return 0;
         });
+    }
+
+    // Unhover the hovered UI component if it is disabled.
+    if ui.hoveredUiComponentsDirty {
+        stopPropagation : bool;
+        _update_hovered_ui_components(ui, .{ kind = .MousePointerMoved }, *stopPropagation);
     }
 }
 
@@ -115,6 +123,11 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         }
         _ui_lock_set_focused(ui, false);
         _ui_do_set_focused(ui, ui.focusedUiComponentDuringLock);
+    } else if event.kind == .MouseWheelScrolled {
+        for uiComponent : ui.hoveredUiComponents {
+            ui_send_trigger(uiComponent, .Scrolling, event, stopPropagation);
+            if <<stopPropagation then break uiComponent;
+        }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
             ui_send_trigger(ui.focusedUiComponent, .Text, event, stopPropagation);
@@ -132,6 +145,10 @@ _ui_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
     } else {
         ui.focusedUiComponentDuringLock = uiComponent;
     }
+}
+
+_ui_set_hovered_components_dirty :: (ui : *Ui) {
+    ui.hoveredUiComponentsDirty = true;
 }
 
 #scope_file
@@ -164,7 +181,8 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
 
     ui.hoveredUiComponents.count = 0;
     for uiComponent : ui.uiComponents {
-        if ui_check_hovered(uiComponent, ui.mousePointerPosition, event, stopPropagation) {
+        if ui_check_hovered(uiComponent, event) {
+            ui_send_trigger(uiComponent, .Hovering, event, stopPropagation);
             Basic.array_add(*ui.hoveredUiComponents, uiComponent);
         }
         if <<stopPropagation then break;
@@ -182,6 +200,8 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
         uiComponent.hovered = true;
         ui_send_trigger(uiComponent, .HoverStart, event, stopPropagation);
     }
+
+    ui.hoveredUiComponentsDirty = false;
 }
 
 _ui_lock_set_focused :: (ui : *Ui, locked := true) {
