@@ -1,7 +1,8 @@
 ImageHolder :: struct {
     Kind :: enum {
         Unknown :: 0;
-        Texture;            // R8G8B8A8Unorm - Color | Sampled | TransferDst @fixme Normal maps etc ARE unorm, but not the other ones
+        Texture;            // R8G8B8A8Srgb - Color | Sampled | TransferDst
+        TextureMap;         // R8G8B8A8Unorm - Color | Sampled | TransferDst @note To be used by normal maps, etc.
         RendererOut;        // R8G8B8A8Srgb  - Color | Sampled | TransferSrc
         RendererOutStorage; // R8G8B8A8Unorm - Storage | Sampled | TransferSrc
         StorageR8;          // R8Unorm       - Storage
@@ -56,11 +57,18 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferSrc | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.Storage;
     } else if kind == .Texture {
         if channelsCount == 4 {
+            format = Vk.Format.R8G8B8A8Srgb;
+        } else {
+            Basic.log("Invalid channels count for texture: %.", channelsCount, flags=.ERROR);
+        }
+        imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
+    } else if kind == .TextureMap {
+        if channelsCount == 4 {
             format = Vk.Format.R8G8B8A8Unorm;
         } else if channelsCount == 1 {
             format = Vk.Format.R8Unorm;
         } else {
-            Basic.log("Invalid channels count for texture: %.", channelsCount, flags=.ERROR);
+            Basic.log("Invalid channels count for texture map: %.", channelsCount, flags=.ERROR);
         }
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
     } else if kind == .Depth {
@@ -139,7 +147,7 @@ _image_holder_copy :: (using imageHolder : *ImageHolder, data : []u8, usage : Im
 _image_holder_create_view :: (using imageHolder : *ImageHolder) -> Vk.ImageView {
     aspect : Vk.ImageAspectFlags;
 
-    if kind == .RendererOut || kind == .RendererOutStorage || kind == .Texture || kind == .StorageR8 || kind == .StorageR32 {
+    if kind == .RendererOut || kind == .RendererOutStorage || kind == .Texture || kind == .TextureMap || kind == .StorageR8 || kind == .StorageR32 {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Color;
     } else if kind == .Depth {
         aspect = cast(u32) Vk.ImageAspectFlagBits.Depth;

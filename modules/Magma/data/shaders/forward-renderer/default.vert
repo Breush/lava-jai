@@ -1,9 +1,11 @@
 #include "$/eye.set"
 #include "$/mesh.set"
 
+// @todo Make that dynamic too?
 layout(location = 0) out vec4 outPosition; // w component is eye-depth
 layout(location = 1) out vec2 outUv;
-layout(location = 2) out mat3 outTbn;
+layout(location = 2) out vec3 outNormal;
+layout(location = 3) out mat3 outTbn;
 
 void main() {
     setupEye();
@@ -29,5 +31,6 @@ void main() {
     outTbn[2] = normalize(outTbn[2]);
 
     outUv = inVertexUv;
+    outNormal = inVertexNormal;
     outPosition.w = gl_Position.z / gl_Position.w;
 }

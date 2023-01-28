@@ -33,8 +33,13 @@ Material :: struct {
             block : UniformBlock;
             blockField : UniformBlockField;
         }
-        dirty : bool;
+        // :PushDescriptors
+        dirties : [2]bool;
     }
+
+    // :PushDescriptors
+    inFlightDescriptorSetIndex : u32;
+    anyUniformDirty : bool;
 }
 
 // Allocate, init and register a new material.
@@ -78,7 +83,6 @@ material_init :: (material : *Material, shader : *Shader) {
         }
     }
 
-
     impl_material_init(material);
 }
 
@@ -91,7 +95,7 @@ material_cleanup :: (material : *Material, resetMemory := true) {
         }
     }
 
-    uninit(*material.uniforms);
+    deinit(*material.uniforms);
 
     if resetMemory {
         <<material = Material.{};
@@ -99,11 +103,18 @@ material_cleanup :: (material : *Material, resetMemory := true) {
 }
 
 material_update :: (material : *Material) {
+    // :PushDescriptors If any uniform is dirty, advance to next offset.
+    if !material.anyUniformDirty then return;
+
+    material.inFlightDescriptorSetIndex = (material.inFlightDescriptorSetIndex + 1) % 2;
+
     for *uniform : material.uniforms {
-        if !uniform.dirty then continue;
+        if !uniform.dirties[material.inFlightDescriptorSetIndex] then continue;
         impl_material_uniform_commit(material, uniform);
-        uniform.dirty = false;
+        uniform.dirties[material.inFlightDescriptorSetIndex] = false;
     }
+
+    material.anyUniformDirty = false;
 }
 
 material_fallback :: (material : *Material, uniformName : string, fallback : *Texture) {
@@ -112,6 +123,9 @@ material_fallback :: (material : *Material, uniformName : string, fallback : *Te
     Basic.assert(uniform.kind == .Texture, "Shader's '%' uniform named '%' is not a texture.", material.shader.id, uniformName);
 
     uniform.texture.fallback = fallback;
+    uniform.dirties[0] = true;
+    uniform.dirties[1] = true;
+    material.anyUniformDirty = true;
 }
 
 material_set :: (material : *Material, uniformName : string, texture : *Texture) {
@@ -121,7 +135,43 @@ material_set :: (material : *Material, uniformName : string, texture : *Texture)
 
     if uniform.texture.value == texture then return;
     uniform.texture.value = texture;
-    uniform.dirty = true;
+    uniform.dirties[0] = true;
+    uniform.dirties[1] = true;
+    material.anyUniformDirty = true;
+}
+
+material_set_color :: (material : *Material, uniformName : string, srgColor : Chamber.vec3) {
+    uniform := table_find_pointer(material.shader.uniformsFrame, uniformName);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
+    Basic.assert(size_of(Chamber.vec3) <= uniform.blockField.maxSize, "Shader's '%' uniform named '%' can not be filled with a value of type 'Chamber.vec3' (source too big).", material.shader.id, uniformName);
+
+    parentUniform := table_find_pointer(*material.uniforms, uniform.blockField.parentName);
+
+    color := srgb_to_linear(srgColor);
+    if <<cast(*Vector3) (parentUniform.block.buffer.data + uniform.blockField.offset) == color then return;
+    <<cast(*Vector3) (parentUniform.block.buffer.data + uniform.blockField.offset) = color;
+
+    parentUniform.dirties[0] = true;
+    parentUniform.dirties[1] = true;
+    material.anyUniformDirty = true;
+}
+
+material_set_color :: (material : *Material, uniformName : string, srgColor : Chamber.vec4) {
+    uniform := table_find_pointer(material.shader.uniformsFrame, uniformName);
+    Basic.assert(uniform != null, "Shader '%' has no uniform named '%'.", material.shader.id, uniformName);
+    Basic.assert(uniform.kind == .BlockField, "Shader's '%' uniform named '%' is not a block field.", material.shader.id, uniformName);
+    Basic.assert(size_of(Chamber.vec4) <= uniform.blockField.maxSize, "Shader's '%' uniform named '%' can not be filled with a value of type 'Chamber.vec4' (source too big).", material.shader.id, uniformName);
+
+    parentUniform := table_find_pointer(*material.uniforms, uniform.blockField.parentName);
+
+    color := srgb_to_linear(srgColor);
+    if <<cast(*Vector4) (parentUniform.block.buffer.data + uniform.blockField.offset) == color then return;
+    <<cast(*Vector4) (parentUniform.block.buffer.data + uniform.blockField.offset) = color;
+
+    parentUniform.dirties[0] = true;
+    parentUniform.dirties[1] = true;
+    material.anyUniformDirty = true;
 }
 
 material_set :: (material : *Material, uniformName : string, value : $T, $EffectiveT : Type = void)
@@ -144,7 +194,9 @@ material_set :: (material : *Material, uniformName : string, value : $T, $Effect
     if <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) == cast(EffectiveT) value then return;
     <<cast(*EffectiveT) (parentUniform.block.buffer.data + uniform.blockField.offset) = cast(EffectiveT) value;
 
-    parentUniform.dirty = true;
+    parentUniform.dirties[0] = true;
+    parentUniform.dirties[1] = true;
+    material.anyUniformDirty = true;
 }
 
 #scope_file

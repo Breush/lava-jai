@@ -14,7 +14,7 @@ for_expansion :: Hash.for_expansion;
 
     files := FileUtilities.file_list(path, recursive = true, follow_symlinks = false);
     Basic.append(*sb, "DOLLAR_SHADERS : [");
-    Basic.append(*sb, Basic.tprint("%", files.count)); // @todo :JaiMissing No way to append a number directly?
+    Basic.print_item_to_builder(*sb, files.count);
     Basic.append(*sb, "]Chamber.DollarFile : .[");
     for file : files {
         fileContent, ok := File.read_entire_file(file);
@@ -56,6 +56,7 @@ EngineImpl :: struct {
     debugUtilsEnabled : bool; // For settings names to Vulkan object
 
     shaderModuleMap : ShaderModuleMap;
+    shaderFileWatcher : FileWatcher.File_Watcher(Engine);
 
     // Per frame state
     FRAME_INDEX_COUNT : u8 : 2;
@@ -70,6 +71,9 @@ QueueIndices :: struct {
 
 ShaderModule :: struct {
     vk : Vk.ShaderModule;
+    id : string;
+    path : string;
+    dirty : bool;
     using spv : Chamber.Spv;
 }
 
@@ -78,10 +82,16 @@ ShaderModuleMap :: Hash.Table(string, ShaderModule);
 impl_engine_init :: (engine : *Engine) {
     _init_instance(engine);
     _init_physical_device(engine);
+
+    if engine.options.watchShaderFiles {
+        FileWatcher.init(*engine.shaderFileWatcher, _shader_file_watcher_callback, engine, .MODIFIED, watch_recursively = false);
+    }
 }
 
 impl_engine_precleanup :: (engine : *Engine) {
     Vk.device_wait_idle(engine.device);
+
+    if engine.options.watchShaderFiles then FileWatcher.deinit(*engine.shaderFileWatcher);
 }
 
 impl_engine_cleanup :: (engine : *Engine) {
@@ -90,12 +100,15 @@ impl_engine_cleanup :: (engine : *Engine) {
 
     Vk.destroy_sampler(engine.device, engine.samplerDefault, null);
 
-    for shaderModule : engine.shaderModuleMap {
+    for shaderModule, shaderId : engine.shaderModuleMap {
         Vk.destroy_shader_module(engine.device, shaderModule.vk, null);
         for *uniformFrame, uniformName : shaderModule.uniformsFrame {
             Basic.free(uniformName);
         }
-        Hash.uninit(*shaderModule.uniformsFrame);
+        Basic.free(shaderId);
+        Basic.free(shaderModule.id);
+        Basic.free(shaderModule.path);
+        Hash.deinit(*shaderModule.uniformsFrame);
     }
 
     Vk.destroy_command_pool(engine.device, engine.graphicsCommandPool, null);
@@ -111,7 +124,7 @@ impl_engine_cleanup :: (engine : *Engine) {
         Vk.destroy_instance(engine.instance, null);
     }
 
-    Hash.uninit(*engine.shaderModuleMap);
+    Hash.deinit(*engine.shaderModuleMap);
 }
 
 impl_engine_draw :: (engine : *Engine) -> bool {
@@ -157,37 +170,52 @@ impl_engine_register :: (engine : *Engine, target : *Target) {
     }
 }
 
-_engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chamber.ShaderKind, $parseUniforms := false) -> *ShaderModule {
-    macroDefinition : string;
-    if kind == .Vertex {
-        macroDefinition = "VERTEX";
-    } else if kind == .Fragment {
-        macroDefinition = "FRAGMENT";
-    } else if kind == .Raygen {
-        macroDefinition = "RAYGEN";
-    } else if kind == .Miss {
-        macroDefinition = "MISS";
-    } else if kind == .ClosestHit {
-        macroDefinition = "CLOSEST_HIT";
+_engine_get_shader_module :: (engine : *Engine, id : string, kind : Chamber.ShaderKind, parseUniforms := false) -> *ShaderModule {
+    macroDefinition := _shader_module_macro_definition(kind);
+    shaderModuleId := Basic.tprint("%.%", id, macroDefinition);
+    shaderModule := Hash.table_find_pointer(*engine.shaderModuleMap, shaderModuleId);
+
+    Basic.log("Loading %.", shaderModuleId, flags = .VERY_VERBOSE_ONLY);
+    if shaderModule != null {
+        if !shaderModule.dirty then return shaderModule;
+
+        Basic.log("Hot reloading %.", shaderModuleId, flags = .VERBOSE_ONLY);
+        if shaderModule.vk != null {
+            Vk.destroy_shader_module(engine.device, shaderModule.vk, null);
+            for *uniformFrame, uniformName : shaderModule.uniformsFrame {
+                Basic.free(uniformName);
+            }
+            Hash.table_reset(*shaderModule.uniformsFrame);
+        }
+    } else {
+        shaderModule = Hash.table_add(*engine.shaderModuleMap, Basic.sprint("%", shaderModuleId), .{});
+        shaderModule.id = Basic.copy_string(id);
+        shaderModule.path = Basic.sprint("%.glsl\0", id);
+        shaderModule.path.count -= 1;
     }
 
-    shaderModuleId := Basic.tprint("%.%", shaderId, macroDefinition);
-    shaderModule := Hash.table_find_pointer(*engine.shaderModuleMap, shaderModuleId);
-    if shaderModule != null then return shaderModule;
-    shaderModule = Hash.table_add(*engine.shaderModuleMap, shaderModuleId, .{});
+    shaderModule.dirty = false;
 
-    shaderPath : string;
-    shaderPath = Basic.tprint("%.glsl\0", shaderId);
-    shaderPath.count -= 1;
+    if engine.options.watchShaderFiles && shaderModule.path[0] != #char "$" {
+        Basic.push_allocator(Basic.temp);
+        path := FileUtilities.parse_path(shaderModule.path);
+        path.words.count -= 1;
+        directory := FileUtilities.path_to_string(path);
+        FileWatcher.add_directories(*engine.shaderFileWatcher, directory);
+    }
 
     // Optimized SPIR-V, no symbols info inside.
-    spvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS, true);
+    spvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, true);
+    if spvCode.count == 0 {
+        Basic.log("Unable to compile % to SPIR-V.", shaderModule.path, flags = .WARNING);
+        return null;
+    }
     defer Basic.array_free(spvCode);
     shaderModule.spv = Chamber.spirv_parse(spvCode, false);
 
-    #if parseUniforms {
+    if parseUniforms {
         // @todo Currently forced to compile once a non-optimized version to get symbols name and such.
-        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderPath, kind, macroDefinition, DOLLAR_SHADERS, false);
+        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, false);
         defer Basic.array_free(nonOptimizedSpvCode);
         nonOptimizedSpv := Chamber.spirv_parse(nonOptimizedSpvCode, true);
         shaderModule.spv.uniformsFrame = nonOptimizedSpv.uniformsFrame;
@@ -205,6 +233,26 @@ _engine_get_shader_module :: (engine : *Engine, shaderId : string, kind : Chambe
 }
 
 #scope_file
+
+_shader_file_watcher_callback :: (watcher : *FileWatcher.File_Watcher(Engine), change : *FileWatcher.File_Change, engine : *Engine) {
+    dirtyShaderModuleIds : [..]string;
+
+    {
+        Basic.push_allocator(Basic.temp);
+        for *shaderModule, shaderModuleId : engine.shaderModuleMap {
+            path1 := FileUtilities.parse_path(shaderModule.path);
+            path2 := FileUtilities.parse_path(change.full_path);
+            if path1.words.count == path2.words.count && FileUtilities.path_contains(path1, path2.words) {
+                shaderModule.dirty = true;
+                Basic.array_add_if_unique(*dirtyShaderModuleIds, shaderModule.id);
+            }
+        }
+    }
+
+    for scene : engine.scenes {
+        _scene_on_shader_modules_changed(scene, dirtyShaderModuleIds);
+    }
+}
 
 _init_instance :: (engine : *Engine) -> bool {
     // Application info
@@ -269,7 +317,7 @@ _init_instance :: (engine : *Engine) -> bool {
     }
     Basic.log("Vulkan enabled instance extensions:", flags=.VERBOSE_ONLY);
     for extension : enabledExtensions {
-        Basic.log("  - %", Basic.to_string(extension), flags=.VERBOSE_ONLY);
+        Basic.log("  - %", to_string(extension), flags=.VERBOSE_ONLY);
     }
 
     // Instance
@@ -306,10 +354,7 @@ _init_instance :: (engine : *Engine) -> bool {
         debugReportCI.sType = .DebugReportCallbackCreateInfoExt;
         debugReportCI.flags = cast(u32) Vk.DebugReportFlagBitsEXT.Error | Vk.DebugReportFlagBitsEXT.Warning /* | Vk.DebugReportFlagBitsEXT.PerformanceWarning */;
         debugReportCI.pfnCallback = _debug_message_callback;
-
-        // :ContextBug
-        #assert(type_info(Context_Base).members[0].name == "thread_index");
-        debugReportCI.pUserData = *context.thread_index;
+        debugReportCI.pUserData = *context;
 
         _CHECK(Vk.create_debug_report_callback_ext(engine.instance, *debugReportCI, null, *engine.debugReportCallback),
                "Unable to create debug report callback.");
@@ -332,7 +377,7 @@ _init_physical_device :: (engine : *Engine) -> bool {
     for physicalDevice, physicalDeviceIndex : physicalDevices {
         physicalDeviceProperties : Vk.PhysicalDeviceProperties;
         Vk.get_physical_device_properties(physicalDevice, *physicalDeviceProperties);
-        deviceName := Basic.to_string(*physicalDeviceProperties.deviceName[0]); // @note Not passing the object directly, because the full length of the array of char is used instead.
+        deviceName := to_string(*physicalDeviceProperties.deviceName[0]); // @note Not passing the object directly, because the full length of the array of char is used instead.
         Basic.log("  - #% '%'", physicalDeviceIndex, deviceName, flags=.VERBOSE_ONLY);
     }
 
@@ -467,7 +512,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     }
     Basic.log("Vulkan enabled device extensions:", flags=.VERBOSE_ONLY);
     for extension : enabledExtensions {
-        Basic.log("  - %", Basic.to_string(extension), flags=.VERBOSE_ONLY);
+        Basic.log("  - %", to_string(extension), flags=.VERBOSE_ONLY);
     }
 
     deviceCI : Vk.DeviceCreateInfo;
@@ -528,10 +573,10 @@ _init_global_resources :: (engine : *Engine) -> bool {
     _CHECK(Vk.create_sampler(engine.device, *samplerCI, null, *engine.samplerDefault),
            "Unable to create sampler.");
 
-    texture_init(*engine.textureInvisible, engine);
+    texture_init(*engine.textureInvisible, engine, false);
     texture_load_from_memory(*engine.textureInvisible, .[0, 0, 0, 0], .{1, 1});
 
-    texture_init(*engine.textureWhite, engine);
+    texture_init(*engine.textureWhite, engine, true);
     texture_load_from_memory(*engine.textureWhite, .[0xFF, 0xFF, 0xFF, 0xFF], .{1, 1});
 
     return true;
@@ -599,70 +644,53 @@ _debug_message_callback :: (
     message : *u8,
     userData : *void
 ) -> Vk.Bool32 #c_call {
-    // :ContextBug @fixme This does not work anymore.
-    // ctx := <<cast(*Context) userData;
-    ctx : Context;
-    push_context ctx {
-    //     flags : Log_Flags;
-    //     if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
-    //         flags |= .VERY_VERBOSE_ONLY;
-    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
-    //         flags |= .CONTENT;
-    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
-    //         flags |= .VERBOSE_ONLY;
-    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning {
-    //         flags |= .WARNING;
-    //     } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
-    //         flags |= .ERROR;
-    //     }
+    push_context << cast(*Context) userData {
+        flags : Log_Flags;
+        if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
+            flags |= .VERY_VERBOSE_ONLY;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Debug {
+            flags |= .CONTENT;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.PerformanceWarning {
+            flags |= .VERBOSE_ONLY;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Warning {
+            flags |= .WARNING;
+        } else if reportFlags & xx Vk.DebugReportFlagBitsEXT.Error {
+            flags |= .ERROR;
+        }
 
-    //     messageStr : string;
-    //     Chamber.loggerPushNonFatalOnError();
-    //     i := 0;
-    //     j : bool;
-    //     while true {
-    //         Basic.log("%", layerPrefix[i]);
-    //         if layerPrefix[i] == 0 {
-    //             messageStr = Basic.to_string(layerPrefix + i + 1);
-    //             if j break;
-    //             else j = true;
-    //         }
-    //         i += 1;
-    //     }
+        messageStr : string;
+        Chamber.loggerPushNonFatalOnError();
 
-        Basic.log(Basic.to_string(message));
+        messageString := to_string(message);
+        linkParts := String.split(messageString, "(https://");
+        specParts := String.split(linkParts[0], " The Vulkan spec states:");
+        sentences := String.split(specParts[0], "| ");
+        errorParts := String.split(sentences[0], "Object ");
+
+        // @todo Investigate why this happens when resizing the window,
+        // but for now it cannot be a blocking error.
+        if errorParts[0] != "Validation Error: [ VUID-VkSwapchainCreateInfoKHR-imageExtent-01274 ]" {
+            flags = .WARNING;
+        }
+
+        Basic.log("===== Vulkan Debug Message =====", flags = flags);
+        Basic.log(errorParts[0], flags = flags);
+        for i : 1..errorParts.count-1 {
+            Basic.log("  | Object %", errorParts[i], flags = flags);
+        }
+        for i : 1..sentences.count-1 {
+            Basic.log("  | %", sentences[i], flags = flags);
+        }
+        if specParts.count == 2 {
+            Basic.log("  >%", specParts[1], flags = flags);
+        }
+        if linkParts.count == 2 {
+            Basic.log("  (https://%", linkParts[1], flags = flags);
+        }
+
+        Chamber.loggerPopNonFatalOnError();
+        Basic.log("================================", flags = flags);
     }
-        // i := 0;
-        // while true {
-        //     Basic.log("%", message[i]);
-        //     if message[i] == 0 then break;
-        //     i += 1;
-        // }
-
-        // messageString := Basic.to_string(message);
-        // linkParts := String.split(messageString, "(https://");
-        // specParts := String.split(linkParts[0], " The Vulkan spec states:");
-        // sentences := String.split(specParts[0], "| ");
-        // errorParts := String.split(sentences[0], "Object ");
-
-        // Basic.log("===== Vulkan Debug Message =====", flags=flags);
-        // Basic.log(errorParts[0], flags=flags);
-        // for i : 1..errorParts.count-1 {
-        //     Basic.log("  | Object %", errorParts[i], flags=flags);
-        // }
-        // for i : 1..sentences.count-1 {
-        //     Basic.log("  | %", sentences[i], flags=flags);
-        // }
-        // if specParts.count == 2 {
-        //     Basic.log("  >%", specParts[1], flags=flags);
-        // }
-        // if linkParts.count == 2 {
-        //     Basic.log("  (https://%", linkParts[1], flags=flags);
-        // }
-
-        // Chamber.loggerPopNonFatalOnError();
-        // Basic.log("================================", flags=flags);
-    // }
     return Vk.FALSE;
 }
 
@@ -708,7 +736,7 @@ _physical_device_score :: (engine : *Engine, physicalDevice : Vk.PhysicalDevice,
 
 _is_layer_available :: (layerName : string, availableLayers : []Vk.LayerProperties) -> bool {
     for availableLayer : availableLayers {
-        if layerName == Basic.to_string(*availableLayer.layerName[0]) {
+        if layerName == to_string(*availableLayer.layerName[0]) {
             return true;
         }
     }
@@ -717,7 +745,7 @@ _is_layer_available :: (layerName : string, availableLayers : []Vk.LayerProperti
 
 _is_extension_available :: (extensionName : string, availableExtensions : []Vk.ExtensionProperties) -> bool {
     for availableExtension : availableExtensions {
-        if extensionName == Basic.to_string(*availableExtension.extensionName[0]) {
+        if extensionName == to_string(*availableExtension.extensionName[0]) {
             return true;
         }
     }
@@ -729,5 +757,15 @@ _chain_front :: (chain : **void, link : *void) {
     <<chain = link;
 }
 
+_shader_module_macro_definition :: (kind : Chamber.ShaderKind) -> string {
+    if kind == .Vertex then return "VERTEX";
+    else if kind == .Fragment then return "FRAGMENT";
+    else if kind == .Raygen then return "RAYGEN";
+    else if kind == .Miss then return "MISS";
+    else if kind == .ClosestHit then return "CLOSEST_HIT";
+    return "";
+}
+
 String :: #import "String";
 FileUtilities :: #import "File_Utilities";
+FileWatcher :: #import "File_Watcher";

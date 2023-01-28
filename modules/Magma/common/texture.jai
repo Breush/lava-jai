@@ -4,13 +4,15 @@ Texture :: struct {
     using textureImpl : TextureImpl;
 
     allocator : Allocator;
+
+    srgb : bool;
 }
 
 // Allocate, init and register a new texture.
-create_texture :: (engine : *Engine) -> *Texture {
+create_texture :: (engine : *Engine, srgb := true) -> *Texture {
     texture := cast(*Texture) Basic.New(Texture);
     Basic.remember_allocators(texture);
-    texture_init(texture, engine);
+    texture_init(texture, engine, srgb);
     engine_register(engine, texture);
     return texture;
 }
@@ -24,8 +26,9 @@ destroy_texture :: (texture : *Texture, unregister := true) {
     }
 }
 
-texture_init :: (texture : *Texture, engine : *Engine) {
+texture_init :: (texture : *Texture, engine : *Engine, srgb : bool) {
     texture.engine = engine;
+    texture.srgb = srgb;
 }
 
 texture_cleanup :: (texture : *Texture, resetMemory := true) {

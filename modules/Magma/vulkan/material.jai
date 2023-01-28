@@ -1,5 +1,7 @@
 MaterialImpl :: struct {
-    descriptorSet : Vk.DescriptorSet;
+    // @todo :PushDescriptors or descriptor buffers (https://www.khronos.org/blog/vk-ext-descriptor-buffer)
+    // might be a better solution long term than having multiple descriptor sets.
+    descriptorSets : [2]Vk.DescriptorSet;
     descriptorPool : Vk.DescriptorPool;
     descriptorSetIndex : u32;
 
@@ -52,10 +54,10 @@ impl_material_uniform_commit :: (material : *Material, uniform : *Material.Unifo
 
 _material_draw :: (material : *Material, commandBuffer : Vk.CommandBuffer) {
     // @note This can happen if the material does not have any uniforms (e.g. fallback).
-    if material.descriptorSet == null then return;
+    if material.descriptorSets[material.inFlightDescriptorSetIndex] == null then return;
 
     Vk.cmd_bind_descriptor_sets(commandBuffer, .Graphics, material.shader.pipelineLayout, material.descriptorSetIndex,
-                                1, *material.descriptorSet, 0, null);
+                                1, *material.descriptorSets[material.inFlightDescriptorSetIndex], 0, null);
 }
 
 #scope_file
@@ -65,7 +67,7 @@ _init_descriptor_set :: (material : *Material) -> bool {
 
     // @todo We could move the descriptor pool to the shader,
     // and that number should not be arbitrary anymore.
-    MAX_DESCRIPTOR_SET_COUNT :: 1;
+    MAX_DESCRIPTOR_SET_COUNT :: 2; // :PushDescriptors
 
     blockSize : u32 = 0;
     textureCount : u32 = 0;
@@ -105,22 +107,35 @@ _init_descriptor_set :: (material : *Material) -> bool {
     _CHECK(Vk.create_descriptor_pool(engine.device, *descriptorPoolCI, null, *material.descriptorPool),
            "Unable to create descriptor pool.");
 
+    // :PushDescriptors
+    descriptorsetLayouts : [2]Vk.DescriptorSetLayout;
+    descriptorsetLayouts[0] = material.shader.descriptorSetLayouts[material.descriptorSetIndex];
+    descriptorsetLayouts[1] = material.shader.descriptorSetLayouts[material.descriptorSetIndex];
+
     descriptorSetAI : Vk.DescriptorSetAllocateInfo;
     descriptorSetAI.sType = .DescriptorSetAllocateInfo;
     descriptorSetAI.descriptorPool = material.descriptorPool;
-    descriptorSetAI.descriptorSetCount = 1;
-    descriptorSetAI.pSetLayouts = *material.shader.descriptorSetLayouts[material.descriptorSetIndex];
+    descriptorSetAI.descriptorSetCount = 2; // :PushDescriptors
+    descriptorSetAI.pSetLayouts = descriptorsetLayouts.data;
 
-    _CHECK(Vk.allocate_descriptor_sets(engine.device, *descriptorSetAI, *material.descriptorSet),
+    _CHECK(Vk.allocate_descriptor_sets(engine.device, *descriptorSetAI, *material.descriptorSets[0]),
            "Unable to allocate descriptor sets.");
+
+    for descriptorSet : material.descriptorSets {
+        _set_debug_utils_name(engine.device, descriptorSet, Basic.tprint("material{%}.descriptorSets[]\0", material.shader.id).data);
+    }
 
     // Initialization to default
     for *uniform, uniformKey : material.uniforms {
         if uniform.kind == .Texture {
             uniform.texture.fallback = *engine.textureWhite;
-            uniform.dirty = true;
+            uniform.dirties[0] = true;
+            uniform.dirties[1] = true;
+            material.anyUniformDirty = true;
         } else if uniform.kind == .Block {
-            uniform.dirty = true;
+            uniform.dirties[0] = true;
+            uniform.dirties[1] = true;
+            material.anyUniformDirty = true;
         }
     }
 
@@ -137,7 +152,7 @@ _material_uniform_commit :: (material : *Material, binding : u32, texture : *Tex
 
     writeDescriptorSet : Vk.WriteDescriptorSet;
     writeDescriptorSet.sType = .WriteDescriptorSet;
-    writeDescriptorSet.dstSet = material.descriptorSet;
+    writeDescriptorSet.dstSet = material.descriptorSets[material.inFlightDescriptorSetIndex];
     writeDescriptorSet.dstBinding = binding;
     writeDescriptorSet.dstArrayElement = 0;
     writeDescriptorSet.descriptorType = .CombinedImageSampler;
@@ -157,7 +172,7 @@ _material_uniform_commit :: (material : *Material, binding : u32, block : Materi
 
     writeDescriptorSet : Vk.WriteDescriptorSet;
     writeDescriptorSet.sType = .WriteDescriptorSet;
-    writeDescriptorSet.dstSet = material.descriptorSet;
+    writeDescriptorSet.dstSet = material.descriptorSets[material.inFlightDescriptorSetIndex];
     writeDescriptorSet.dstBinding = binding;
     writeDescriptorSet.dstArrayElement = 0;
     writeDescriptorSet.descriptorType = .UniformBuffer;
