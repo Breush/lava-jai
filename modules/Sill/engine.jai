@@ -144,62 +144,80 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
 
 engine_run :: (engine : *Engine) {
     previousTime := Basic.get_time();
-    updateTimeLag : float64 = 0;
+    previousSleepTime : float64;
+    updateTimeLag : float64;
     updateTime : float64 : 1.0/90.0 * 0.7854; // A bit faster than 90 FPS
 
-    fpsFrameRenderedCount := 0;
-    fpsElapsedTime : float64 = 0;
-    fpsAverageElapsedTime : float64 = 0;
+    fpsData : struct {
+        elapsedTime : float64;
+        renderTime : float64;
+        renderCount : s64;
+        updateCount : s64;
+        updateTime : float64;
+        sleepCount : s64;
+        sleepTime : float64;
+    };
 
     while !engine.closingMainWindow {
         currentTime := Basic.get_time();
         elapsedTime := currentTime - previousTime;
+        elapsedTimeWithoutSleep := elapsedTime - previousSleepTime;
         previousTime = currentTime;
 
-        if engine.options.fpsLimit > 0 && elapsedTime < 1.0 / engine.options.fpsLimit {
-            sleepingTime := (1.0 / engine.options.fpsLimit - elapsedTime);
-            Basic.sleep_milliseconds(cast(s32) (sleepingTime * 1000.0));
-
-            currentTime := Basic.get_time();
-            elapsedTime += currentTime - previousTime;
-            previousTime = currentTime;
-        }
-
         if engine.options.logFps {
-            fpsFrameRenderedCount += 1;
-            fpsElapsedTime += elapsedTime;
-            fpsAverageElapsedTime += elapsedTime;
-            if fpsElapsedTime >= 1.0 {
-                Basic.print("RenderTime: %ms | FPS: % | DrawCalls: %\n",
-                            cast(u32) (fpsAverageElapsedTime / fpsFrameRenderedCount * 10000) / 10.0,
-                            fpsFrameRenderedCount,
-                            engine.renderEngine.stats.drawCalls);
-                fpsFrameRenderedCount = 0;
-                fpsAverageElapsedTime = 0;
-                fpsElapsedTime = 0;
+            fpsData.elapsedTime += elapsedTime;
+            if fpsData.elapsedTime >= 1.0 {
+                renderTimeMs := ifx fpsData.renderCount != 0 then cast(u32) (fpsData.renderTime / fpsData.renderCount * 10000) / 10.0 else 0.0;
+                updateTimeMs := ifx fpsData.updateCount != 0 then cast(u32) (fpsData.updateTime / fpsData.updateCount * 10000) / 10.0 else 0.0;
+                sleepTimeMs := ifx fpsData.sleepCount != 0 then cast(u32) (fpsData.sleepTime / fpsData.sleepCount * 10000) / 10.0 else 0.0;
+                Basic.log("FPS: % | Render: %ms [% DrawCalls] | Update: %ms | Sleep: %ms\n",
+                          fpsData.renderCount, renderTimeMs, engine.renderEngine.stats.drawCalls,
+                          updateTimeMs, sleepTimeMs);
+                fpsData = .{};
             }
         }
 
-        // We play logic at a constant rate.
-        updateTimeLag += elapsedTime;
-        while (updateTimeLag >= updateTime) {
-            Basic.reset_temporary_storage();
-            _input_reset(engine);
-            _engine_handle_events(engine, updateTime);
-            _engine_update_entities(engine, updateTime);
-            _ui_update(engine);
-            updateTimeLag -= updateTime;
+        if engine.options.fpsLimit > 0 && elapsedTimeWithoutSleep < 1.0 / engine.options.fpsLimit {
+            sleepTime := (1.0 / engine.options.fpsLimit - elapsedTimeWithoutSleep);
+            Basic.sleep_milliseconds(cast(s32) (sleepTime * 1000.0));
+            previousSleepTime = sleepTime;
+            if engine.options.logFps then _update_fps_counter(*fpsData.sleepTime, *fpsData.sleepCount, *currentTime);
         }
 
-        // But we draw as fast as we can.
-        Magma.engine_update(engine.renderEngine);
-        Magma.engine_draw(engine.renderEngine);
+        if _engine_check_window_resized(engine, elapsedTime) {
+            // Force an update after a resize.
+            updateTimeLag = updateTime;
+        } else {
+            // We play logic at a constant rate.
+            updateTimeLag += elapsedTime;
+            while (updateTimeLag >= updateTime) {
+                Basic.reset_temporary_storage();
+                _input_reset(engine);
+                _engine_handle_events(engine, updateTime);
+                _engine_update_entities(engine, updateTime);
+                _ui_update(engine);
+                updateTimeLag -= updateTime;
+                if engine.options.logFps then _update_fps_counter(*fpsData.updateTime, *fpsData.updateCount, *currentTime);
+            }
+
+            // But we draw as fast as we can.
+            Magma.engine_update(engine.renderEngine);
+            Magma.engine_draw(engine.renderEngine);
+            if engine.options.logFps then _update_fps_counter(*fpsData.renderTime, *fpsData.renderCount, *currentTime);
+        }
     }
 
     Crater.destroy_window(engine.window);
 }
 
 #scope_file
+
+_update_fps_counter :: (time : *float64, count : *s64, sinceTime : *float64) {
+    newTime := Basic.get_time();
+    << time += newTime - << sinceTime;
+    << sinceTime = newTime;
+    << count += 1;
+}
 
 _engine_update_entities :: (engine : *Engine, updateTime : float64) {
     engine.Meta._update_entities(engine, updateTime);
@@ -218,28 +236,14 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
 }
 
 _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
-    // @todo Speed: Squash events (for instance mouse moves since last poll)
-    event := Crater.window_poll_event(engine.window);
+    event := Crater.window_poll_event(engine.window, squash = true);
 
-    // Craft a delayed WindowSizeChanged event, so that the user handler only gets one.
-    if engine.windowSizeChangedTimer > 0.0 {
-        engine.windowSizeChangedTimer -= updateTime;
-        if engine.options.eventHandler && engine.windowSizeChangedTimer <= 0.0 {
-            event : Crater.Event;
-            event.kind = .WindowSizeChanged;
-            event.windowSize.width = cast(u16) engine.options.windowExtent.width;
-            event.windowSize.height = cast(u16) engine.options.windowExtent.height;
-            engine.options.eventHandler(event);
-        }
-    }
-
-    while event.kind != Crater.Event.Kind.None {
-        if event.kind == Crater.Event.Kind.WindowClosed {
+    while event.kind != .None {
+        if event.kind == .WindowClosed {
             engine.closingMainWindow = true;
             return;
         }
-        else if event.kind == Crater.Event.Kind.WindowSizeChanged {
-            Magma.engine_wait_idle(engine.renderEngine);
+        else if event.kind == .WindowSizeChanged {
             engine.windowSizeChangedTimer = 0.150;
             engine.options.windowExtent = Crater.window_get_extent(engine.window);
             return;
@@ -252,7 +256,7 @@ _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
             if engine.options.eventHandler then engine.options.eventHandler(event);
         }
 
-        event = Crater.window_poll_event(engine.window);
+        event = Crater.window_poll_event(engine.window, squash = true);
     }
 
     #if VR_ENABLED {
@@ -260,4 +264,32 @@ _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
             _input_handle_vr_events(engine, engine.vrTarget);
         }
     }
+}
+
+_engine_check_window_resized :: (engine : *Engine, elapsedTime : float64) -> bool {
+    if engine.windowSizeChangedTimer <= 0.0 then return false;
+
+    // Eat all events (and reset the window size timer if needed.)
+    event := Crater.window_poll_event(engine.window, squash = true);
+    while event.kind != .None {
+        if event.kind == .WindowSizeChanged {
+            engine.windowSizeChangedTimer = 0.150;
+            engine.options.windowExtent = Crater.window_get_extent(engine.window);
+            break;
+        }
+        event = Crater.window_poll_event(engine.window, squash = true);
+    }
+
+    // Craft a delayed WindowSizeChanged event, so that the user handler only gets one.
+    engine.windowSizeChangedTimer -= elapsedTime;
+    if engine.options.eventHandler && engine.windowSizeChangedTimer <= 0.0 {
+        event : Crater.Event;
+        event.kind = .WindowSizeChanged;
+        event.windowSize.width = cast(u16) engine.options.windowExtent.width;
+        event.windowSize.height = cast(u16) engine.options.windowExtent.height;
+        Magma.engine_wait_idle(engine.renderEngine);
+        engine.options.eventHandler(event);
+    }
+
+    return true;
 }

@@ -175,9 +175,9 @@ window_get_handle :: (window : *Window) -> Chamber.WindowHandle {
     return impl_window_get_handle(window);
 }
 
-window_poll_event :: (window : *Window) -> Event {
+window_poll_event :: (window : *Window, squash := false) -> Event {
     event : Event;
-    event.kind = Event.Kind.None;
+    event.kind = .None;
 
     if window.events.count == 0 {
         impl_window_process_events(window);
@@ -190,7 +190,36 @@ window_poll_event :: (window : *Window) -> Event {
         }
     }
 
-    return Basic.pop(*window.events);
+    event = Basic.pop(*window.events);
+
+    if squash {
+        if event.kind == .MousePointerMoved {
+            for < futureEvent : window.events {
+                if futureEvent.kind != .MousePointerMoved then continue;
+                event.mousePointer.x = futureEvent.mousePointer.x;
+                event.mousePointer.y = futureEvent.mousePointer.y;
+                event.mousePointer.dx += futureEvent.mousePointer.dx;
+                event.mousePointer.dy += futureEvent.mousePointer.dy;
+                remove futureEvent;
+            }
+        } else if event.kind == .MouseWheelScrolled {
+            for < futureEvent : window.events {
+                if futureEvent.kind != .MouseWheelScrolled then continue;
+                event.mouseWheel.dx += futureEvent.mouseWheel.dx;
+                event.mouseWheel.dy += futureEvent.mouseWheel.dy;
+                remove futureEvent;
+            }
+        } else if event.kind == .WindowSizeChanged {
+            for < futureEvent : window.events {
+                if futureEvent.kind != .WindowSizeChanged then continue;
+                event.windowSize.width = futureEvent.windowSize.width;
+                event.windowSize.height = futureEvent.windowSize.height;
+                remove futureEvent;
+            }
+        }
+    }
+
+    return event;
 }
 
 window_close :: (window : *Window) {
