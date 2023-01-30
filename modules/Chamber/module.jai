@@ -44,6 +44,9 @@ Anchor :: enum {
     BottomLeft; BottomRight;
 }
 
+libc :: #system_library "libc";
+c_free :: (data : *void) -> *void #foreign libc "free";
+
 min :: (a : $T, b : T) -> T #expand {
     return ifx a <= b then a else b;
 }

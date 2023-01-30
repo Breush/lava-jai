@@ -76,7 +76,7 @@ impl_window_init :: (window : *Window) -> bool {
         }
         Xcb.Render.pictforminfo_next(*pfIterator);
     }
-    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, pfReply, null);
+    Chamber.c_free(pfReply);
 
     // Finding the cursor theme path
     rmCookie := Xcb.get_property(window.xcbConnection, 0, window.xcbScreen.root, cast(u32) Xcb.AtomEnum.AtomResourceManager, cast(u32) Xcb.AtomEnum.AtomString, 0, 16 * 1024); // Arbitrary size...
@@ -94,7 +94,7 @@ impl_window_init :: (window : *Window) -> bool {
             window.systemCursorThemeName = Basic.sprint(String.trim_left(it));
         }
     }
-    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, rmReply, null);
+    Chamber.c_free(rmReply);
 
     baseCursorThemePath : [..]string;
     defer Basic.array_free(baseCursorThemePath);
@@ -139,7 +139,7 @@ impl_window_process_events :: (window : *Window) {
         if event == null then break;
 
         _window_event_process(window, event);
-        context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, event, null);
+        Chamber.c_free(event);
     }
 }
 
@@ -148,10 +148,8 @@ impl_window_close :: (window : *Window) {
     Xkb.keymap_unref(window.xkbKeymap);
     Xkb.context_unref(window.xkbContext);
 
-    // Using default_allocator because these were allocated
-    // in C code, so we don't want to call any other allocators.
-    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbProtocolsReply, null);
-    context.default_allocator.proc(Allocator_Mode.FREE, 0, 0, window.xcbDeleteWindowReply, null);
+    Chamber.c_free(window.xcbProtocolsReply);
+    Chamber.c_free(window.xcbDeleteWindowReply);
 
     Basic.free(window.systemCursorThemeName);
     Basic.free(window.systemCursorThemePath);
