@@ -18,7 +18,7 @@ UiComponent :: struct {
     checkHoveredHandler : CheckHoveredHandlerType;
     checkHoveredHandlerUserData : *void;
 
-    CheckHoveredHandlerType :: #type (hovered : bool, userData : *void) -> bool;
+    CheckHoveredHandlerType :: #type (hovered : bool, relativeMousePointerPosition : Chamber.vec2, userData : *void) -> bool;
     TriggerCallbackType :: #type (trigger : UiTrigger, userData : *void);
     triggerCallbacks : [..]Callback(TriggerCallbackType);
 
@@ -76,7 +76,7 @@ ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData 
     callback.userData = userData;
 }
 
-ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, userData : *$T) -> bool, userData : *T = null) {
+ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, relativeMousePointerPosition : Chamber.vec2, userData : *$T) -> bool, userData : *T = null) {
     iUi.checkHoveredHandler = cast(UiComponent.CheckHoveredHandlerType) function;
     iUi.checkHoveredHandlerUserData = userData;
     _ui_set_hovered_components_dirty(iUi.entity.engine);
@@ -128,26 +128,27 @@ ui_check_hovered :: (iUi : *UiComponent, event : Crater.Event) -> bool {
     if iUi.entity.flags & .Disabled || iUi.disabled then return false;
 
     relativePosition := ui_relative_mouse_pointer_position(iUi);
+    centeredRelativePosition := relativePosition;
 
     // Make the hover check as if it was a center anchor.
     if iUi.anchor == {
-        case .Left;         relativePosition.x -= iUi.extent.x / 2.0;
-        case .Right;        relativePosition.x += iUi.extent.x / 2.0;
-        case .Top;          relativePosition.y -= iUi.extent.y / 2.0;
-        case .Bottom;       relativePosition.y += iUi.extent.y / 2.0;
-        case .TopLeft;      relativePosition.x -= iUi.extent.x / 2.0; relativePosition.y -= iUi.extent.y / 2.0;
-        case .TopRight;     relativePosition.x += iUi.extent.x / 2.0; relativePosition.y -= iUi.extent.y / 2.0;
-        case .BottomLeft;   relativePosition.x -= iUi.extent.x / 2.0; relativePosition.y += iUi.extent.y / 2.0;
-        case .BottomRight;  relativePosition.x += iUi.extent.x / 2.0; relativePosition.y += iUi.extent.y / 2.0;
+        case .Left;         centeredRelativePosition.x -= iUi.extent.x / 2.0;
+        case .Right;        centeredRelativePosition.x += iUi.extent.x / 2.0;
+        case .Top;          centeredRelativePosition.y -= iUi.extent.y / 2.0;
+        case .Bottom;       centeredRelativePosition.y += iUi.extent.y / 2.0;
+        case .TopLeft;      centeredRelativePosition.x -= iUi.extent.x / 2.0; centeredRelativePosition.y -= iUi.extent.y / 2.0;
+        case .TopRight;     centeredRelativePosition.x += iUi.extent.x / 2.0; centeredRelativePosition.y -= iUi.extent.y / 2.0;
+        case .BottomLeft;   centeredRelativePosition.x -= iUi.extent.x / 2.0; centeredRelativePosition.y += iUi.extent.y / 2.0;
+        case .BottomRight;  centeredRelativePosition.x += iUi.extent.x / 2.0; centeredRelativePosition.y += iUi.extent.y / 2.0;
     }
 
-    hovered := relativePosition.x >= -iUi.extent.x / 2.0 &&
-               relativePosition.x <  iUi.extent.x / 2.0 &&
-               relativePosition.y >= -iUi.extent.y / 2.0 &&
-               relativePosition.y <  iUi.extent.y / 2.0;
+    hovered := centeredRelativePosition.x >= -iUi.extent.x / 2.0 &&
+               centeredRelativePosition.x <  iUi.extent.x / 2.0 &&
+               centeredRelativePosition.y >= -iUi.extent.y / 2.0 &&
+               centeredRelativePosition.y <  iUi.extent.y / 2.0;
 
     if iUi.checkHoveredHandler != null {
-        hovered = iUi.checkHoveredHandler(hovered, iUi.checkHoveredHandlerUserData);
+        hovered = iUi.checkHoveredHandler(hovered, relativePosition, iUi.checkHoveredHandlerUserData);
     }
 
     return hovered;
