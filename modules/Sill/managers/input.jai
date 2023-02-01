@@ -54,7 +54,7 @@ input_action_bind :: (input : *Input, actionName : string, triggerKind : Input.V
 }
 
 input_action_active :: (input : *Input, actionName : string) -> bool {
-    action := table_find_pointer(input.actions, actionName);
+    action := table_find_pointer(*input.actions, actionName);
     if action == null then return false;
     return action.activeness != 0;
 }

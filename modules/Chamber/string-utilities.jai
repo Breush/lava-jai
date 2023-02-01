@@ -158,6 +158,18 @@ utf8_word_length_after_byte :: (s : string, byteIndex : u32) -> u8 {
     return 1 + Unicode.trailingBytesForUTF8[s[byteIndex]];
 }
 
+word_length_after_byte :: (s : string, byteIndex : u32) -> u32 {
+    foundWord := false;
+    for i : byteIndex + 1 .. cast(u32) s.count - 1 {
+        if !foundWord {
+            foundWord = s[i] != #char " ";
+            continue;
+        }
+        if s[i] == #char " " then return i - byteIndex;
+    }
+    return cast(u32) s.count - byteIndex;
+}
+
 utf8_word_length_before_byte :: (s : string, byteIndex : u32) -> u8 {
     index := byteIndex - 1;
     while index >= 0 {
@@ -171,40 +183,38 @@ utf8_word_length_before_byte :: (s : string, byteIndex : u32) -> u8 {
     return cast(u8) (byteIndex - index);
 }
 
-delete_after_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
-    if s.count == 0 then return 0;
-    if byteIndex >= s.count then return 0;
+word_length_before_byte :: (s : string, byteIndex : u32) -> u32 {
+    foundWord := false;
+    for < i : byteIndex - 1 .. cast(u32) 0 {
+        if !foundWord {
+            foundWord = s[i] != #char " ";
+            continue;
+        }
+        if s[i] == #char " " then return byteIndex - i - 1;
+    }
+    return byteIndex;
+}
 
-    deletedBytes := utf8_word_length_after_byte(<<s, byteIndex);
-
+delete_after_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
     s1 := <<s;
     s1.count = byteIndex;
 
     s2 := <<s;
-    Basic.advance(*s2, byteIndex + deletedBytes);
+    Basic.advance(*s2, byteIndex + bytesToDelete);
 
     memcpy(s1.data + s1.count, s2.data, s2.count); // :MissingMemmove
     s.count = s1.count + s2.count;
-
-    return deletedBytes;
 }
 
-delete_before_byte :: (s : *string, byteIndex : u32) -> (deletedBytes : u8) {
-    if s.count == 0 then return 0;
-    if byteIndex == 0 || byteIndex > s.count then return 0;
-
-    deletedBytes := utf8_word_length_before_byte(<<s, byteIndex);
-
+delete_before_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
     s1 := <<s;
-    s1.count = byteIndex - deletedBytes;
+    s1.count = byteIndex - bytesToDelete;
 
     s2 := <<s;
     Basic.advance(*s2, byteIndex);
 
     memcpy(s1.data + s1.count, s2.data, s2.count); // @todo :MissingMemmove Could be memmove, but the intrisics does not exist.
     s.count = s1.count + s2.count;
-
-    return deletedBytes;
 }
 
 insert_after_byte :: (s : *string, byteIndex : u32, c : string) {
