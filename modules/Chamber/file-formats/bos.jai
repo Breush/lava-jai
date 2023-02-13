@@ -13,7 +13,7 @@
 // The file is structured as such:
 // Header (12 bytes):
 // | MagicNumber (4 bytes)
-// | Version (4 bytes)
+// | Version (4 bytes) (file format version)
 // | TypeTableLengthInBytes (4 bytes)
 // Type entry (multiple times):
 // | Type (4 bytes)
@@ -29,6 +29,7 @@
 // |   KeyType (4 bytes)
 // |   ValueType (4 bytes)
 // Content:
+// | DataVersion (4 bytes)
 // | Type (4 bytes)
 // | Data depending on type
 
@@ -79,7 +80,9 @@ BosSerializationOptions :: struct {
     typeTableEnabled : bool;
 }
 
-bos_deserialize_as :: (object : *$T, bytes : Bytes) -> (success : bool) {
+// If version is 0xFFFFFFFF, no version comparison will occur.
+// If version mismatch with the stored one in bytes, false is returned without touching the object.
+bos_deserialize_as :: (object : *$T, bytes : Bytes, version : u32) -> (success : bool) {
     header := cast(*BosHeader) bytes.data;
     if bytes.count < size_of(BosHeader) ||
        memcmp(header.magic.data, "BOS\0".data, 4) != 0 ||
@@ -89,8 +92,12 @@ bos_deserialize_as :: (object : *$T, bytes : Bytes) -> (success : bool) {
     }
 
     Basic.advance(*bytes, size_of(BosHeader));
-    typeTableBytes := bytes;
     Basic.advance(*bytes, header.typeTableLengthInBytes);
+
+    dataVersion := bos_deserialize_raw_numeric(*bytes, u32);
+    if version != 0xFFFFFFFF && dataVersion != version {
+        return false;
+    }
 
     typeEntry := << cast(*BosType) bytes.data;
     typeKind := typeEntry & 0xFF;
@@ -199,7 +206,7 @@ bos_deserialize_string :: (bytes : *Bytes) -> string {
     return str;
 }
 
-bos_serialize :: (object : $T, options := BosSerializationOptions.{}) -> (bytes : Bytes) {
+bos_serialize :: (object : $T, version : u32, options := BosSerializationOptions.{}) -> (bytes : Bytes) {
     sb : Basic.String_Builder;
     defer Basic.reset(*sb);
 
@@ -221,6 +228,7 @@ bos_serialize :: (object : $T, options := BosSerializationOptions.{}) -> (bytes 
         defer Hash.deinit(*knownTypesMap);
         rootType = bos_serialize_type(*sb, typeInfo, *knownTypesMap, options);
     }
+    bos_serialize_raw_numeric(*contentSb, version);
     bos_serialize_raw_type(*contentSb, rootType);
     bos_serialize(*contentSb, cast(*u8) *object, typeInfo);
 
