@@ -2,6 +2,9 @@
 
 Message :: struct {
     listenerComponents : [..]*ListenerComponent;
+
+    messages : [..]*void;
+    messagesPool : Pool.Pool;
 }
 
 message_register_component :: (message : *Message, listenerComponent : *ListenerComponent) {
@@ -13,15 +16,30 @@ message_unregister_component :: (message : *Message, listenerComponent : *Listen
 }
 
 message_send :: (message : *Message, data : $T) {
-    message_send(message, *data);
+    messageContent := cast(*T) Pool.get(*message.messagesPool, size_of(T));
+    << messageContent = data;
+    Basic.array_add(*message.messages, messageContent);
 }
 
-message_send :: (message : *Message, data : *void) {
-    for listenerComponent : message.listenerComponents {
-        listener_forward_message(listenerComponent, data);
+_message_cleanup :: (using message : *Message) {
+    Basic.array_free(listenerComponents);
+    Basic.array_free(messages);
+    Pool.release(*messagesPool);
+}
+
+_message_update :: (using message : *Message) {
+    lastIndex := messages.count - 1;
+    for messageIndex : 0 .. lastIndex {
+        messageContent := messages[messageIndex];
+        for listenerComponent : message.listenerComponents {
+            listener_forward_message(listenerComponent, messageContent);
+        }
+        lastIndex = messages.count - 1;
     }
+    messages.count = 0;
+    Pool.reset(*messagesPool);
 }
 
-_message_cleanup :: (message : *Message) {
-    Basic.array_free(message.listenerComponents);
-}
+#scope_file
+
+Pool :: #import "Pool";

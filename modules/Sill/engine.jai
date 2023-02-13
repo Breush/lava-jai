@@ -145,8 +145,8 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
 engine_run :: (engine : *Engine) {
     previousTime := Basic.get_time();
     previousSleepTime : float64;
-    updateTimeLag : float64;
     updateTime : float64 : 1.0/90.0 * 0.7854; // A bit faster than 90 FPS
+    updateTimeLag := updateTime; // Force an initial update.
 
     fpsData : struct {
         elapsedTime : float64;
@@ -194,8 +194,10 @@ engine_run :: (engine : *Engine) {
                 Basic.reset_temporary_storage();
                 _input_reset(engine);
                 _engine_handle_events(engine, updateTime);
+                _message_update(engine);
                 _engine_update_entities(engine, updateTime);
                 _ui_update(engine);
+                _message_update(engine);
                 updateTimeLag -= updateTime;
                 if engine.options.logFps then _update_fps_counter(*fpsData.updateTime, *fpsData.updateCount, *currentTime);
             }
