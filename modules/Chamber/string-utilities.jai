@@ -159,13 +159,19 @@ utf8_word_length_after_byte :: (s : string, byteIndex : u32) -> u8 {
 }
 
 word_length_after_byte :: (s : string, byteIndex : u32) -> u32 {
+    if s[byteIndex] == #char "\n" then return 1;
+
     foundWord := false;
-    for i : byteIndex + 1 .. cast(u32) s.count - 1 {
+    for i : byteIndex .. cast(u32) s.count - 1 {
+        isSpace := Basic.is_space(s[i]);
         if !foundWord {
-            foundWord = s[i] != #char " ";
+            foundWord = !isSpace;
+            // If we had multiple spaces in a row, we want to erase them and stop before the word.
+            if foundWord && i - byteIndex >= 2 then return i - byteIndex;
             continue;
         }
-        if s[i] == #char " " then return i - byteIndex;
+        // Otherwise we erase 1 space + the word and stop at the end of the word.
+        if isSpace then return i - byteIndex;
     }
     return cast(u32) s.count - byteIndex;
 }
@@ -184,22 +190,28 @@ utf8_word_length_before_byte :: (s : string, byteIndex : u32) -> u8 {
 }
 
 word_length_before_byte :: (s : string, byteIndex : u32) -> u32 {
+    if s[byteIndex - 1] == #char "\n" then return 1;
+
     foundWord := false;
     for < i : byteIndex - 1 .. cast(u32) 0 {
+        isSpace := Basic.is_space(s[i]);
         if !foundWord {
-            foundWord = s[i] != #char " ";
+            foundWord = !isSpace;
+            // If we had multiple spaces in a row, we want to erase them and stop before the word.
+            if foundWord && byteIndex - i - 1 >= 2 then return byteIndex - i - 1;
             continue;
         }
-        if s[i] == #char " " then return byteIndex - i - 1;
+        // Otherwise we erase 1 space + the word and stop at the beginning of the word.
+        if isSpace then return byteIndex - i - 1;
     }
     return byteIndex;
 }
 
 delete_after_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
-    s1 := <<s;
+    s1 := s.*;
     s1.count = byteIndex;
 
-    s2 := <<s;
+    s2 := s.*;
     Basic.advance(*s2, byteIndex + bytesToDelete);
 
     memcpy(s1.data + s1.count, s2.data, s2.count); // :MissingMemmove
@@ -207,10 +219,10 @@ delete_after_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
 }
 
 delete_before_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
-    s1 := <<s;
+    s1 := s.*;
     s1.count = byteIndex - bytesToDelete;
 
-    s2 := <<s;
+    s2 := s.*;
     Basic.advance(*s2, byteIndex);
 
     memcpy(s1.data + s1.count, s2.data, s2.count); // @todo :MissingMemmove Could be memmove, but the intrisics does not exist.
@@ -218,15 +230,15 @@ delete_before_byte :: (s : *string, byteIndex : u32, bytesToDelete : u32) {
 }
 
 insert_after_byte :: (s : *string, byteIndex : u32, c : string) {
-    s1 := <<s;
+    s1 := s.*;
     s1.count = byteIndex;
 
-    s2 := <<s;
+    s2 := s.*;
     Basic.advance(*s2, byteIndex);
 
     // @todo Sometimes, we could prevent the reallocation, if the allocated space is known.
     // So maybe this should take a [..]u8?
-    (<<s) = Basic.sprint("%1%2%3", s1, c, s2);
+    s.* = Basic.sprint("%1%2%3", s1, c, s2);
     Basic.free(s1);
 }
 

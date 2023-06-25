@@ -19,12 +19,12 @@ os_user_path :: (allocator := context.allocator) -> string {
         POSIX :: #import "POSIX";
         posixPath := POSIX.getenv("HOME");
         if posixPath == null then path = "/";
-        else path =  Basic.sprint("%/", to_string(posixPath));
+        else path =  Basic.sprint("%/", Basic.to_string(posixPath));
     } else #if OS == .WINDOWS {
         Windows :: #import "Windows";
         windowsPath := Windows.getenv("HOMEPATH");
         if windowsPath == null then path = "C:\\"; // @todo Should probably list drives.
-        else path =  Basic.sprint("%\\", to_string(windowsPath));
+        else path =  Basic.sprint("%\\", Basic.to_string(windowsPath, c_style_strlen(windowsPath)));
     } else {
         #run Basic.assert(false);
     }
@@ -42,7 +42,7 @@ os_application_data_storage_path :: (allocator := context.allocator) -> string {
     } else #if OS == .WINDOWS {
         Windows :: #import "Windows";
         windowsPath := Windows.getenv("APPDATA");
-        if windowsPath != null then path =  Basic.sprint("%\\", Basic.to_string(windowsPath));
+        if windowsPath != null then path =  Basic.sprint("%\\", Basic.to_string(windowsPath, c_style_strlen(windowsPath)));
         else path = os_user_path();
     } else {
         #run Basic.assert(false);

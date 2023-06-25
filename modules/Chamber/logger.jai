@@ -5,7 +5,6 @@ loggerData : struct {
     ourPath : FileUtilities.Path;
     oldLogger : type_of(Context_Base.logger);
     oldLoggerData : *void;
-    lastMessage : string;
 };
 
 init_logger :: () {
@@ -22,13 +21,12 @@ init_logger :: () {
 }
 
 cleanup_logger :: () {
-    Basic.free(loggerData.lastMessage);
     FileUtilities.free_permanent(loggerData.ourPath);
     context.logger = loggerData.oldLogger;
     context.logger_data = loggerData.oldLoggerData;
 }
 
-logger :: (message : string, data : *void, info : Log_Info) {
+logger :: (inMessage : string, data : *void, info : Log_Info) {
     needFileAndLine := (info.common_flags & .WARNING) || (info.common_flags & .ERROR);
 
     if ((context.log_level < .VERY_VERBOSE) && (info.common_flags & .VERY_VERBOSE_ONLY)) ||
@@ -36,13 +34,9 @@ logger :: (message : string, data : *void, info : Log_Info) {
         return;
     }
 
-    // if loggerData.lastMessage == message then return;
+    message := String.trim_right(inMessage);
 
-    push_allocator(context.default_allocator);
-    if loggerData.lastMessage.count != 0 then Basic.free(loggerData.lastMessage);
-    loggerData.lastMessage = Basic.copy_string(message);
-
-    context.allocator = temp;
+    push_allocator(Basic.temp);
 
     // @note Here we cut down path.words which has been
     // allocated on a temporary storage by removing all

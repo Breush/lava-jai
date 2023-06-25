@@ -73,8 +73,9 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     // :ContextBug We need to reference the first
     // field of the context, otherwise this does not work (for some unknown reason).
     // This is the workaround provided by Jon.
-    #assert(type_info(Context_Base).members[0].name == "thread_index");
-    userData.ctx = xx *context.thread_index;
+    #assert(type_info(Context_Base).members[0].name == "context_info");
+    userData.ctx = xx *context.context_info;
+    // @todo Keep compiler alive?
     compiler := Shaderc.compiler_initialize();
     compileOptions := Shaderc.compile_options_initialize();
     Shaderc.compile_options_set_optimization_level(compileOptions, ifx optimized then Shaderc.OptimizationLevel.Performance else .Zero);
@@ -86,6 +87,8 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     compilationResult := Shaderc.compile_into_spv(compiler, glslFileContent.data, xx glslFileContent.count, shadercShaderKind,
                                                   glslFile.data, "main", compileOptions);
     defer Shaderc.result_release(compilationResult);
+    defer Shaderc.compile_options_release(compileOptions);
+    defer Shaderc.compiler_release(compiler);
 
     status := Shaderc.result_get_compilation_status(compilationResult);
     if status != .Success {
@@ -214,7 +217,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                         uniformFrame.kind = .Block;
                         type := table_find_pointer(*typePointerToType, typePointer);
                         if type != null {
-                            typeInfo, ok := table_find(*typeInfos, <<type);
+                            typeInfo, ok := table_find(*typeInfos, type.*);
 
                             uniformFrame.block.size = typeInfo.size;
                             nextOffset := typeInfo.size;
@@ -222,7 +225,7 @@ spirv_parse :: (fileContent : []u8, $parseUniforms := false) -> Spv {
                                 memberName := Basic.copy_string(member.name);
                                 uniformFrame := table_add(*spv.uniformsFrame, memberName, .{});
                                 uniformFrame.kind = .BlockField;
-                                uniformFrame.blockField.parentName = <<uniformName;
+                                uniformFrame.blockField.parentName = uniformName.*;
                                 uniformFrame.blockField.offset = member.offset;
                                 uniformFrame.blockField.maxSize = (nextOffset - member.offset);
                                 nextOffset = member.offset;
@@ -337,7 +340,7 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
 
     // :ContextBug We need to recreate a variable here,
     // otherwise the wrong context will be popped.
-    ctx := << userData.ctx;
+    ctx := userData.ctx.*;
     push_context ctx {
         requestedSourceString := to_string(requestedSource);
         requestingSourceString := to_string(requestingSource);
@@ -378,9 +381,8 @@ _get_entire_shader_file :: (filename : string, requestingPath : string, dollarFi
             }
         }
     } else {
-        readOk : bool;
         path = Basic.tprint("%/%", requestingPath, filename);
-        code, readOk = File.read_entire_file(path);
+        code=, readOk := File.read_entire_file(path);
     }
 
     if code.count == 0 {

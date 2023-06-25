@@ -49,7 +49,7 @@ font_load :: (filenames : []string, size : float) -> Font {
         fontInfo := Basic.peek_pointer(font.infos);
         fontInfo.filename = filename;
         fileBytes, readOk := File.read_entire_file(filename);
-        _CHECK(readOk, font, Basic.tprint("Unable to read font file: %", filename));
+        _CHECK(readOk, font, "Unable to read font file: %", filename);
         fontInfo.content = fileBytes;
 
         StbTrueType.init_font(*fontInfo.stb, fontInfo.content.data, 0);
@@ -101,7 +101,7 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
 
         pGlyphInfo, glyphInfoPixelsChanged := font_glyph_info(font, codepoint);
         pixelsChanged = pixelsChanged || glyphInfoPixelsChanged;
-        glyphInfo := <<pGlyphInfo;
+        glyphInfo := pGlyphInfo.*;
 
         glyphInfo.offset.x += advance;
 
@@ -110,8 +110,6 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
             advance += (glyphInfo.advance + kernAdvance * glyphInfo.fontInfo.glyphScale);
         }
 
-        // @todo This pseudo-subpixel clean on option?
-        round(*glyphInfo.offset);
         Basic.array_add(*glyphInfos, glyphInfo);
     }
 
@@ -146,6 +144,8 @@ font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo, pixelsCh
     glyphInfo.offset.y = cast(float) (glyphInfo.fontInfo.glyphAscent * glyphInfo.fontInfo.glyphScale + y0);
 
     if glyphInfo.blank return glyphInfo, false;
+
+    // @todo Investigate signed distance fields (stbtt_GetCodepointSDF).
 
     // Draw the bitmap to the pixels
     glyphStartPosition := cast(s32) font.nextGlyphStartPosition;

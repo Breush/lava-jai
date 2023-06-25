@@ -129,12 +129,13 @@ bos_deserialize :: (objectBytes : *u8, typeInfo : *Type_Info, bytes : *Bytes) {
     } else if typeInfo.type == .ARRAY {
         targetTypeInfo := cast(*Type_Info_Array) typeInfo;
         // @todo Handle flatness, if elements are known flats.
-        if targetTypeInfo.array_type == .RESIZABLE || targetTypeInfo.array_type == .VIEW {
+        if targetTypeInfo.array_type == .RESIZABLE {
             arrayLength := bos_deserialize_raw_numeric(bytes, u32);
-            objectArray := cast(*[]u8) objectBytes;
+            objectArray := cast(*[..]u8) objectBytes;
             elementSize := targetTypeInfo.element_type.runtime_size;
             Basic.array_resize(objectArray, arrayLength * elementSize);
             objectArray.count = arrayLength;
+            objectArray.allocated = arrayLength;
             for elementIndex : 0 .. cast,no_check(s32) arrayLength - 1 {
                 bos_deserialize(objectArray.data + elementIndex * elementSize, targetTypeInfo.element_type, bytes);
             }
@@ -162,7 +163,7 @@ bos_deserialize :: (objectBytes : *u8, typeInfo : *Type_Info, bytes : *Bytes) {
             << cast(*s64) (objectBytes + allocatedMember.offset_in_bytes) = cast(s64) allocated;
 
             entryMember := targetTypeInfo.members[4];
-            entryTypeInfo := << cast(**Type_Info_Struct) (targetTypeInfo.constant_storage_buffer + entryMember.offset_into_constant_storage);
+            entryTypeInfo := << cast(**Type_Info_Struct) (targetTypeInfo.constant_storage.data + entryMember.offset_into_constant_storage);
             entrySize := entryTypeInfo.runtime_size;
 
             entriesMember := targetTypeInfo.members[5];
@@ -170,7 +171,7 @@ bos_deserialize :: (objectBytes : *u8, typeInfo : *Type_Info, bytes : *Bytes) {
             Basic.array_resize(entriesArray, allocated * entrySize);
             entriesArray.count = allocated;
 
-            for i : 0 .. count - 1 {
+            for i : 0 .. cast(s32) count - 1 {
                 entryIndex := bos_deserialize_raw_numeric(bytes, u32);
                 bos_deserialize(entriesArray.data + entryIndex * entrySize, entryTypeInfo, bytes);
             }
@@ -295,7 +296,7 @@ bos_serialize :: (sb : *Basic.String_Builder, objectBytes : *u8, typeInfo : *Typ
 
             entryMember := targetTypeInfo.members[4];
             Basic.assert(entryMember.name == "Entry" && entryMember.type.type == .TYPE);
-            entryTypeInfo := << cast(**Type_Info_Struct) (targetTypeInfo.constant_storage_buffer + entryMember.offset_into_constant_storage);
+            entryTypeInfo := << cast(**Type_Info_Struct) (targetTypeInfo.constant_storage.data + entryMember.offset_into_constant_storage);
             entrySize := entryTypeInfo.runtime_size;
 
             entriesMember := targetTypeInfo.members[5];
@@ -330,7 +331,7 @@ bos_serialize :: (sb : *Basic.String_Builder, objectBytes : *u8, typeInfo : *Typ
 
 bos_serialize_type :: (sb : *Basic.String_Builder, typeInfo : *Type_Info, knownTypesMap : *Hash.Table(*Type_Info, BosType), options : BosSerializationOptions) -> BosType {
     knownType := Hash.table_find_pointer(knownTypesMap, typeInfo);
-    if knownType != null then return <<knownType;
+    if knownType != null then return knownType.*;
 
     type : BosType;
     if typeInfo.type == .BOOL {
@@ -376,8 +377,8 @@ bos_serialize_type :: (sb : *Basic.String_Builder, typeInfo : *Type_Info, knownT
             keyParameter := targetTypeInfo.specified_parameters[0];
             valueParameter := targetTypeInfo.specified_parameters[1];
             Basic.assert(keyParameter.name == "Key_Type");
-            keyTypeInfo := << cast(**Type_Info) (targetTypeInfo.constant_storage_buffer + keyParameter.offset_into_constant_storage);
-            valueTypeInfo := << cast(**Type_Info) (targetTypeInfo.constant_storage_buffer + valueParameter.offset_into_constant_storage);
+            keyTypeInfo := << cast(**Type_Info) (targetTypeInfo.constant_storage.data + keyParameter.offset_into_constant_storage);
+            valueTypeInfo := << cast(**Type_Info) (targetTypeInfo.constant_storage.data + valueParameter.offset_into_constant_storage);
 
             // Ensure that key/value types are fully serialized first.
             keyType := bos_serialize_type(sb, keyTypeInfo, knownTypesMap, options);

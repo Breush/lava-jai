@@ -44,9 +44,6 @@ Anchor :: enum {
     BottomLeft; BottomRight;
 }
 
-libc :: #system_library "libc";
-c_free :: (data : *void) -> *void #foreign libc "free";
-
 min :: (a : $T, b : T) -> T #expand {
     return ifx a <= b then a else b;
 }
@@ -78,13 +75,15 @@ copy_files_recursively :: (source : string, dest : string) {
     visitor :: (info : *FileUtilities.File_Visit_Info, paths : Paths) {
         relativePath := info.full_name;
         Basic.advance(*relativePath, paths.source.count);
-        outPath := String.join(paths.dest, "/", relativePath);
+        outPath := String.join(paths.dest, PATH_SEPARATOR, relativePath);
         File.make_directory_if_it_does_not_exist(String.path_strip_filename(outPath));
         FileUtilities.copy_file(info.full_name, outPath);
     }
 
     FileUtilities.visit_files(paths.source, true, paths, visitor);
 }
+
+BUILD_IS_DEBUG :: #run Compiler.get_build_options().array_bounds_check;
 
 debug :: (args : ..Any, loc := #caller_location) {
     format := "%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0%0";
@@ -98,32 +97,37 @@ debug :: (args : ..Any, loc := #caller_location) {
     Basic.log(format, ..args, loc=loc, flags=.CONTENT);
 }
 
-_CHECK :: (result : $R, returnedValue : $T, message : string, fatal := true, loc := #caller_location) #expand {
+_CHECK :: (result : $R, returnedValue : $T, message : string, args : ..Any, fatal := true, loc := #caller_location) #expand
+#modify {
+    return T != string; // To avoid ambuiguity with the other _CHECK below.
+}
+ {
     if !fatal then loggerPushNonFatalOnError();
 
     #if type_of(result) == bool {
         if !result {
             // @note Don't use message directly, as it can have % in its content,
             // raising an error because there are no formatted arguments.
-            Basic.log("%", message, loc=loc, flags=.ERROR);
+            Basic.log(message, ..args, loc=loc, flags=.ERROR);
             if !fatal then loggerPopNonFatalOnError();
             `return returnedValue;
         }
     } else {
         if result != .Success {
-            Basic.log("% (%)", message, result, loc=loc, flags=.ERROR);
+            Basic.log("Result: %", result, loc=loc, flags=.WARNING);
+            Basic.log(message, ..args, loc=loc, flags=.ERROR);
             if !fatal then loggerPopNonFatalOnError();
             `return returnedValue;
         }
     }
 }
 
-_CHECK :: (result : $R, message : string, loc := #caller_location) #expand {
-    _CHECK(result, false, message, loc=loc);
+_CHECK :: (result : $R, message : string, args : ..Any, loc := #caller_location) #expand {
+    _CHECK(result, false, message, ..args, loc=loc);
 }
 
-_CHECK_NON_FATAL :: (result : $R, message : string, loc := #caller_location) #expand {
-    _CHECK(result, false, message, fatal=false, loc=loc);
+_CHECK_NON_FATAL :: (result : $R, message : string, args : ..Any, loc := #caller_location) #expand {
+    _CHECK(result, false, message, ..args, fatal=false, loc=loc);
 }
 
 #scope_module
@@ -134,3 +138,4 @@ FileUtilities :: #import "File_Utilities";
 Hash :: #import "Hash_Table";
 Math :: #import "Math";
 String :: #import "String";
+Compiler :: #import "Compiler";

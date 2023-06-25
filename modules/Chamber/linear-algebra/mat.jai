@@ -161,7 +161,7 @@ unnear_orthographic_projection_matrix :: (extent : vec2, farClip : float) -> mat
 
 unnear_orthographic_projection :: (matrix : *mat4, extent : vec2, farClip : float, $clear := true) {
     #if clear {
-        <<matrix = mat4.{};
+        matrix.* = mat4.{};
     }
 
     matrix.coef[0][0] = 2. / extent.width;
@@ -201,7 +201,7 @@ infinite_perspective_projection_matrix :: (fovX : float32, aspectRatio : float32
 
 infinite_perspective_projection :: (matrix : *mat4, fovX : float32, aspectRatio : float32, nearClip : float, $clear := true) {
     #if clear {
-        <<matrix = mat4.{};
+        matrix.* = mat4.{};
     }
 
     oneOverTanFovXOver2 := 1. / tan(fovX * 0.5);
@@ -217,7 +217,7 @@ infinite_perspective_projection :: (matrix : *mat4, fovX : float32, aspectRatio 
 infinite_perspective_projection :: (matrix : *mat4, angleLeft : float, angleRight : float,
                                     angleUp : float, angleDown : float, nearClip : float, $clear := true) {
     #if clear {
-        <<matrix = mat4.{};
+        matrix.* = mat4.{};
     }
 
     tanAngleLeft := tan(angleLeft);

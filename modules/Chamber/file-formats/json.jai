@@ -49,8 +49,7 @@ json_parse_file :: (filename: string) -> JsonValue, success: bool {
     }
     defer file_close(*file);
 
-    fileData : string;
-    fileData, success = read_entire_file(file);
+    fileData, success= := read_entire_file(file);
     if !success {
         report_error("Couldn’t read file %", filename);
         return result, false;
@@ -86,14 +85,18 @@ json_free :: (using val: JsonValue) {
     }
 }
 
-operator [] :: (json_val: JsonValue, key: string) -> JsonValue {
+get :: (json_val: JsonValue, key: string) -> JsonValue {
     assert(json_val.type == .OBJECT);
-    table := <<json_val.object;
+    table := json_val.object.*;
     val, success := table_find(*table, key);
     if !success then {
         val.type = .INVALID;
     }
     return val;
+}
+
+operator [] :: (json_val: JsonValue, key: string) -> JsonValue {
+    return inline get(json_val, key);
 }
 
 operator [] :: (json_val: JsonValue, i: u64) -> JsonValue {
@@ -122,7 +125,7 @@ parse_value :: (to_parse: string, slot: *u8, info: *Type_Info, ignore_unknown: b
             value_info = pointer_info.pointer_to;
         }
         if value_info.type != expected_type {
-            report_error("Cannot parse % value into type type %", expected_type, <<info);
+            report_error("Cannot parse % value into type type %", expected_type, info.*);
             return null, false, value_info;
         }
         if info.type == .POINTER {
@@ -141,7 +144,7 @@ parse_value :: (to_parse: string, slot: *u8, info: *Type_Info, ignore_unknown: b
             if slot {
                 // @ToDo, @Incomplete: Handle null properly
                 if info.type != .POINTER {
-                    report_error("Got NULL value for non-pointer type %. Assigning default value instead.", <<info);
+                    report_error("Got NULL value for non-pointer type %. Assigning default value instead.", info.*);
                 }
             }
             return remainder, true;
@@ -322,7 +325,7 @@ parse_object :: (str: string, slot: *u8, info: *Type_Info_Struct, ignore_unknown
             member_slot = slot + member.offset_in_bytes;
             member_info = member.type;
         } else if !ignore_unknown {
-            report_error("Missing member % in %", key, <<info);
+            report_error("Missing member % in %", key, info.*);
             return remainder, false;
         }
 
@@ -422,7 +425,7 @@ parse_value :: (to_parse: string) -> JsonValue, remainder: string, success: bool
             result.array, remainder, success = parse_array(remainder);
         case #char "{";
             obj := cast(*JSON_Object) alloc(size_of(JSON_Object));
-            <<obj, remainder, success = parse_object(remainder);
+            obj.*, remainder, success = parse_object(remainder);
             result.type = .OBJECT;
             result.object = obj;
         case;

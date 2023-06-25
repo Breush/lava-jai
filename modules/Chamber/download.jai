@@ -48,7 +48,7 @@ DownloadData :: struct {
 // Curl expects a C function, that's why we have to use #c_call, and since #c_call doesn't provide a context and JAI function need it, we push_context
 write_callback :: (contents : *u8, count : u64, size : u64, downloadData : *DownloadData) -> u64 #c_call {
     totalSize := count * size;
-    push_context << downloadData.ctx {
+    push_context downloadData.ctx.* {
         file_write(downloadData.file, contents, cast(s64) totalSize);
         // print_curl_stats(downloadData.curl);
     }
