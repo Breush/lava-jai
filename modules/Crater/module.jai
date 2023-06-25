@@ -126,6 +126,11 @@ PointerStyle :: enum {
     Text;           // I-beam, usually for horizontal text.
 }
 
+ClipboardKind :: enum {
+    Default :: 0;
+    MousePaste;     // Linux-only, the middle-click paste.
+}
+
 create_window :: (videoMode : VideoMode, title := "") -> *Window {
     window := cast(*Window) Basic.New(Window);
     Basic.remember_allocators(window);
@@ -152,7 +157,7 @@ window_cleanup :: (window : *Window, resetMemory := true) {
     Basic.array_free(window.events);
 
     if resetMemory {
-         (<<window) = Window.{};
+         window.* = .{};
     }
 }
 
@@ -222,6 +227,10 @@ window_poll_event :: (window : *Window, squash := false) -> Event {
     return event;
 }
 
+window_get_clipboard :: (window : *Window, clipboardKind : ClipboardKind) -> string {
+    return impl_window_get_clipboard(window, clipboardKind);
+}
+
 window_close :: (window : *Window) {
     if !window.opened then return;
     window.opened = false;
@@ -279,7 +288,7 @@ _window_add_event :: (window : *Window, event : *Event) {
     }
 
     // @note Adding the event at the start so that we pop the right event.
-    Basic.array_insert_at(*window.events, <<event, 0);
+    Basic.array_insert_at(*window.events, event.*, 0);
 }
 
 _center_pointer :: (window : *Window) {

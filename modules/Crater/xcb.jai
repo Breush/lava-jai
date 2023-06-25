@@ -11,8 +11,9 @@ WindowImpl :: struct {
     xcbId : Xcb.Window;
     xcbConnection : *Xcb.Connection;
     xcbScreen : *Xcb.Screen;
-    xcbProtocolsReply : *Xcb.InternAtomReply;
-    xcbDeleteWindowReply : *Xcb.InternAtomReply;
+    xcbProtocolsAtom : Xcb.Atom;
+    xcbDeleteWindowAtom : Xcb.Atom;
+    xcbClipboardAtom : Xcb.Atom;
     xcbArgb32PictforminfoId : type_of(Xcb.Render.Pictforminfo.id);
     xcbCursors : [#run type_info(PointerStyle).values.count]Xcb.Cursor;
 
@@ -50,14 +51,16 @@ impl_window_init :: (window : *Window) -> bool {
                       cast(u16) Xcb.WindowClass.InputOutput, window.xcbScreen.rootVisual, valueMask, *valueList[0]);
 
     // Enable window destroyed notifications
-    window.xcbProtocolsReply = Xcb.xcb_helper_get_intern_atom(window.xcbConnection, true, "WM_PROTOCOLS");
-    window.xcbDeleteWindowReply = Xcb.xcb_helper_get_intern_atom(window.xcbConnection, false, "WM_DELETE_WINDOW");
-    Xcb.change_property(window.xcbConnection, cast(u8) Xcb.PropMode.Replace, window.xcbId, window.xcbProtocolsReply.atom,
-                        cast(u32) Xcb.AtomEnum.AtomAtom, 32, 1, *window.xcbDeleteWindowReply.atom);
+    window.xcbProtocolsAtom = Xcb.helper_get_intern_atom(window.xcbConnection, true, "WM_PROTOCOLS");
+    window.xcbDeleteWindowAtom = Xcb.helper_get_intern_atom(window.xcbConnection, false, "WM_DELETE_WINDOW");
+    window.xcbClipboardAtom = Xcb.helper_get_intern_atom(window.xcbConnection, false, "WM_DELETE_WINDOW");
+
+    Xcb.change_property(window.xcbConnection, cast(u8) Xcb.PropMode.Replace, window.xcbId, window.xcbProtocolsAtom,
+                        cast(u32) Xcb.AtomEnum.Atom, 32, 1, *window.xcbDeleteWindowAtom);
 
     // Set title
     Xcb.change_property(window.xcbConnection, cast(u8) Xcb.PropMode.Replace, window.xcbId,
-                        cast(u32) Xcb.AtomEnum.AtomWmName, cast(u32) Xcb.AtomEnum.AtomString, 8, cast(u32) window.title.count, window.title.data);
+                        cast(u32) Xcb.AtomEnum.WmName, cast(u32) Xcb.AtomEnum.String, 8, cast(u32) window.title.count, window.title.data);
 
     // Show the final window
     Xcb.map_window(window.xcbConnection, window.xcbId);
@@ -76,10 +79,10 @@ impl_window_init :: (window : *Window) -> bool {
         }
         Xcb.Render.pictforminfo_next(*pfIterator);
     }
-    Chamber.c_free(pfReply);
+    Xcb.c_free(pfReply);
 
     // Finding the cursor theme path
-    rmCookie := Xcb.get_property(window.xcbConnection, 0, window.xcbScreen.root, cast(u32) Xcb.AtomEnum.AtomResourceManager, cast(u32) Xcb.AtomEnum.AtomString, 0, 16 * 1024); // Arbitrary size...
+    rmCookie := Xcb.get_property(window.xcbConnection, 0, window.xcbScreen.root, cast(u32) Xcb.AtomEnum.ResourceManager, cast(u32) Xcb.AtomEnum.String, 0, 16 * 1024); // Arbitrary size...
     rmReply := Xcb.get_property_reply(window.xcbConnection, rmCookie, null);
     rmValue : string;
     rmValue.data = Xcb.get_property_value(rmReply);
@@ -94,7 +97,7 @@ impl_window_init :: (window : *Window) -> bool {
             window.systemCursorThemeName = Basic.sprint(String.trim_left(it));
         }
     }
-    Chamber.c_free(rmReply);
+    Xcb.c_free(rmReply);
 
     baseCursorThemePath : [..]string;
     defer Basic.array_free(baseCursorThemePath);
@@ -139,7 +142,7 @@ impl_window_process_events :: (window : *Window) {
         if event == null then break;
 
         _window_event_process(window, event);
-        Chamber.c_free(event);
+        Xcb.c_free(event);
     }
 }
 
@@ -147,9 +150,6 @@ impl_window_close :: (window : *Window) {
     Xkb.state_unref(window.xkbState);
     Xkb.keymap_unref(window.xkbKeymap);
     Xkb.context_unref(window.xkbContext);
-
-    Chamber.c_free(window.xcbProtocolsReply);
-    Chamber.c_free(window.xcbDeleteWindowReply);
 
     Basic.free(window.systemCursorThemeName);
     Basic.free(window.systemCursorThemePath);
@@ -202,6 +202,52 @@ impl_window_update_pointer_style :: (window : *Window) {
 
     Xcb.change_window_attributes(window.xcbConnection, window.xcbId, cast(u32) Xcb.Cw.Cursor, *cursor);
     Xcb.flush(window.xcbConnection);
+}
+
+impl_window_get_clipboard :: (window : *Window, clipboardKind : ClipboardKind) -> string {
+    clipboardAtom := ifx clipboardKind == .Default then window.xcbClipboardAtom else cast(Xcb.Atom) Xcb.AtomEnum.Primary;
+    storageAtom := ifx clipboardKind == .Default then cast(u32) Xcb.AtomEnum.CutBuffer1 else cast(u32) Xcb.AtomEnum.CutBuffer2;
+
+    // Request the data to our window.
+    Xcb.convert_selection(window.xcbConnection, window.xcbId, clipboardAtom, cast(u32) Xcb.AtomEnum.String, storageAtom, Xcb.CURRENT_TIME);
+    Xcb.flush(window.xcbConnection);
+
+    // We need to wait for the SelectionNotify event.
+    event : *Xcb.GenericEvent;
+    selectionNotifyFound : bool;
+    for cast(s32) 1 .. cast(s32) 10 {
+        event = Xcb.poll_for_event(window.xcbConnection);
+        if event == null {
+            // Will wait 1ms then 2ms etc. until 10ms - so this is a 55ms timeout.
+            Basic.sleep_milliseconds(it);
+            continue;
+        }
+
+        defer Xcb.c_free(event);
+        if event.responseType & 0x7f == Xcb.SELECTION_NOTIFY {
+            selectionNotifyEvent := cast(*Xcb.SelectionNotifyEvent) event;
+            if selectionNotifyEvent.requestor == window.xcbId {
+                // @todo Not handling "INCR" for large buffers to be copied.
+                selectionNotifyFound = selectionNotifyEvent.target == cast(u32) Xcb.AtomEnum.String;
+                break;
+            }
+        }
+
+        _window_event_process(window, event);
+    }
+
+    if !selectionNotifyFound then return ""; // Timeout.
+
+    // And read it.
+    contentCookie := Xcb.get_property(window.xcbConnection, 0, window.xcbId, storageAtom, cast(u32) Xcb.AtomEnum.String, 0, 16 * 1024); // Arbitrary size...
+    contentReply := Xcb.get_property_reply(window.xcbConnection, contentCookie, null);
+    defer Xcb.c_free(contentReply);
+
+    contentValue : string;
+    contentValue.data = Xcb.get_property_value(contentReply);
+    contentValue.count = Xcb.get_property_value_length(contentReply);
+
+    return contentValue;
 }
 
 #scope_file
@@ -284,7 +330,7 @@ _window_event_process :: (window : *Window, xcbEvent : *Xcb.GenericEvent) {
     if xcbEvent.responseType & 0x7f == {
     case Xcb.CLIENT_MESSAGE;
         clientMessageEvent := cast(*Xcb.ClientMessageEvent) xcbEvent;
-        if clientMessageEvent.data.data32[0] != window.xcbDeleteWindowReply.atom {
+        if clientMessageEvent.data.data32[0] != window.xcbDeleteWindowAtom {
             return;
         }
 

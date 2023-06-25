@@ -43,7 +43,7 @@ impl_window_init :: (window : *Window) -> bool {
                                           null, null,
                                           window.hInstance, null);
 
-    _CHECK(window.hWnd != null, Basic.tprint("Unable to create window handle: %.", Windows.GetLastError()));
+    _CHECK(window.hWnd != null, "Unable to create window handle: %.", Windows.GetLastError());
 
     SetWindowLongPtrW(window.hWnd, Windows.GWL_USERDATA, cast(LONG_PTR) window);
 
@@ -94,6 +94,11 @@ impl_window_update_pointer_style :: (window : *Window) {
     }
 
     Windows.SetCursor(cursor);
+}
+
+impl_window_get_clipboard :: (window : *Window, clipboardKind : ClipboardKind) -> string {
+    if clipboardKind == .MousePaste then return "";
+    return Clipboard.os_clipboard_get_text();
 }
 
 #scope_file
@@ -281,3 +286,4 @@ _virtual_key_to_key :: (wParam : Windows.WPARAM) -> Key {
 
 Windows :: #import "Windows";
 WindowsUtf8 :: #import "Windows_Utf8";
+Clipboard :: #import "Clipboard";
