@@ -22,7 +22,7 @@ component_cleanup :: (iTransform : *TransformComponent, resetMemory := true) {
     Basic.array_free(iTransform.worldTransformChangedCallbacks);
 
     if resetMemory {
-        <<iTransform = TransformComponent.{};
+        iTransform.* = .{};
     }
 }
 
@@ -74,8 +74,7 @@ transform_origin_target :: (iTransform : *TransformComponent, origin : Chamber.v
 }
 
 transform_on_world_transform_changed :: (iTransform : *TransformComponent, function : (committed : bool, userData : *$T), userData : *T = null) {
-    Basic.array_add(*iTransform.worldTransformChangedCallbacks, .{});
-    callback := Basic.peek_pointer(iTransform.worldTransformChangedCallbacks);
+    callback := Basic.array_add(*iTransform.worldTransformChangedCallbacks);
     callback.function = cast(TransformComponent.WorldTransformChangedCallbackType) function;
     callback.userData = userData;
 }

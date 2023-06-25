@@ -44,6 +44,7 @@ UiCallbackFlags :: enum_flags u16 {
     DragDrop;   // User dropped the draggable element that was dragged. Always called before DragStop.
     DragStop;   // User stopped dragging, either by canceling it with another mouse button or by dropping.
     Scrolling;
+    MousePasting;
 
     Stop :: HoverStop | ClickStop | FocusStop | DragStop;
 }
@@ -55,17 +56,17 @@ UiTrigger :: struct {
 }
 
 component_init :: (iUi : *UiComponent) {
-    ui_register_component(iUi.entity.engine, iUi);
+    ui_register_component(*iUi.entity.engine.ui, iUi);
 }
 
 component_cleanup :: (iUi : *UiComponent) {
-    ui_unregister_component(iUi.entity.engine, iUi);
+    ui_unregister_component(*iUi.entity.engine.ui, iUi);
     Basic.array_reset(*iUi.triggerCallbacks);
 }
 
 component_update :: (iUi : *UiComponent, dt : float64) {
     if iUi.entity.flags & .DisabledChanged {
-        _ui_set_hovered_components_dirty(iUi.entity.engine);
+        _ui_set_hovered_components_dirty(*iUi.entity.engine.ui);
     }
 }
 
@@ -79,14 +80,14 @@ ui_on_trigger :: (iUi : *UiComponent, function : (trigger : UiTrigger, userData 
 ui_check_hovered_handler :: (iUi : *UiComponent, function : (hovered : bool, relativeMousePointerPosition : Chamber.vec2, userData : *$T) -> bool, userData : *T = null) {
     iUi.checkHoveredHandler = cast(UiComponent.CheckHoveredHandlerType) function;
     iUi.checkHoveredHandlerUserData = userData;
-    _ui_set_hovered_components_dirty(iUi.entity.engine);
+    _ui_set_hovered_components_dirty(*iUi.entity.engine.ui);
 }
 
 ui_set_focused :: (iUi : *UiComponent, focused := true) {
     if focused {
-        _ui_set_focused(iUi.entity.engine, iUi);
+        _ui_set_focused(*iUi.entity.engine.ui, iUi);
     } else {
-        _ui_set_focused(iUi.entity.engine, null);
+        _ui_set_focused(*iUi.entity.engine.ui, null);
     }
 }
 

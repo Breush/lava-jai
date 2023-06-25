@@ -8,14 +8,14 @@ ListenerComponent :: struct {
 }
 
 component_init :: (iListener : *ListenerComponent) {
-    message_register_component(iListener.entity.engine, iListener);
+    message_register_component(*iListener.entity.engine.message, iListener);
 }
 
 component_cleanup :: (iListener : *ListenerComponent, resetMemory := true) {
-    message_unregister_component(iListener.entity.engine, iListener);
+    message_unregister_component(*iListener.entity.engine.message, iListener);
     Basic.array_reset(*iListener.messageCallbacks);
     if resetMemory {
-        <<iListener = ListenerComponent.{};
+        iListener.* = .{};
     }
 }
 

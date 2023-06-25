@@ -14,10 +14,11 @@ EngineBase :: struct {
     vrRightRenderer : *Magma.Renderer;
 }
 
-    #as fonts : Fonts;
-    #as input : Input;
-    #as message : Message;
-    #as ui : Ui;
+    // :AsProblem Using #as here causes runtime errors if we pass *engine later one.
+    fonts : Fonts;
+    input : Input;
+    message : Message;
+    ui : Ui;
 
     // User control.
     options : EngineOptions;
@@ -47,7 +48,8 @@ EngineOptions :: struct {
 
     // Features, create renderers/targets accordingly.
     postProcessing := false;
-    rayTracing := false;
+
+    renderEngine : Magma.Engine.Options;
 }
 
 create_engine :: ($_Meta : Type, options := EngineOptions.{}) -> *Engine(_Meta) {
@@ -79,13 +81,7 @@ engine_init :: (engine : *EngineBase) {
     engine.window = Crater.create_window(videoMode, engine.options.windowTitle);
 
     // Rendering
-    renderEngineOptions : Magma.Engine.Options;
-    renderEngineOptions.features |= .Vr;
-    if engine.options.rayTracing {
-        renderEngineOptions.features |= .RayTracing;
-    }
-
-    engine.renderEngine = Magma.create_engine(renderEngineOptions);
+    engine.renderEngine = Magma.create_engine(engine.options.renderEngine);
     engine.windowTarget = Magma.create_window_target(engine.renderEngine, Crater.window_get_handle(engine.window));
     engine.scene = Magma.create_scene(engine.renderEngine);
 
@@ -111,7 +107,7 @@ engine_init :: (engine : *EngineBase) {
     }
 
     if classicRendererRequired {
-        if engine.options.rayTracing {
+        if engine.options.renderEngine.features & .RayTracing {
             engine.renderer = Magma.create_ray_tracing_renderer(engine.scene, engine.options.windowExtent);
         } else {
             engine.renderer = Magma.create_forward_renderer(engine.scene, engine.options.windowExtent);
@@ -125,20 +121,20 @@ engine_init :: (engine : *EngineBase) {
         }
     }
 
-    _fonts_init(engine, engine.renderEngine);
+    _fonts_init(*engine.fonts, engine.renderEngine);
 }
 
 engine_cleanup :: (engine : *Engine, resetMemory := true) {
-    _ui_cleanup(engine);
-    _input_cleanup(engine);
-    _fonts_cleanup(engine);
-    _message_cleanup(engine);
+    _ui_cleanup(*engine.ui);
+    _input_cleanup(*engine.input);
+    _fonts_cleanup(*engine.fonts);
+    _message_cleanup(*engine.message);
     engine.Meta._cleanup_entities(engine);
 
     Basic.array_free(engine.pendingDestroyedEntities);
 
     if resetMemory {
-        <<engine = Engine(engine.Meta).{};
+        engine.* = Engine(engine.Meta).{};
     }
 }
 
@@ -190,14 +186,17 @@ engine_run :: (engine : *Engine) {
         } else {
             // We play logic at a constant rate.
             updateTimeLag += elapsedTime;
-            while (updateTimeLag >= updateTime) {
+            // @fixme If rendering is slow and updates are fast, it would be better
+            // to have a while loop here.
+            // However, if updates are slow, better just do one round of updates here.
+            if (updateTimeLag >= updateTime) {
                 Basic.reset_temporary_storage();
-                _input_reset(engine);
+                _input_reset(*engine.input);
                 _engine_handle_events(engine, updateTime);
-                _message_update(engine);
+                _message_update(*engine.message);
                 _engine_update_entities(engine, updateTime);
-                _ui_update(engine);
-                _message_update(engine);
+                _ui_update(*engine.ui);
+                _message_update(*engine.message);
                 updateTimeLag -= updateTime;
                 if engine.options.logFps then _update_fps_counter(*fpsData.updateTime, *fpsData.updateCount, *currentTime);
             }
@@ -216,9 +215,9 @@ engine_run :: (engine : *Engine) {
 
 _update_fps_counter :: (time : *float64, count : *s64, sinceTime : *float64) {
     newTime := Basic.get_time();
-    << time += newTime - << sinceTime;
-    << sinceTime = newTime;
-    << count += 1;
+    time.* += newTime - sinceTime.*;
+    sinceTime.* = newTime;
+    count.* += 1;
 }
 
 _engine_update_entities :: (engine : *Engine, updateTime : float64) {
@@ -226,10 +225,12 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
 
     // Remove pending entities
     if (engine.pendingDestroyedEntities.count != 0) {
-        // Some entities might remove others, so we copy everything before-hand.
-        pendingDestroyedEntities := Basic.array_copy(engine.pendingDestroyedEntities);
+        // Some entities might remove others, so we store everything before-hand.
+        pendingDestroyedEntities := engine.pendingDestroyedEntities;
         defer Basic.array_free(pendingDestroyedEntities);
+        engine.pendingDestroyedEntities.data = null;
         engine.pendingDestroyedEntities.count = 0;
+        engine.pendingDestroyedEntities.allocated = 0;
 
         for entity : pendingDestroyedEntities {
             engine.Meta._destroy_entity(entity);
@@ -240,22 +241,24 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
 _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
     event := Crater.window_poll_event(engine.window, squash = true);
 
+    startTime := Basic.get_time();
     while event.kind != .None {
-        if event.kind == .WindowClosed {
-            engine.closingMainWindow = true;
-            return;
-        }
-        else if event.kind == .WindowSizeChanged {
+        if event.kind == .WindowSizeChanged {
             engine.windowSizeChangedTimer = 0.150;
             engine.options.windowExtent = Crater.window_get_extent(engine.window);
             return;
         }
 
         stopPropagation := false;
-        _ui_handle_event(engine, event, *stopPropagation);
+        _ui_handle_event(*engine.ui, event, *stopPropagation);
         if !stopPropagation {
-            _input_handle_event(engine, event);
+            _input_handle_event(*engine.input, event);
             if engine.options.eventHandler then engine.options.eventHandler(event);
+        }
+
+        // Just hop out if we're taking too long.
+        if Basic.get_time() - startTime > updateTime * 0.5 {
+            break;
         }
 
         event = Crater.window_poll_event(engine.window, squash = true);

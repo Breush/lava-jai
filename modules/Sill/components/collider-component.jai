@@ -25,7 +25,7 @@ component_cleanup :: (iCollider : *ColliderComponent, resetMemory := true) {
     Basic.array_free(iCollider.boxShapes);
 
     if resetMemory {
-        <<iCollider = .{};
+        iCollider.* = .{};
     }
 }
 

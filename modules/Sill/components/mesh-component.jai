@@ -35,7 +35,7 @@ component_cleanup :: (iMesh : *MeshComponent, resetMemory := true) {
     Basic.array_free(iMesh.nodes);
 
     if resetMemory {
-        <<iMesh = MeshComponent.{};
+        iMesh.* = .{};
     }
 }
 
@@ -59,11 +59,15 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
 
 // Utility function for ease, better tweak manually the nodes and primitives
 // arrays if you know the size in advance.
-mesh_make_primitive :: (iMesh : *MeshComponent) -> *Magma.Mesh, *MeshNode {
+mesh_make_primitive :: (iMesh : *MeshComponent, parent := -1) -> *Magma.Mesh, *MeshNode {
     mesh := Magma.create_mesh(iMesh.entity.engine.scene);
     node := Basic.array_add(*iMesh.nodes);
     Basic.array_add(*node.primitives, mesh);
     iMesh._nodesTransformsDirty = true;
+    if parent != -1 {
+        Basic.array_add(*iMesh.nodes[parent].children, iMesh.nodes.count - 1);
+        node.parent = parent;
+    }
     return mesh, node;
 }
 
@@ -71,7 +75,7 @@ mesh_make_primitives :: (iMesh : *MeshComponent, count : u32) -> []*Magma.Mesh, 
     node := Basic.array_add(*iMesh.nodes);
     Basic.array_resize(*node.primitives, count);
     for *primitive : node.primitives {
-        << primitive = Magma.create_mesh(iMesh.entity.engine.scene);
+        primitive.* = Magma.create_mesh(iMesh.entity.engine.scene);
     }
     iMesh._nodesTransformsDirty = true;
     return node.primitives, node;
@@ -445,7 +449,7 @@ _glb_load_mesh :: (iMesh : *MeshComponent, meshIndex : u64, glb : Glb, cache : *
 _glb_set_material :: (iMesh : *MeshComponent, iPrimitive : *Magma.Mesh, materialIndex : u64, glb : Glb, cache : *Cache) {
     cachedMaterial := table_find_pointer(*cache.material, materialIndex);
     if cachedMaterial != null {
-        iPrimitive.material = <<cachedMaterial;
+        iPrimitive.material = cachedMaterial.*;
         return;
     }
 
@@ -518,7 +522,7 @@ _glb_set_texture :: (iMaterial : *Magma.Material, uniformName : string, textureR
     // @todo Engine-wise texture cache (based on pixels hash).
     cachedTexture := table_find_pointer(*cache.bufferViewToTexture, bufferViewIndex);
     if cachedTexture != null {
-        Magma.material_set(iMaterial, uniformName, <<cachedTexture);
+        Magma.material_set(iMaterial, uniformName, cachedTexture.*);
         return;
     }
 

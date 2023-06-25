@@ -17,7 +17,7 @@ component_cleanup :: (iBehavior : *BehaviorComponent, resetMemory := true) {
     Basic.array_free(iBehavior.updateCallbacks);
 
     if resetMemory {
-        <<iBehavior = BehaviorComponent.{};
+        iBehavior.* = BehaviorComponent.{};
     }
 }
 

@@ -32,9 +32,11 @@ Component :: struct {
 destroy_entity :: (entity : *Entity, destroyChildren := false, warnParent := true) {
     Basic.array_add(*entity.engine.pendingDestroyedEntities, entity);
     entity.flags |= .Destroyed;
-    if destroyChildren {
-        for child : entity.children {
+    for child : entity.children {
+        if destroyChildren {
             destroy_entity(child, destroyChildren = true, warnParent = false);
+        } else {
+            entity_set_parent(child, null, warnOldParent = false);
         }
     }
     if warnParent then entity_set_parent(entity, null, warnOldParent = true);

@@ -9,7 +9,9 @@ Input :: struct {
         changed : bool;             // Action was updated since last reset.
         previousActiveness : u8;    // Activess at the last reset.
         activeness : u8;            // How many buttons/keys are currently down.
-        keys : [..]Crater.Key;      // @todo These are "OR". But we will need to express "AND" somehow.
+        // @todo These are "OR". But we will need to express "AND" somehow.
+        keys : [..]Crater.Key;
+        mouseButtons : [..]Crater.MouseButton;
         triggers : [..]Trigger;
 
         Trigger :: struct {
@@ -44,6 +46,11 @@ input_state :: (input : *Input, key : Crater.Key) -> bool {
 input_action_bind :: (input : *Input, actionName : string, key : Crater.Key) {
     action := Chamber.table_find_or_add(*input.actions, actionName);
     Basic.array_add_if_unique(*action.keys, key);
+}
+
+input_action_bind :: (input : *Input, actionName : string, mouseButton : Crater.MouseButton) {
+    action := Chamber.table_find_or_add(*input.actions, actionName);
+    Basic.array_add_if_unique(*action.mouseButtons, mouseButton);
 }
 
 input_action_bind :: (input : *Input, actionName : string, triggerKind : Input.VrTriggerKind) {
@@ -95,6 +102,7 @@ input_axis_value :: (input : *Input, axisName : string) -> float32 {
 _input_cleanup :: (input : *Input) {
     for *action : input.actions {
         Basic.array_free(action.keys);
+        Basic.array_free(action.mouseButtons);
         Basic.array_free(action.triggers);
     }
     for *axis : input.axes {
@@ -125,8 +133,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
                 action.activeness += 1;
             }
         }
-    }
-    else if event.kind == .KeyReleased {
+    } else if event.kind == .KeyReleased {
         for *action : input.actions {
             input.keyStates[event.key.which] = false;
             if action.activeness == 0 then continue;
@@ -136,8 +143,24 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
                 action.activeness -= 1;
             }
         }
-    }
-    else if event.kind == .MousePointerMoved {
+    } else if event.kind == .MouseButtonPressed {
+        for *action : input.actions {
+            mouseButtonFound, _ := Basic.array_find(action.mouseButtons, event.mouseButton.which);
+            if mouseButtonFound {
+                action.changed = true;
+                action.activeness += 1;
+            }
+        }
+    } else if event.kind == .MouseButtonReleased {
+        for *action : input.actions {
+            if action.activeness == 0 then continue;
+            mouseButtonFound, _ := Basic.array_find(action.mouseButtons, event.mouseButton.which);
+            if mouseButtonFound {
+                action.changed = true;
+                action.activeness -= 1;
+            }
+        }
+    } else if event.kind == .MousePointerMoved {
         for *axis : input.axes {
             for kind : axis.kinds {
                 if kind == .MousePointerX {
@@ -147,8 +170,7 @@ _input_handle_event :: (input : *Input, event : Crater.Event) {
                 }
             }
         }
-    }
-    else if event.kind == .MouseWheelScrolled {
+    } else if event.kind == .MouseWheelScrolled {
         for *axis : input.axes {
             for kind : axis.kinds {
                 if kind == .MouseWheelY {

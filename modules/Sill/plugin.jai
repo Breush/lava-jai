@@ -359,14 +359,15 @@ _generate :: (workspace : s64) {
         Basic.print_to_builder(*builder, "\n    create_%_entity :: (engine : *Sill.Engine) -> *% {\n", metaEntity.idSnakeCase, metaEntity.structName);
         Basic.print_to_builder(*builder, "        array := *engine.entities.%;\n", metaEntity.idCamelCase);
         Basic.append(*builder, "        entity, _ := Bucket_Array.find_and_occupy_empty_slot(array);\n");
-        Basic.print_to_builder(*builder, "        <<entity = %.{};\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "        entity.* = %.{};\n", metaEntity.structName);
         Basic.append(*builder, "        engine.Meta.entity_init(entity, engine);\n");
         Basic.append(*builder, "        return entity;\n");
         Basic.append(*builder, "    }\n");
+        // destroy a specific entity does not warn parent & children as the generic dstroy_entity does it for us.
         Basic.print_to_builder(*builder, "\n    destroy_%_entity :: (entity : *%) {\n", metaEntity.idSnakeCase, metaEntity.structName);
-        Basic.append(*builder, "        entity_cleanup(entity, warnParent = false);\n");
+        Basic.append(*builder, "        entity_cleanup(entity, warnParentAndChildren = false);\n");
         Basic.print_to_builder(*builder, "        array := *(cast(*Sill.Engine(SillMeta)) entity.engine).entities.%;\n", metaEntity.idCamelCase);
-        Basic.append(*builder, "        for *bucketedEntity : <<array {\n");
+        Basic.append(*builder, "        for *bucketedEntity : array.* {\n");
         Basic.append(*builder, "            if entity == bucketedEntity {\n");
         Basic.append(*builder, "                remove bucketedEntity;\n");
         Basic.append(*builder, "                break;\n");
@@ -395,12 +396,17 @@ _generate :: (workspace : s64) {
     }
 
     for metaEntity : metaEntityList {
-        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%, warnParent := true) {\n", metaEntity.structName);
+        Basic.print_to_builder(*builder, "\n    entity_cleanup :: (entity : *%, warnParentAndChildren := true) {\n", metaEntity.structName);
         Basic.append(*builder, "        #import \"Sill\";\n");
         if metaEntity.hasOnCleanup {
             Basic.append(*builder, "        entity.on_cleanup(entity);\n");
         }
-        Basic.append(*builder, "        if warnParent then entity_set_parent(entity, null, warnOldParent = true);\n");
+        Basic.append(*builder, "        if warnParentAndChildren {\n");
+        Basic.append(*builder, "            entity_set_parent(entity, null, warnOldParent = true);\n");
+        Basic.append(*builder, "            for child : entity.children {\n");
+        Basic.append(*builder, "                entity_set_parent(child, null, warnOldParent = false);\n");
+        Basic.append(*builder, "            }\n");
+        Basic.append(*builder, "        }\n");
         for structMember : metaEntity.structMembers {
             if structMember.kind == .Component {
                 Basic.print_to_builder(*builder, "        component_cleanup(*entity.%);\n", structMember.id);
@@ -433,7 +439,7 @@ _generate :: (workspace : s64) {
     for metaEntity : metaEntityList {
         if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
-        Basic.append(*builder, "            engine.Meta.entity_cleanup(entity);\n");
+        Basic.append(*builder, "            engine.Meta.entity_cleanup(entity, /*warnParent = false*/);\n");
         Basic.append(*builder, "        }\n");
         Basic.print_to_builder(*builder, "        Bucket_Array.bucket_array_reset(*engine.entities.%);\n", metaEntity.idCamelCase);
     }
@@ -444,6 +450,7 @@ _generate :: (workspace : s64) {
         if metaEntity.noStorage then continue;
         Basic.print_to_builder(*builder, "        for *entity : engine.entities.% {\n", metaEntity.idCamelCase);
         Basic.append(*builder, "            if entity.flags & .Destroyed then continue;\n");
+        Basic.append(*builder, "            if (entity.flags & .Disabled) && !(entity.flags & .DisabledChanged) then continue;\n");
         Basic.append(*builder, "            engine.Meta.entity_update(entity, dt);\n");
         Basic.append(*builder, "        }\n");
     }

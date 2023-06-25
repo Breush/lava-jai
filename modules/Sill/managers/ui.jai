@@ -44,9 +44,9 @@ ui_unregister_component :: (ui : *Ui, uiComponent : *UiComponent) {
 }
 
 _ui_cleanup :: (ui : *Ui) {
-    Basic.array_free(ui.uiComponents);
-    Basic.array_free(ui.hoveredUiComponents);
-    Basic.array_free(ui.draggedUiComponents);
+    Basic.array_reset(*ui.uiComponents);
+    Basic.array_reset(*ui.hoveredUiComponents);
+    Basic.array_reset(*ui.draggedUiComponents);
 }
 
 _ui_update :: (ui : *Ui) {
@@ -83,7 +83,7 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         _ui_lock_set_focused(ui);
         for uiComponent : ui.hoveredUiComponents {
             ui_send_trigger(uiComponent, .ClickStart, event, stopPropagation);
-            if <<stopPropagation then break;
+            if stopPropagation.* then break;
         }
         _ui_lock_set_focused(ui, false);
         _ui_do_set_focused(ui, ui.focusedUiComponentDuringLock);
@@ -116,17 +116,22 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         if !ui.pressedMouseButtons[event.mouseButton.which] then return;
         ui.pressedMouseButtons[event.mouseButton.which] = false;
 
-        _ui_lock_set_focused(ui);
+        if event.mouseButton.which == .Middle && ui.focusedUiComponent != null {
+            ui_send_trigger(ui.focusedUiComponent, .MousePasting, event, stopPropagation);
+            if stopPropagation.* then return;
+        }
+
+        _ui_lock_set_focused(ui, resetIfLocked = false);
         for uiComponent : ui.hoveredUiComponents {
             ui_send_trigger(uiComponent, .ClickStop, event, stopPropagation);
-            if <<stopPropagation then break;
+            if stopPropagation.* then break;
         }
         _ui_lock_set_focused(ui, false);
         _ui_do_set_focused(ui, ui.focusedUiComponentDuringLock);
     } else if event.kind == .MouseWheelScrolled {
         for uiComponent : ui.hoveredUiComponents {
             ui_send_trigger(uiComponent, .Scrolling, event, stopPropagation);
-            if <<stopPropagation then break uiComponent;
+            if stopPropagation.* then break uiComponent;
         }
     } else if event.kind == .TextEntered {
         if ui.focusedUiComponent {
@@ -134,7 +139,12 @@ _ui_handle_event :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool) {
         }
     } else if event.kind == .KeyPressed {
         if ui.focusedUiComponent {
-            ui_send_trigger(ui.focusedUiComponent, .Key, event, stopPropagation);
+            if event.key.which == .Escape {
+                _ui_set_focused(ui, null);
+                stopPropagation.* = true;
+            } else {
+                ui_send_trigger(ui.focusedUiComponent, .Key, event, stopPropagation);
+            }
         }
     }
 }
@@ -158,14 +168,14 @@ _update_dragged_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
         ui.draggingState = .Moving;
         for uiComponent : ui.draggedUiComponents {
             ui_send_trigger(uiComponent, .DragStart, ui.dragEvent, stopPropagation);
-            if <<stopPropagation then break;
+            if stopPropagation.* then break;
         }
     }
 
     if ui.draggingState == .Moving {
         for uiComponent : ui.draggedUiComponents {
             ui_send_trigger(uiComponent, .Dragging, event, stopPropagation);
-            if <<stopPropagation then break;
+            if stopPropagation.* then break;
         }
     }
 }
@@ -185,7 +195,7 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
             ui_send_trigger(uiComponent, .Hovering, event, stopPropagation);
             Basic.array_add(*ui.hoveredUiComponents, uiComponent);
         }
-        if <<stopPropagation then break;
+        if stopPropagation.* then break;
     }
 
     // Triggering hover-start/stop callbacks.
@@ -204,9 +214,9 @@ _update_hovered_ui_components :: (ui : *Ui, event : Crater.Event, stopPropagatio
     ui.hoveredUiComponentsDirty = false;
 }
 
-_ui_lock_set_focused :: (ui : *Ui, locked := true) {
+_ui_lock_set_focused :: (ui : *Ui, locked := true, resetIfLocked := true) {
     ui.setFocusedLocked = locked;
-    if ui.setFocusedLocked then ui.focusedUiComponentDuringLock = ui.focusedUiComponent;
+    if ui.setFocusedLocked && resetIfLocked then ui.focusedUiComponentDuringLock = null;
 }
 
 _ui_do_set_focused :: (ui : *Ui, uiComponent : *UiComponent) {
@@ -223,14 +233,14 @@ _ui_stop_dragging :: (ui : *Ui, event : Crater.Event, stopPropagation : *bool, s
     // This allows us to cancel a drag by clicking another button,
     // without creating a ClickStop event for that other button.
     for *pressedMouseButton : ui.pressedMouseButtons {
-        <<pressedMouseButton = false;
+        pressedMouseButton.* = false;
     }
 
     ui.draggingState = .None;
     for uiComponent : ui.draggedUiComponents {
         if sendDrop then ui_send_trigger(uiComponent, .DragDrop, event, stopPropagation);
         ui_send_trigger(uiComponent, .DragStop, event, stopPropagation);
-        if <<stopPropagation then break;
+        if stopPropagation.* then break;
     }
     _update_hovered_ui_components(ui, event, stopPropagation);
 }

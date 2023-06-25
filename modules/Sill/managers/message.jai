@@ -17,13 +17,13 @@ message_unregister_component :: (message : *Message, listenerComponent : *Listen
 
 message_send :: (message : *Message, data : $T) {
     messageContent := cast(*T) Pool.get(*message.messagesPool, size_of(T));
-    << messageContent = data;
+    messageContent.* = data;
     Basic.array_add(*message.messages, messageContent);
 }
 
 _message_cleanup :: (using message : *Message) {
-    Basic.array_free(listenerComponents);
-    Basic.array_free(messages);
+    Basic.array_reset(*listenerComponents);
+    Basic.array_reset(*messages);
     Pool.release(*messagesPool);
 }
 
