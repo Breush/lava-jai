@@ -65,7 +65,7 @@ _change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, src
         srcStageMask = .FragmentShader;
     } else if srcImageUsage == .FragmentOutput {
         srcLayout = .ShaderReadOnlyOptimal;
-        srcAccessMask = .ShaderWrite;
+        srcAccessMask = .ShaderRead;
         srcStageMask = .FragmentShader;
     } else if dstImageUsage == .RayTracingOutput {
         dstLayout = .General;
@@ -91,7 +91,7 @@ _change_image_layout :: (commandBuffer : Vk.CommandBuffer, image : Vk.Image, src
         dstStageMask = .FragmentShader;
     } else if dstImageUsage == .FragmentOutput {
         dstLayout = .ShaderReadOnlyOptimal;
-        dstAccessMask = .ShaderWrite;
+        dstAccessMask = .ShaderRead;
         dstStageMask = .FragmentShader;
     } else if dstImageUsage == .RayTracingOutput {
         dstLayout = .General;

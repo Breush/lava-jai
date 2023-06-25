@@ -55,6 +55,12 @@ _init_pipeline :: (shader : *Shader, vertShaderModule : *ShaderModule = null, fr
         Basic.array_resize(*shader.descriptorSetLayouts, setLayoutMaxIndex + 1);
     }
 
+    uniformIndex : u32 = 0;
+    for *uniformFrame, uniformName : shader.uniformsFrame {
+        Hash.table_add(*shader.uniformsNameToIndex, Basic.copy_string(uniformName), uniformIndex);
+        uniformIndex += 1;
+    }
+
     for setLayoutIndex : 0..setLayoutMaxIndex {
         setLayoutBindings : [..]Vk.DescriptorSetLayoutBinding;
         defer Basic.array_free(setLayoutBindings);
@@ -81,6 +87,7 @@ _init_pipeline :: (shader : *Shader, vertShaderModule : *ShaderModule = null, fr
         descriptorSetLayoutCI.sType = .DescriptorSetLayoutCreateInfo;
         descriptorSetLayoutCI.bindingCount = cast(u32) setLayoutBindings.count;
         descriptorSetLayoutCI.pBindings = setLayoutBindings.data;
+        descriptorSetLayoutCI.flags = cast(u32) Vk.DescriptorSetLayoutCreateFlagBits.DescriptorBufferExt;
 
         _CHECK(Vk.create_descriptor_set_layout(engine.device, *descriptorSetLayoutCI, null, *shader.descriptorSetLayouts[setLayoutIndex]),
                "Unable to create descriptor set layout.");
@@ -137,8 +144,6 @@ _init_pipeline :: (shader : *Shader, vertShaderModule : *ShaderModule = null, fr
     inputAssemblyStateCI.primitiveRestartEnable = Vk.FALSE;
 
     // ---
-
-    extent := renderer_get_extent(shader.renderer, 0); // @todo Let user choose which output.
 
     // Will be dynamic
     viewport : Vk.Viewport;
@@ -228,6 +233,7 @@ _init_pipeline :: (shader : *Shader, vertShaderModule : *ShaderModule = null, fr
     pipelineCI.renderPass = _renderer_get_render_pass(shader.renderer);
     pipelineCI.subpass = 0;
     pipelineCI.basePipelineHandle = null;
+    pipelineCI.flags = cast(u32) Vk.PipelineCreateFlagBits.DescriptorBufferExt;
 
     _CHECK(Vk.create_graphics_pipelines(engine.device, null, 1, *pipelineCI, null, *shader.pipeline),
            "Unable to create graphics pipeline.");

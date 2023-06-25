@@ -16,7 +16,7 @@ ImageHolder :: struct {
     extent : Chamber.uvec2;
     format : Vk.Format;
     channelsCount : u8;
-    deviceMemory : Vk.DeviceMemory;
+    allocation : Vma.Allocation;
 }
 
 _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
@@ -72,7 +72,7 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
         }
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.TransferDst | Vk.ImageUsageFlagBits.Sampled | Vk.ImageUsageFlagBits.ColorAttachment;
     } else if kind == .Depth {
-        format = Vk.Format.D32Sfloat;
+        format = Vk.Format.D32SfloatS8Uint;
         imageCI.usage = cast(u32) Vk.ImageUsageFlagBits.DepthStencilAttachment;
     } else if kind == .StorageR8 {
         format = Vk.Format.R8Unorm;
@@ -86,36 +86,22 @@ _image_holder_init :: (using imageHolder : *ImageHolder, _engine : *Engine,
 
     imageCI.format = format;
 
-    _CHECK(Vk.create_image(engine.device, *imageCI, null, *image),
-           "Unable to create image.");
-    _set_debug_utils_name(engine.device, image, Basic.tprint("%.image\0", _name).data);
-
-    // Device memory
-    memoryRequirements : Vk.MemoryRequirements;
-    Vk.get_image_memory_requirements(engine.device, image, *memoryRequirements);
-
-    memoryAI : Vk.MemoryAllocateInfo;
-    memoryAI.sType = .MemoryAllocateInfo;
-    memoryAI.allocationSize = memoryRequirements.size;
-    memoryAI.memoryTypeIndex = _select_best_memory_type_index(engine, memoryRequirements.memoryTypeBits, cast(u32) Vk.MemoryPropertyFlagBits.DeviceLocal);
-
-    _CHECK(Vk.allocate_memory(engine.device, *memoryAI, null, *deviceMemory),
+    allocationCI : Vma.AllocationCreateInfo;
+    allocationCI.usage = .Auto;
+    _CHECK(Vma.create_image(engine.alloc, *imageCI, *allocationCI, *image, *allocation, null),
            "Unable to allocate image memory.");
-
-    Vk.bind_image_memory(engine.device, image, deviceMemory, 0);
+    _set_debug_utils_name(engine.device, image, Basic.tprint("%.image\0", _name).data);
 
     return true;
 }
 
 _image_holder_cleanup :: (using imageHolder : *ImageHolder, resetMemory := true) {
     if image != null {
-        Vk.device_wait_idle(engine.device);
-        Vk.destroy_image(engine.device, image, null);
-        Vk.free_memory(engine.device, deviceMemory, null);
+        Vma.destroy_image(engine.alloc, image, allocation);
     }
 
     if resetMemory {
-        <<imageHolder = .{};
+        imageHolder.* = .{};
     }
 }
 
@@ -189,11 +175,13 @@ BufferHolder :: struct {
         AccelerationStructureInput;     // AccelerationStructureBuildInputReadOnlyKHR
         AccelerationStructureStorage;   // AccelerationStructureStorageKHR
         AccelerationStructureScratch;   // StorageBuffer
+        Descriptor;                     // DescriptorBuffer
     }
 
     CpuIo :: enum {
         Unknown :: 0;
         None;               // Should never be read/written from CPU.
+        AlwaysMapped;       // Always mapped, meaning that the buffer is stored on CPU.
         Direct;             // Manipulated directly, meaning that the buffer is stored on CPU.
         OnDemandStaging;    // Manipulated through a staging buffer created each time a copy is needed.
         PersistentStaging;  // Manipulated through a persistent staging buffer.
@@ -206,8 +194,9 @@ BufferHolder :: struct {
     capacity : Vk.DeviceSize;
 
     buffer : Vk.Buffer;
-    deviceMemory : Vk.DeviceMemory;
+    allocation : Vma.Allocation;
     deviceAddress : Vk.DeviceAddress;
+    mappedData : *void;
 
     stagingBufferHolder : *BufferHolder; // Set only when cpuIo == .PersistentStaging
 }
@@ -216,8 +205,6 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
                         _kind : BufferHolder.Kind, _cpuIo : BufferHolder.CpuIo,
                         _size : Vk.DeviceSize) -> bool {
     if engine == _engine && kind == _kind && cpuIo == _cpuIo && size == _size then return true;
-
-
     if capacity >= _size && engine == _engine && kind == _kind && cpuIo == _cpuIo {
         size = _size;
         return true;
@@ -254,7 +241,7 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
             bufferCIFlags |= cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureBuildInputReadOnlyKhr;
         }
     } else if kind == .ShaderUniform {
-        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.UniformBuffer;
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.UniformBuffer | .ShaderDeviceAddress;
     } else if kind == .ShaderStorage {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.StorageBuffer;
     } else if kind == .ShaderBindingTable {
@@ -265,6 +252,8 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.AccelerationStructureStorageKhr;
     } else if kind == .AccelerationStructureScratch {
         bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.StorageBuffer;
+    } else if kind == .Descriptor {
+        bufferCIFlags = cast(u32) Vk.BufferUsageFlagBits.ResourceDescriptorBuffer | .ShaderDeviceAddress;
     }
 
     if engine.options.features & .RayTracing {
@@ -280,36 +269,17 @@ _buffer_holder_init :: (using bufferHolder : *BufferHolder, _engine : *Engine, n
     bufferCI.size = size;
     bufferCI.usage = bufferCIFlags;
     bufferCI.sharingMode = Vk.SharingMode.Exclusive;
-    _CHECK(Vk.create_buffer(engine.device, *bufferCI, null, *buffer),
-           "Unable to create buffer.");
+
+    allocationCI : Vma.AllocationCreateInfo;
+    allocationCI.usage = .Auto;
+
+    if cpuIo == .Direct || cpuIo == .AlwaysMapped {
+        allocationCI.flags = cast(u32) Vma.AllocationCreateFlagBits.HostAccessSequentialWrite;
+    }
+
+    _CHECK(Vma.create_buffer(engine.alloc, *bufferCI, *allocationCI, *buffer, *allocation, null),
+           "Unable to allocate buffer memory.");
     _set_debug_utils_name(engine.device, buffer, Basic.tprint("%.buffer\0", name).data);
-
-    memoryRequirements : Vk.MemoryRequirements;
-    Vk.get_buffer_memory_requirements(engine.device, buffer, *memoryRequirements);
-
-    memoryPropertyFlags := cast(Vk.MemoryPropertyFlags) Vk.MemoryPropertyFlagBits.DeviceLocal;
-    if cpuIo == .Direct {
-        memoryPropertyFlags = cast(u32) Vk.MemoryPropertyFlagBits.HostVisible | Vk.MemoryPropertyFlagBits.HostCoherent;
-    }
-
-    memoryAI : Vk.MemoryAllocateInfo;
-    memoryAI.sType = .MemoryAllocateInfo;
-    memoryAI.allocationSize = memoryRequirements.size;
-    memoryAI.memoryTypeIndex = _select_best_memory_type_index(engine, memoryRequirements.memoryTypeBits,
-                                                              memoryPropertyFlags);
-
-    memoryAFI : Vk.MemoryAllocateFlagsInfo;
-    if bufferCIFlags & cast(u32) Vk.BufferUsageFlagBits.ShaderDeviceAddress {
-        memoryAFI.sType = .MemoryAllocateFlagsInfo;
-        memoryAFI.flags = cast(u32) Vk.MemoryAllocateFlagBits.DeviceAddress;
-        memoryAI.pNext = *memoryAFI;
-    }
-
-    _CHECK(Vk.allocate_memory(engine.device, *memoryAI, null, *deviceMemory),
-           "Unable to create buffer device memory.");
-    _set_debug_utils_name(engine.device, deviceMemory, Basic.tprint("%.deviceMemory\0", name).data);
-
-    Vk.bind_buffer_memory(engine.device, buffer, deviceMemory, 0);
 
     return true;
 }
@@ -320,13 +290,17 @@ _buffer_holder_cleanup :: (using bufferHolder : *BufferHolder, resetMemory := tr
         Basic.free(stagingBufferHolder);
     }
 
-    if bufferHolder.engine != null {
-        Vk.destroy_buffer(engine.device, buffer, null);
-        Vk.free_memory(engine.device, deviceMemory, null);
+    if engine != null {
+        Vk.device_wait_idle(engine.device);
+        if mappedData {
+            mappedData = null;
+            Vma.unmap_memory(engine.alloc, allocation);
+        }
+        Vma.destroy_buffer(engine.alloc, buffer, allocation);
     }
 
     if resetMemory {
-        <<bufferHolder = .{};
+        bufferHolder.* = .{};
     }
 }
 
@@ -337,11 +311,14 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : $T) -> bool {
 _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSize : Vk.DeviceSize) -> bool {
     if dataSize == 0 then return false;
 
-    if cpuIo == .Direct {
+    if cpuIo == .AlwaysMapped {
+        if mappedData == null then Vma.map_memory(engine.alloc, allocation, *mappedData);
+        memcpy(mappedData, data, cast(s64) dataSize);
+    } if cpuIo == .Direct {
         targetData : *void;
-        Vk.map_memory(engine.device, deviceMemory, 0, size, 0, *targetData);
+        Vma.map_memory(engine.alloc, allocation, *targetData);
         memcpy(targetData, data, cast(s64) dataSize);
-        Vk.unmap_memory(engine.device, deviceMemory);
+        Vma.unmap_memory(engine.alloc, allocation);
     } else if cpuIo == .OnDemandStaging {
         stagingBufferHolder : BufferHolder;
         _buffer_holder_init(*stagingBufferHolder, engine, "buffer-holder.stagingBufferHolder", .Staging, .Direct, dataSize);
@@ -358,6 +335,15 @@ _buffer_holder_copy :: (using bufferHolder : *BufferHolder, data : *void, dataSi
     }
 
     return true;
+}
+
+_buffer_holder_mapped_data :: inline (using bufferHolder : *BufferHolder) -> *void {
+    if cpuIo == .AlwaysMapped {
+        if mappedData == null then Vma.map_memory(engine.alloc, allocation, *mappedData);
+        return mappedData;
+    } else {
+        return null;
+    }
 }
 
 _buffer_holder_device_address :: (using bufferHolder : *BufferHolder) -> Vk.DeviceAddress {

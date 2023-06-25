@@ -8,6 +8,7 @@ Shader :: struct {
 
     materials : [..]*Material;
     uniformsFrame : *Chamber.UniformsFrame;
+    uniformsNameToIndex : Hash.Table(string, u32);
     options : ShaderOptions;
 
     using shaderImpl : ShaderImpl;
@@ -53,10 +54,14 @@ shader_init :: (shader : *Shader, renderer : *Renderer, id : string, options : S
 shader_cleanup :: (shader : *Shader, resetMemory := true) {
     impl_shader_cleanup(shader);
 
+    for _, uniformName : shader.uniformsNameToIndex {
+        Basic.free(uniformName);
+    }
     Basic.array_free(shader.materials);
+    Hash.deinit(*shader.uniformsNameToIndex);
 
     if resetMemory {
-        <<shader = Shader.{};
+        shader.* = Shader.{};
     }
 }
 

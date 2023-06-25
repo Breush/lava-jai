@@ -83,9 +83,9 @@ _window_target_draw :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
 
     if result == .ErrorOutOfDateKhr || result == .SuboptimalKhr {
         _recreate_swapchain(windowTarget);
-        return true;
+        return false;
     } else {
-        _CHECK(result, Basic.tprint("Unable to acquire next swapchain image: %", result));
+        _CHECK(result, "Unable to acquire next swapchain image: %", result);
     }
 
     if !_renderer_render(windowTarget.rendererOutput.renderer, frameIndex) then return false;
@@ -131,12 +131,16 @@ _render :: (windowTarget : *WindowTarget, frameIndex : u8) -> bool {
     filter := Vk.Filter.Linear;
     if windowTarget.options.filter == .Nearest then filter = Vk.Filter.Nearest;
 
-    _change_image_layout(commandBuffer, swapchainImage, .DontCare, .TransferOutput);
-    _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.usage, .TransferInput);
-    Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
-                      swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
-    _change_image_layout(commandBuffer, rendererImageInfo.image, .TransferInput, rendererImageInfo.usage);
-    _change_image_layout(commandBuffer, swapchainImage, .TransferOutput, .PresentInput);
+    if rendererImageInfo.layout != .Undefined {
+        _change_image_layout(commandBuffer, swapchainImage, .DontCare, .TransferOutput);
+        _change_image_layout(commandBuffer, rendererImageInfo.image, rendererImageInfo.usage, .TransferInput);
+        Vk.cmd_blit_image(commandBuffer, rendererImageInfo.image, Vk.ImageLayout.TransferSrcOptimal,
+                          swapchainImage, Vk.ImageLayout.TransferDstOptimal, 1, *imageBlit, filter);
+        _change_image_layout(commandBuffer, rendererImageInfo.image, .TransferInput, rendererImageInfo.usage);
+        _change_image_layout(commandBuffer, swapchainImage, .TransferOutput, .PresentInput);
+    } else {
+        _change_image_layout(commandBuffer, swapchainImage, .DontCare, .PresentInput);
+    }
 
     Vk.end_command_buffer(commandBuffer);
 
@@ -266,6 +270,10 @@ _init_swapchain :: (windowTarget : *WindowTarget) -> bool {
 
     _CHECK(Vk.create_swapchain_khr(windowTarget.engine.device, *swapchainCI, null, *windowTarget.swapchain),
            "Unable to create swapchain.");
+
+    if swapchainCI.oldSwapchain != null && swapchainCI.oldSwapchain != windowTarget.swapchain {
+        Vk.destroy_swapchain_khr(windowTarget.engine.device, swapchainCI.oldSwapchain, null);
+    }
 
     // Swapchain images
     Vk.array_fill(*windowTarget.swapchainImages, Vk.get_swapchain_images_khr, windowTarget.engine.device, windowTarget.swapchain);

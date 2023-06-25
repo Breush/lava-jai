@@ -285,7 +285,7 @@ _forward_renderer_cleanup :: (forwardRenderer : *ForwardRenderer, resetMemory : 
     impl_forward_renderer_cleanup(forwardRenderer);
 
     if resetMemory {
-        <<forwardRenderer = .{};
+        forwardRenderer.* = .{};
     }
 }
 
@@ -293,7 +293,7 @@ _ray_tracing_renderer_cleanup :: (rayTracingRenderer : *RayTracingRenderer, rese
     impl_ray_tracing_renderer_cleanup(rayTracingRenderer);
 
     if resetMemory {
-        <<rayTracingRenderer = .{};
+        rayTracingRenderer.* = .{};
     }
 }
 
@@ -301,6 +301,6 @@ _post_process_renderer_cleanup :: (postProcessRenderer : *PostProcessRenderer, r
     impl_post_process_renderer_cleanup(postProcessRenderer);
 
     if resetMemory {
-        <<postProcessRenderer = .{};
+        postProcessRenderer.* = .{};
     }
 }

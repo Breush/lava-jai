@@ -106,7 +106,7 @@ window_target_cleanup :: (windowTarget : *WindowTarget, resetMemory := true) {
     impl_window_target_cleanup(windowTarget);
 
     if resetMemory {
-        <<windowTarget = WindowTarget.{};
+        windowTarget.* = WindowTarget.{};
     }
 }
 

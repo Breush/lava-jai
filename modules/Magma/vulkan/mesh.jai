@@ -28,12 +28,6 @@ impl_mesh_cleanup :: (mesh : *Mesh) {
 }
 
 impl_mesh_update :: (mesh : *Mesh) -> bool {
-    if mesh.verticesDirty {
-        if !_rebuild_vertex_buffer(mesh) then return false;
-    }
-    if mesh.indicesDirty {
-        if !_rebuild_index_buffer(mesh) then return false;
-    }
     if (mesh.verticesDirty || mesh.indicesDirty) &&
        (mesh.scene.engine.options.features & .RayTracing) {
         if !_rebuild_blas(mesh) then return false;
@@ -48,6 +42,13 @@ _mesh_post_init :: (mesh : *Mesh) {
 _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
     if mesh.indices.count == 0 then return;
 
+    if mesh.verticesDirty {
+        _rebuild_vertex_buffer(mesh);
+    }
+    if mesh.indicesDirty {
+        _rebuild_index_buffer(mesh);
+    }
+
     offsets := cast(Vk.DeviceSize) 0;
     Vk.cmd_bind_vertex_buffers(commandBuffer, 0, 1, *mesh.vertexBufferHolder.buffer, *offsets);
     instanceBuffer, instanceOffset := _scene_instance_buffer_and_offset(mesh.scene, mesh.sharedInstanceRef);
@@ -60,18 +61,18 @@ _mesh_draw :: (mesh : *Mesh, commandBuffer : Vk.CommandBuffer) {
 #scope_file
 
 _rebuild_vertex_buffer :: (using mesh : *Mesh) -> bool {
-    // @todo Using .Direct instead of .OnDemandStaging for vertex and index buffers
-    // make them really fast for integrated GPUs. Definitely an idea.
     _buffer_holder_init(*vertexBufferHolder, scene.engine, "mesh.vertexBufferHolder",
-                        .ShaderVertex, .OnDemandStaging, size_of(VertexInput) * cast(u64) vertices.count);
+                        .ShaderVertex, .Direct, size_of(VertexInput) * cast(u64) vertices.count);
     _buffer_holder_copy(*vertexBufferHolder, vertices.data, vertexBufferHolder.size);
+    mesh.verticesDirty = false;
     return true;
 }
 
 _rebuild_index_buffer :: (using mesh : *Mesh) -> bool {
     _buffer_holder_init(*indexBufferHolder, scene.engine, "mesh.indexBufferHolder",
-                        .ShaderIndex, .OnDemandStaging, size_of(u16) * cast(u64) indices.count);
+                        .ShaderIndex, .Direct, size_of(u16) * cast(u64) indices.count);
     _buffer_holder_copy(*indexBufferHolder, indices.data, indexBufferHolder.size);
+    mesh.indicesDirty = false;
     return true;
 }
 

@@ -55,7 +55,7 @@ scene_cleanup :: (scene : *Scene, resetMemory := true) {
     Basic.array_free(scene.meshes);
 
     if resetMemory {
-        <<scene = Scene.{};
+        scene.* = Scene.{};
     }
 }
 

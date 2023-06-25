@@ -1,9 +1,6 @@
 MaterialImpl :: struct {
-    // @todo :PushDescriptors or descriptor buffers (https://www.khronos.org/blog/vk-ext-descriptor-buffer)
-    // might be a better solution long term than having multiple descriptor sets.
-    descriptorSets : [2]Vk.DescriptorSet;
-    descriptorPool : Vk.DescriptorPool;
     descriptorSetIndex : u32;
+    descriptorBufferHolder : BufferHolder;
 
     UniformBlockImpl :: struct {
         bufferHolder : BufferHolder;
@@ -16,12 +13,12 @@ impl_material_init :: (material : *Material) {
     for *uniform : material.uniforms {
         if uniform.kind == .Block {
             _buffer_holder_init(*uniform.block.bufferHolder, engine, "material.uniforms[].block.bufferHolder",
-                                .ShaderUniform, .PersistentStaging, cast(u64) uniform.block.buffer.count);
+                                .ShaderUniform, .Direct, cast(u64) uniform.block.buffer.count);
             _set_debug_utils_name(engine.device, uniform.block.bufferHolder.buffer, "material.uniforms[].block.buffer");
         }
     }
 
-    _init_descriptor_set(material);
+    _init_descriptor_buffer(material);
 }
 
 impl_material_cleanup :: (material : *Material) {
@@ -33,10 +30,7 @@ impl_material_cleanup :: (material : *Material) {
         }
     }
 
-    // @todo This will be needed when the pool moves to shader.
-    // So that one can destroy a material at will.
-    // Vk.free_descriptor_sets(engine.device, material.descriptorPool, 1, *material.descriptorSet);
-    Vk.destroy_descriptor_pool(engine.device, material.descriptorPool, null);
+    _buffer_holder_cleanup(*material.descriptorBufferHolder, false);
 }
 
 impl_material_uniform_commit :: (material : *Material, uniform : *Material.Uniform) {
@@ -47,27 +41,32 @@ impl_material_uniform_commit :: (material : *Material, uniform : *Material.Unifo
             _material_uniform_commit(material, uniform.binding, uniform.texture.fallback);
         }
     } else if uniform.kind == .Block {
-        _buffer_holder_copy(*uniform.block.bufferHolder, uniform.block.buffer.data, cast(Vk.DeviceSize) uniform.block.buffer.count);
         _material_uniform_commit(material, uniform.binding, uniform.block);
     }
 }
 
 _material_draw :: (material : *Material, commandBuffer : Vk.CommandBuffer) {
     // @note This can happen if the material does not have any uniforms (e.g. fallback).
-    if material.descriptorSets[material.inFlightDescriptorSetIndex] == null then return;
+    if material.uniforms.count == 0 then return;
 
-    Vk.cmd_bind_descriptor_sets(commandBuffer, .Graphics, material.shader.pipelineLayout, material.descriptorSetIndex,
-                                1, *material.descriptorSets[material.inFlightDescriptorSetIndex], 0, null);
+    bindingInfo : Vk.DescriptorBufferBindingInfoEXT;
+    bindingInfo.sType = .DescriptorBufferBindingInfoExt;
+    bindingInfo.address = _buffer_holder_device_address(*material.descriptorBufferHolder);
+    bindingInfo.usage = cast(u32) Vk.BufferUsageFlagBits.ResourceDescriptorBuffer;
+
+    // @todo Technically known to be slow. An material catalog would help, but add complexity.
+    Vk.cmd_bind_descriptor_buffers_ext(commandBuffer, 1, *bindingInfo);
+
+    bufferIndexUbo : u32;
+    bufferOffset : Vk.DeviceSize;
+    Vk.cmd_set_descriptor_buffer_offsets_ext(commandBuffer, .Graphics, material.shader.pipelineLayout, material.descriptorSetIndex,
+                                             1, *bufferIndexUbo, *bufferOffset);
 }
 
 #scope_file
 
-_init_descriptor_set :: (material : *Material) -> bool {
+_init_descriptor_buffer :: (material : *Material) -> bool {
     engine := material.shader.renderer.scene.engine;
-
-    // @todo We could move the descriptor pool to the shader,
-    // and that number should not be arbitrary anymore.
-    MAX_DESCRIPTOR_SET_COUNT :: 2; // :PushDescriptors
 
     blockSize : u32 = 0;
     textureCount : u32 = 0;
@@ -79,63 +78,37 @@ _init_descriptor_set :: (material : *Material) -> bool {
         }
     }
 
-    // Some trick here to not do dynamic allocations.
-    descriptorPoolSizes : [2]Vk.DescriptorPoolSize;
-    descriptorPoolSizesCount : u32 = 0;
+    if textureCount == 0 && blockSize == 0 then return true;
 
-    if blockSize != 0 {
-        descriptorPoolSizes[descriptorPoolSizesCount].type = .UniformBuffer;
-        descriptorPoolSizes[descriptorPoolSizesCount].descriptorCount = blockSize * MAX_DESCRIPTOR_SET_COUNT;
-        descriptorPoolSizesCount += 1;
-    }
-    if textureCount != 0 {
-        descriptorPoolSizes[descriptorPoolSizesCount].type = .CombinedImageSampler;
-        descriptorPoolSizes[descriptorPoolSizesCount].descriptorCount = textureCount * MAX_DESCRIPTOR_SET_COUNT;
-        descriptorPoolSizesCount += 1;
-    }
+    memorySize : Vk.DeviceSize;
+    Vk.get_descriptor_set_layout_size_ext(engine.device, material.shader.descriptorSetLayouts[material.descriptorSetIndex], *memorySize);
 
-    // @note No descriptor set to create: neither block nor texture.
-    if descriptorPoolSizesCount == 0 then return true;
-
-    descriptorPoolCI : Vk.DescriptorPoolCreateInfo;
-    descriptorPoolCI.sType = .DescriptorPoolCreateInfo;
-    descriptorPoolCI.poolSizeCount = descriptorPoolSizesCount;
-    descriptorPoolCI.pPoolSizes = descriptorPoolSizes.data;
-    descriptorPoolCI.maxSets = MAX_DESCRIPTOR_SET_COUNT;
-    // descriptorPoolCI.flags = cast(u32) Vk.DescriptorPoolCreateFlagBits.FreeDescriptorSet;
-
-    _CHECK(Vk.create_descriptor_pool(engine.device, *descriptorPoolCI, null, *material.descriptorPool),
-           "Unable to create descriptor pool.");
-
-    // :PushDescriptors
-    descriptorsetLayouts : [2]Vk.DescriptorSetLayout;
-    descriptorsetLayouts[0] = material.shader.descriptorSetLayouts[material.descriptorSetIndex];
-    descriptorsetLayouts[1] = material.shader.descriptorSetLayouts[material.descriptorSetIndex];
-
-    descriptorSetAI : Vk.DescriptorSetAllocateInfo;
-    descriptorSetAI.sType = .DescriptorSetAllocateInfo;
-    descriptorSetAI.descriptorPool = material.descriptorPool;
-    descriptorSetAI.descriptorSetCount = 2; // :PushDescriptors
-    descriptorSetAI.pSetLayouts = descriptorsetLayouts.data;
-
-    _CHECK(Vk.allocate_descriptor_sets(engine.device, *descriptorSetAI, *material.descriptorSets[0]),
-           "Unable to allocate descriptor sets.");
-
-    for descriptorSet : material.descriptorSets {
-        _set_debug_utils_name(engine.device, descriptorSet, Basic.tprint("material{%}.descriptorSets[]\0", material.shader.id).data);
-    }
+    _buffer_holder_init(*material.descriptorBufferHolder, engine, "material.descriptorBufferHolder",
+                        .Descriptor, .AlwaysMapped, memorySize);
 
     // Initialization to default
     for *uniform, uniformKey : material.uniforms {
         if uniform.kind == .Texture {
             uniform.texture.fallback = *engine.textureWhite;
-            uniform.dirties[0] = true;
-            uniform.dirties[1] = true;
-            material.anyUniformDirty = true;
+            uniform.dirty = true;
         } else if uniform.kind == .Block {
-            uniform.dirties[0] = true;
-            uniform.dirties[1] = true;
-            material.anyUniformDirty = true;
+            uniform.dirty = true;
+
+            offset : Vk.DeviceSize;
+            Vk.get_descriptor_set_layout_binding_offset_ext(engine.device, material.shader.descriptorSetLayouts[material.descriptorSetIndex],
+                                                            uniform.binding, *offset);
+
+            descriptorAddressInfo : Vk.DescriptorAddressInfoEXT;
+            descriptorAddressInfo.sType = .DescriptorAddressInfoExt;
+            descriptorAddressInfo.address = _buffer_holder_device_address(*uniform.block.bufferHolder);
+            descriptorAddressInfo.range = uniform.block.bufferHolder.size;
+
+            descInfo : Vk.DescriptorGetInfoEXT;
+            descInfo.sType = .DescriptorGetInfoExt;
+            descInfo.type = .UniformBuffer;
+            descInfo.data.pUniformBuffer = *descriptorAddressInfo;
+            Vk.get_descriptor_ext(engine.device, *descInfo, engine.physicalDeviceDescriptorBufferProperties.uniformBufferDescriptorSize,
+                                _buffer_holder_mapped_data(*material.descriptorBufferHolder) + offset);
         }
     }
 
@@ -145,41 +118,25 @@ _init_descriptor_set :: (material : *Material) -> bool {
 _material_uniform_commit :: (material : *Material, binding : u32, texture : *Texture) {
     engine := material.shader.renderer.scene.engine;
 
+    offset : Vk.DeviceSize;
+    Vk.get_descriptor_set_layout_binding_offset_ext(engine.device, material.shader.descriptorSetLayouts[material.descriptorSetIndex],
+                                                    binding, *offset);
+
     descriptorII : Vk.DescriptorImageInfo;
     descriptorII.imageLayout = texture.imageLayout;
     descriptorII.imageView = texture.imageView;
     descriptorII.sampler = engine.samplerDefault;
 
-    writeDescriptorSet : Vk.WriteDescriptorSet;
-    writeDescriptorSet.sType = .WriteDescriptorSet;
-    writeDescriptorSet.dstSet = material.descriptorSets[material.inFlightDescriptorSetIndex];
-    writeDescriptorSet.dstBinding = binding;
-    writeDescriptorSet.dstArrayElement = 0;
-    writeDescriptorSet.descriptorType = .CombinedImageSampler;
-    writeDescriptorSet.descriptorCount = 1;
-    writeDescriptorSet.pImageInfo = *descriptorII;
-
-    Vk.update_descriptor_sets(engine.device, 1, *writeDescriptorSet, 0, null);
+    descInfo : Vk.DescriptorGetInfoEXT;
+    descInfo.sType = .DescriptorGetInfoExt;
+    descInfo.type = .CombinedImageSampler;
+    descInfo.data.pCombinedImageSampler = *descriptorII;
+    Vk.get_descriptor_ext(engine.device, *descInfo, engine.physicalDeviceDescriptorBufferProperties.combinedImageSamplerDescriptorSize,
+                          _buffer_holder_mapped_data(*material.descriptorBufferHolder) + offset);
 }
 
 _material_uniform_commit :: (material : *Material, binding : u32, block : Material.UniformBlock) {
-    engine := material.shader.renderer.scene.engine;
-
-    descriptorBI : Vk.DescriptorBufferInfo;
-    descriptorBI.buffer = block.bufferHolder.buffer;
-    descriptorBI.offset = 0;
-    descriptorBI.range = block.bufferHolder.size;
-
-    writeDescriptorSet : Vk.WriteDescriptorSet;
-    writeDescriptorSet.sType = .WriteDescriptorSet;
-    writeDescriptorSet.dstSet = material.descriptorSets[material.inFlightDescriptorSetIndex];
-    writeDescriptorSet.dstBinding = binding;
-    writeDescriptorSet.dstArrayElement = 0;
-    writeDescriptorSet.descriptorType = .UniformBuffer;
-    writeDescriptorSet.descriptorCount = 1;
-    writeDescriptorSet.pBufferInfo = *descriptorBI;
-
-    Vk.update_descriptor_sets(engine.device, 1, *writeDescriptorSet, 0, null);
+    _buffer_holder_copy(*block.bufferHolder, block.buffer.data, cast(Vk.DeviceSize) block.buffer.count);
 }
 
 #import "Hash_Table";

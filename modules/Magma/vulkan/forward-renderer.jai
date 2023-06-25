@@ -5,7 +5,7 @@ ForwardRendererImpl :: struct {
 
     extraFrameObjects : [Engine.FRAME_INDEX_COUNT]struct {
         imageHolder : ImageHolder;
-        imageView : Vk.ImageView;
+        imageInfo : ImageInfo;
         depthImageHolder : ImageHolder;
         depthImageView : Vk.ImageView;
         framebuffer : Vk.Framebuffer;
@@ -66,12 +66,13 @@ _forward_renderer_post_init :: (forwardRenderer : *ForwardRenderer) -> bool {
 
 _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8) -> bool {
     commandBuffer := forwardRenderer.frameObjects[frameIndex].commandBuffer;
+    forwardRenderer.extraFrameObjects[frameIndex].imageInfo.layout = forwardRenderer.FINAL_IMAGE_LAYOUT;
 
     renderPassBeginInfo : Vk.RenderPassBeginInfo;
     renderPassBeginInfo.sType = .RenderPassBeginInfo;
     renderPassBeginInfo.renderPass = forwardRenderer.renderPass;
     renderPassBeginInfo.framebuffer = forwardRenderer.extraFrameObjects[frameIndex].framebuffer;
-    // @fixme Could use the render area and viewports and avoid the ComposePostProcess
+    // @todo Could use the render area and viewports and avoid the ComposePostProcess
     renderPassBeginInfo.renderArea.extent.width = forwardRenderer.eye.extent.width;
     renderPassBeginInfo.renderArea.extent.height = forwardRenderer.eye.extent.height;
 
@@ -116,6 +117,10 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     // kind of an insertion sort.
     forwardRenderer.scene.currentRendererMaterialFallback = *forwardRenderer.materialFallback;
     Sort.quick_sort(forwardRenderer.scene.meshes, (m1 : *Mesh, m2 : *Mesh) -> int {
+        // Put disabled meshes at the end.
+        if m1.disabled && m2.disabled then return 0;
+        if m1.disabled != m2.disabled then return cast(int) m1.disabled - cast(int) m2.disabled;
+
         material1 := ifx m1.material == null then m1.scene.currentRendererMaterialFallback else m1.material;
         material2 := ifx m2.material == null then m2.scene.currentRendererMaterialFallback else m2.material;
 
@@ -133,7 +138,8 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
     });
 
     for mesh : forwardRenderer.scene.meshes {
-        if mesh.disabled then continue;
+        // @note We can break here because the meshes have been sorted with disabled meshes at the end.
+        if mesh.disabled then break;
         if !eye_is_seeing(*forwardRenderer.eye, mesh.boundingSphere) then continue;
 
         if mesh.material != lastDrawnMaterial {
@@ -162,12 +168,7 @@ _forward_renderer_render :: (forwardRenderer : *ForwardRenderer, frameIndex : u8
 
 _forward_renderer_get_output_image_info :: (forwardRenderer : *ForwardRenderer, outputIndex : u8, frameIndex : u8) -> ImageInfo {
     Basic.assert(outputIndex == 0);
-    imageInfo : ImageInfo;
-    imageInfo.image = forwardRenderer.extraFrameObjects[frameIndex].imageHolder.image;
-    imageInfo.view = forwardRenderer.extraFrameObjects[frameIndex].imageView;
-    imageInfo.layout = forwardRenderer.FINAL_IMAGE_LAYOUT;
-    imageInfo.usage = .FragmentOutput;
-    return imageInfo;
+    return forwardRenderer.extraFrameObjects[frameIndex].imageInfo;
 }
 
 #scope_file
@@ -196,7 +197,7 @@ _init_render_pass :: (forwardRenderer : *ForwardRenderer) -> bool {
     subpassDesc.pipelineBindPoint = Vk.PipelineBindPoint.Graphics;
 
     // Depth
-    attachmentDescs[0].format = Vk.Format.D32Sfloat; // @note This is widely supported.
+    attachmentDescs[0].format = Vk.Format.D32SfloatS8Uint; // @note This is widely supported.
     attachmentDescs[0].samples = Vk.SampleCountFlagBits._1;
     attachmentDescs[0].loadOp = Vk.AttachmentLoadOp.Clear;
     attachmentDescs[0].storeOp = Vk.AttachmentStoreOp.DontCare;
@@ -245,9 +246,12 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
     for *extraFrameObject : forwardRenderer.extraFrameObjects {
         // Output image
         _image_holder_init(*extraFrameObject.imageHolder, engine, "forwardRenderer.extraFrameObjects[].imageHolder", .RendererOut, forwardRenderer.eye.extent);
-        extraFrameObject.imageView = _image_holder_create_view(*extraFrameObject.imageHolder);
-        if extraFrameObject.imageView == null then return false;
-        _set_debug_utils_name(engine.device, extraFrameObject.imageView, "forwardRenderer.extraFrameObjects[].imageView");
+        extraFrameObject.imageInfo.image = extraFrameObject.imageHolder.image;
+        extraFrameObject.imageInfo.view = _image_holder_create_view(*extraFrameObject.imageHolder);
+        extraFrameObject.imageInfo.layout = .Undefined;
+        extraFrameObject.imageInfo.usage = .FragmentOutput;
+        if extraFrameObject.imageInfo.view == null then return false;
+        _set_debug_utils_name(engine.device, extraFrameObject.imageInfo.view, "forwardRenderer.extraFrameObjects[].imageInfo.view");
 
         // Depth image
         _image_holder_init(*extraFrameObject.depthImageHolder, engine, "forwardRenderer.extraFrameObjects[].depthImageHolder", .Depth, forwardRenderer.eye.extent);
@@ -258,7 +262,7 @@ _init_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) -> bool {
         // Framebuffer
         imageViews : [2]Vk.ImageView;
         imageViews[0] = extraFrameObject.depthImageView;
-        imageViews[1] = extraFrameObject.imageView;
+        imageViews[1] = extraFrameObject.imageInfo.view;
 
         framebufferCI : Vk.FramebufferCreateInfo;
         framebufferCI.sType = .FramebufferCreateInfo;
@@ -282,7 +286,7 @@ _cleanup_extra_frame_objects :: (forwardRenderer : *ForwardRenderer) {
     Vk.device_wait_idle(forwardRenderer.scene.engine.device);
     for *extraFrameObject : forwardRenderer.extraFrameObjects {
         _image_holder_cleanup(*extraFrameObject.imageHolder);
-        Vk.destroy_image_view(engine.device, extraFrameObject.imageView, null);
+        Vk.destroy_image_view(engine.device, extraFrameObject.imageInfo.view, null);
         _image_holder_cleanup(*extraFrameObject.depthImageHolder);
         Vk.destroy_image_view(engine.device, extraFrameObject.depthImageView, null);
         Vk.destroy_framebuffer(forwardRenderer.scene.engine.device, extraFrameObject.framebuffer, null);

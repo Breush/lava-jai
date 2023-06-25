@@ -64,7 +64,7 @@ vr_target_cleanup :: (vrTarget : *VrTarget, resetMemory := true) {
     impl_vr_target_cleanup(vrTarget);
 
     if resetMemory {
-        <<vrTarget = VrTarget.{};
+        vrTarget.* = .{};
     }
 }
 

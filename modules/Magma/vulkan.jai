@@ -1,4 +1,5 @@
 Vk :: #import "Vulkan";
+Vma :: #import "VulkanMemoryAllocator";
 
 #load "vulkan/common.jai";
 #load "vulkan/engine.jai";

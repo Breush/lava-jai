@@ -6,6 +6,7 @@ Texture :: struct {
     allocator : Allocator;
 
     srgb : bool;
+    id : u32;
 }
 
 // Allocate, init and register a new texture.
@@ -29,25 +30,31 @@ destroy_texture :: (texture : *Texture, unregister := true) {
 texture_init :: (texture : *Texture, engine : *Engine, srgb : bool) {
     texture.engine = engine;
     texture.srgb = srgb;
+    texture.id = engine.nextTextureId;
+    engine.nextTextureId += 1;
+
+    // Basic.log("[Texture#%] Init", texture.id, flags = .VERBOSE_ONLY);
 }
 
 texture_cleanup :: (texture : *Texture, resetMemory := true) {
     impl_texture_cleanup(texture);
 
+    // Basic.log("[Texture#%] Cleanup", texture.id, flags = .VERBOSE_ONLY);
+
     if resetMemory {
-        <<texture = Texture.{};
+        texture.* = Texture.{};
     }
 }
 
 texture_load_from_file :: (texture : *Texture, filename : string) -> bool {
     fileBytes, readOk := File.read_entire_file(filename);
     defer Basic.free(fileBytes);
-    _CHECK(readOk, Basic.tprint("Unable to read texture file: %", filename));
+    _CHECK(readOk, "Unable to read texture file: %", filename);
 
     extent : Chamber.uvec2;
     pixelsRaw := stbi_load_from_memory(fileBytes.data, xx fileBytes.count, xx *extent.width, xx *extent.height, null, 4);
 
-    _CHECK(extent.width != 0 && extent.height != 0, Basic.tprint("Invalid texture file: %", filename));
+    _CHECK(extent.width != 0 && extent.height != 0, "Invalid texture file: %", filename);
 
     pixels : []u8;
     pixels.data = pixelsRaw;

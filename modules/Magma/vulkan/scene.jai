@@ -42,6 +42,7 @@ impl_scene_update :: (scene : *Scene) -> bool {
         if !mesh.disabled && mesh.instanceDirty {
             scene.instancesBuckets[mesh.sharedInstanceRef.bucketIndex].inputs[mesh.sharedInstanceRef.inputIndex] = mesh.instance;
             scene.instancesBuckets[mesh.sharedInstanceRef.bucketIndex].dirty = true;
+            mesh.instanceDirty = false;
         }
     }
 
@@ -76,7 +77,7 @@ _scene_share_instance :: (using scene : *Scene) -> Scene.InstanceRef {
         instanceRef.bucketIndex = cast(s32) instancesBuckets.count;
         availableBucket = Basic.array_add(*instancesBuckets);
         _buffer_holder_init(*availableBucket.bufferHolder, engine, "scene.instancesBuckets[].bufferHolder",
-                            .ShaderVertex, .PersistentStaging, size_of(type_of(availableBucket.inputs)));
+                            .ShaderVertex, .Direct, size_of(type_of(availableBucket.inputs)));
     }
 
     instanceRef.inputIndex = availableBucket.nextIndex;

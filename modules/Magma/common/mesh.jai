@@ -85,7 +85,7 @@ mesh_cleanup :: (mesh : *Mesh, resetMemory := true) {
     Basic.array_free(mesh.indices);
 
     if resetMemory {
-        <<mesh = Mesh.{};
+        mesh.* = .{};
     }
 }
 
@@ -94,15 +94,11 @@ mesh_update :: (mesh : *Mesh) {
     if mesh.disabled then return;
 
     impl_mesh_update(mesh);
-
-    mesh.verticesDirty = false;
-    mesh.indicesDirty = false;
-    mesh.instanceDirty = false;
 }
 
 mesh_commit_vertices :: (mesh : *Mesh) {
-    _updateGeometryAabb(mesh);
-    _updateBoundingSphere(mesh);
+    _update_geometry_aabb(mesh);
+    _update_bounding_sphere(mesh);
     mesh.verticesDirty = true;
 }
 
@@ -119,7 +115,7 @@ mesh_commit_instance :: (mesh : *Mesh, $copyTrs := true) {
         mesh.transform = meshTransform;
     }
 
-    _updateBoundingSphere(mesh);
+    _update_bounding_sphere(mesh);
     mesh.instanceDirty = true;
 }
 
@@ -182,7 +178,7 @@ mesh_distance_from :: (mesh : *Mesh, ray : Chamber.Ray, pickPrecision : Chamber.
 
 #scope_file
 
-_updateGeometryAabb :: (mesh : *Mesh) {
+_update_geometry_aabb :: (mesh : *Mesh) {
     if mesh.vertices.count == 0 {
         mesh.geometryAabb.center = .{};
         mesh.geometryAabb.extent = .{};
@@ -203,7 +199,7 @@ _updateGeometryAabb :: (mesh : *Mesh) {
     mesh.geometryAabb.extent.std = maxRange - minRange;
 }
 
-_updateBoundingSphere :: (mesh : *Mesh) {
+_update_bounding_sphere :: (mesh : *Mesh) {
     mesh.boundingSphere.center = Chamber.multiply(mesh.transform, mesh.geometryAabb.center);
     mesh.boundingSphere.radius = Math.length((mesh.transform.scaling * mesh.geometryAabb.extent) / 2.);
 }

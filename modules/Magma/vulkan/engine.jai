@@ -36,9 +36,11 @@ EngineImpl :: struct {
     instance : Vk.Instance;
     physicalDevice : Vk.PhysicalDevice;
     device : Vk.Device;
+    alloc : Vma.Allocator;
 
     physicalDeviceMemoryProperties : Vk.PhysicalDeviceMemoryProperties;
     physicalDeviceRayTracingPipelineProperties : Vk.PhysicalDeviceRayTracingPipelinePropertiesKHR;
+    physicalDeviceDescriptorBufferProperties : Vk.PhysicalDeviceDescriptorBufferPropertiesEXT;
 
     queueIndices : QueueIndices;
     graphicsQueue : Vk.Queue;
@@ -111,6 +113,7 @@ impl_engine_cleanup :: (engine : *Engine) {
         Hash.deinit(*shaderModule.uniformsFrame);
     }
 
+    Vma.destroy_allocator(engine.alloc);
     Vk.destroy_command_pool(engine.device, engine.graphicsCommandPool, null);
     Vk.destroy_device(engine.device, null);
 
@@ -197,10 +200,7 @@ _engine_get_shader_module :: (engine : *Engine, id : string, kind : Chamber.Shad
     shaderModule.dirty = false;
 
     if engine.options.watchShaderFiles && shaderModule.path[0] != #char "$" {
-        Basic.push_allocator(Basic.temp);
-        path := FileUtilities.parse_path(shaderModule.path);
-        path.words.count -= 1;
-        directory := FileUtilities.path_to_string(path);
+        directory := String.path_strip_filename(shaderModule.path);
         FileWatcher.add_directories(*engine.shaderFileWatcher, directory);
     }
 
@@ -260,7 +260,7 @@ _init_instance :: (engine : *Engine) -> bool {
     applicationInfo.sType = .ApplicationInfo;
     applicationInfo.pApplicationName = "lava-magma";
     applicationInfo.pEngineName = "lava-magma";
-    applicationInfo.apiVersion = Vk.API_VERSION_1_2;
+    applicationInfo.apiVersion = Vk.API_VERSION_1_3;
 
     enabledLayers : [..]*u8;
     enabledExtensions : [..]*u8;
@@ -275,15 +275,18 @@ _init_instance :: (engine : *Engine) -> bool {
     defer Basic.array_free(availableExtensions);
 
     // Validation layers
+    needValidationLayers := Chamber.BUILD_IS_DEBUG;
     validationLayersEnabled := false;
-    if !_is_layer_available("VK_LAYER_KHRONOS_validation", availableLayers) {
-        Basic.log("Instance layer VK_LAYER_KHRONOS_validation is not available. Disabling validation layers.", flags=.WARNING);
-    } else if  !_is_extension_available(Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, availableExtensions) {
-        Basic.log("Instance extension ", Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, " is not available. Disabling validation layers.", flags=.WARNING);
-    } else {
-        Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_validation");
-        Basic.array_add(*enabledExtensions, Vk.EXT_DEBUG_REPORT_EXTENSION_NAME);
-        validationLayersEnabled = true;
+    if needValidationLayers {
+        if !_is_layer_available("VK_LAYER_KHRONOS_validation", availableLayers) {
+            Basic.log("Instance layer VK_LAYER_KHRONOS_validation is not available. Disabling validation layers.", flags=.WARNING);
+        } else if !_is_extension_available(Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, availableExtensions) {
+            Basic.log("Instance extension ", Vk.EXT_DEBUG_REPORT_EXTENSION_NAME, " is not available. Disabling validation layers.", flags=.WARNING);
+        } else {
+            Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_validation");
+            Basic.array_add(*enabledExtensions, Vk.EXT_DEBUG_REPORT_EXTENSION_NAME);
+            validationLayersEnabled = true;
+        }
     }
 
     // Debug utils
@@ -409,10 +412,15 @@ _init_physical_device :: (engine : *Engine) -> bool {
     engine.physicalDevice = physicalDevices[bestPhysicalDeviceIndex];
     Vk.get_physical_device_memory_properties(engine.physicalDevice, *engine.physicalDeviceMemoryProperties);
 
+    physicalDevicePropertiesPNext : *void;
+    engine.physicalDeviceRayTracingPipelineProperties.sType = .PhysicalDeviceRayTracingPipelinePropertiesKhr;
+    _chain_front(*physicalDevicePropertiesPNext, *engine.physicalDeviceRayTracingPipelineProperties);
+    engine.physicalDeviceDescriptorBufferProperties.sType = .PhysicalDeviceDescriptorBufferPropertiesExt;
+    _chain_front(*physicalDevicePropertiesPNext, *engine.physicalDeviceDescriptorBufferProperties);
+
     physicalDeviceProperties : Vk.PhysicalDeviceProperties2;
     physicalDeviceProperties.sType = .PhysicalDeviceProperties2;
-    engine.physicalDeviceRayTracingPipelineProperties.sType = .PhysicalDeviceRayTracingPipelinePropertiesKhr;
-    physicalDeviceProperties.pNext = *engine.physicalDeviceRayTracingPipelineProperties;
+    physicalDeviceProperties.pNext = physicalDevicePropertiesPNext;
     Vk.get_physical_device_properties2(engine.physicalDevice, *physicalDeviceProperties);
 
     return true;
@@ -422,6 +430,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     enabledExtensions : [..]*u8;
     defer Basic.array_free(enabledExtensions);
     Basic.array_add(*enabledExtensions, Vk.KHR_SWAPCHAIN_EXTENSION_NAME);
+    Basic.array_add(*enabledExtensions, Vk.EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
 
     if engine.device != null {
         // If we already had a initialized device, check that it is compatible.
@@ -466,25 +475,30 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 
     // Features
     enabledFeatures : Vk.PhysicalDeviceFeatures;
-
     deviceCIPNext : *void;
+
+    descriptorBufferFeatures : Vk.PhysicalDeviceDescriptorBufferFeaturesEXT;
+    descriptorBufferFeatures.sType = .PhysicalDeviceDescriptorBufferFeaturesExt;
+    descriptorBufferFeatures.descriptorBuffer = Vk.TRUE;
+    _chain_front(*deviceCIPNext, *descriptorBufferFeatures);
+
+    bufferDeviceAddressFeatures : Vk.PhysicalDeviceBufferDeviceAddressFeatures;
+    bufferDeviceAddressFeatures.sType = .PhysicalDeviceBufferDeviceAddressFeatures;
+    bufferDeviceAddressFeatures.bufferDeviceAddress = Vk.TRUE;
+    _chain_front(*deviceCIPNext, *bufferDeviceAddressFeatures);
+
     timelineSemaphoreFeatures : Vk.PhysicalDeviceTimelineSemaphoreFeatures;
     timelineSemaphoreFeatures.sType = .PhysicalDeviceTimelineSemaphoreFeatures;
     timelineSemaphoreFeatures.timelineSemaphore = Vk.TRUE;
     _chain_front(*deviceCIPNext, *timelineSemaphoreFeatures);
 
     rayTracingPipelineFeatures : Vk.PhysicalDeviceRayTracingPipelineFeaturesKHR;
-    bufferDeviceAddressFeatures : Vk.PhysicalDeviceBufferDeviceAddressFeatures;
     accelerationStructureFeatures : Vk.PhysicalDeviceAccelerationStructureFeaturesKHR;
     _16BitStorageFeatures : Vk.PhysicalDevice16BitStorageFeatures;
     if engine.options.features & .RayTracing {
         Basic.array_add(*enabledExtensions, Vk.KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
         Basic.array_add(*enabledExtensions, Vk.KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
         Basic.array_add(*enabledExtensions, Vk.KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-
-        bufferDeviceAddressFeatures.sType = .PhysicalDeviceBufferDeviceAddressFeatures;
-        bufferDeviceAddressFeatures.bufferDeviceAddress = Vk.TRUE;
-        _chain_front(*deviceCIPNext, *bufferDeviceAddressFeatures);
 
         accelerationStructureFeatures.sType = .PhysicalDeviceAccelerationStructureFeaturesKhr;
         accelerationStructureFeatures.accelerationStructure = Vk.TRUE;
@@ -531,6 +545,12 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     Vk.get_device_queue(engine.device, cast(u32) engine.queueIndices.transfer, 0, *engine.transferQueue);
     Vk.get_device_queue(engine.device, cast(u32) engine.queueIndices.present, 0, *engine.presentQueue);
 
+    Vk.load_device_proc(engine.device, *Vk.get_descriptor_set_layout_size_ext, "vkGetDescriptorSetLayoutSizeEXT");
+    Vk.load_device_proc(engine.device, *Vk.cmd_bind_descriptor_buffers_ext, "vkCmdBindDescriptorBuffersEXT");
+    Vk.load_device_proc(engine.device, *Vk.cmd_set_descriptor_buffer_offsets_ext, "vkCmdSetDescriptorBufferOffsetsEXT");
+    Vk.load_device_proc(engine.device, *Vk.get_descriptor_ext, "vkGetDescriptorEXT");
+    Vk.load_device_proc(engine.device, *Vk.get_descriptor_set_layout_binding_offset_ext, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+
     if engine.debugUtilsEnabled {
         Vk.load_device_proc(engine.device, *Vk.set_debug_utils_object_name_ext, "vkSetDebugUtilsObjectNameEXT");
     }
@@ -553,6 +573,18 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
 }
 
 _init_global_resources :: (engine : *Engine) -> bool {
+    vulkanFunctions : Vma.VulkanFunctions;
+    vulkanFunctions.vkGetInstanceProcAddr = xx Vk.get_instance_proc_addr;
+    vulkanFunctions.vkGetDeviceProcAddr = xx Vk.get_device_proc_addr;
+
+    allocatorCI : Vma.AllocatorCreateInfo;
+    allocatorCI.physicalDevice = engine.physicalDevice;
+    allocatorCI.device = engine.device;
+    allocatorCI.instance = engine.instance;
+    allocatorCI.pVulkanFunctions = *vulkanFunctions;
+    allocatorCI.flags = cast(u32) Vma.AllocatorCreateFlagBits.BufferDeviceAddress;
+    Vma.create_allocator(*allocatorCI, *engine.alloc);
+
     if !_create_graphics_command_pool(engine, *engine.graphicsCommandPool, false) {
         return false;
     }
@@ -669,7 +701,8 @@ _debug_message_callback :: (
 
         // @todo Investigate why this happens when resizing the window,
         // but for now it cannot be a blocking error.
-        if errorParts[0] != "Validation Error: [ VUID-VkSwapchainCreateInfoKHR-imageExtent-01274 ]" {
+        if errorParts[0] == "Validation Error: [ VUID-VkSwapchainCreateInfoKHR-imageExtent-01274 ] " ||
+           errorParts[0] == "Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] " {
             flags = .WARNING;
         }
 
@@ -753,8 +786,8 @@ _is_extension_available :: (extensionName : string, availableExtensions : []Vk.E
 }
 
 _chain_front :: (chain : **void, link : *void) {
-    (cast(*Vk.BaseInStructure) link).pNext = <<chain;
-    <<chain = link;
+    (cast(*Vk.BaseInStructure) link).pNext = chain.*;
+    chain.* = link;
 }
 
 _shader_module_macro_definition :: (kind : Chamber.ShaderKind) -> string {

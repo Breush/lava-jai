@@ -32,6 +32,8 @@ Engine :: struct {
     textures : [..]*Texture;
     targets : [..]*Target;
 
+    nextTextureId : u32;
+
     vr : Vr;
 
     stats : struct {
@@ -98,7 +100,7 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
     Basic.array_free(engine.textures);
 
     if resetMemory {
-        <<engine = Engine.{};
+        engine.* = .{};
     }
 }
 
