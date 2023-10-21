@@ -82,6 +82,11 @@ ShaderModule :: struct {
 ShaderModuleMap :: Hash.Table(string, ShaderModule);
 
 impl_engine_init :: (engine : *Engine) {
+    oldLayerPath := Chamber.os_get_environment_variable("VK_LAYER_PATH");
+    newLayerPath := Basic.tprint("%0%:%\0", String.path_strip_filename(System.get_path_of_running_executable()), ifx OS == .WINDOWS then "" else "lib", oldLayerPath);
+    Chamber.os_set_environment_variable("VK_LAYER_PATH", newLayerPath);
+    Chamber.debug(newLayerPath);
+
     _init_instance(engine);
     _init_physical_device(engine);
 
@@ -289,6 +294,12 @@ _init_instance :: (engine : *Engine) -> bool {
         }
     }
 
+    // Shader object layer.
+    if !_is_layer_available("VK_LAYER_KHRONOS_shader_object", availableLayers) {
+        Basic.log_error("Instance layer VK_LAYER_KHRONOS_shader_object is not available.");
+    }
+    Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_shader_object");
+
     // Debug utils
     engine.debugUtilsEnabled = _is_extension_available(Vk.EXT_DEBUG_UTILS_EXTENSION_NAME, availableExtensions);
     if engine.debugUtilsEnabled {
@@ -431,6 +442,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     defer Basic.array_free(enabledExtensions);
     Basic.array_add(*enabledExtensions, Vk.KHR_SWAPCHAIN_EXTENSION_NAME);
     Basic.array_add(*enabledExtensions, Vk.EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
+    Basic.array_add(*enabledExtensions, Vk.EXT_SHADER_OBJECT_EXTENSION_NAME);
 
     if engine.device != null {
         // If we already had a initialized device, check that it is compatible.
@@ -583,6 +595,7 @@ _init_global_resources :: (engine : *Engine) -> bool {
     allocatorCI.instance = engine.instance;
     allocatorCI.pVulkanFunctions = *vulkanFunctions;
     allocatorCI.flags = cast(u32) Vma.AllocatorCreateFlagBits.BufferDeviceAddress;
+    allocatorCI.vulkanApiVersion = Vk.API_VERSION_1_3;
     Vma.create_allocator(*allocatorCI, *engine.alloc);
 
     if !_create_graphics_command_pool(engine, *engine.graphicsCommandPool, false) {

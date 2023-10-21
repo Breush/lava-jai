@@ -28,7 +28,7 @@ impl_forward_renderer_init :: (forwardRenderer : *ForwardRenderer) {
     nextLocation := _fill_vertex_input_descs(VertexInput, 0, 0, Vk.VertexInputRate.Vertex);
     _fill_vertex_input_descs(InstanceInput, 1, nextLocation, Vk.VertexInputRate.Instance);
 
-    forwardRenderer.pushConstantRanges[0].size = size_of(EyeShaderObject);
+    forwardRenderer.pushConstantRanges[0].size = size_of(EyeShaderObject) + size_of(u32) /* frame trick */;
     forwardRenderer.pushConstantRanges[0].stageFlags = cast(u32) Vk.ShaderStageFlagBits.Vertex | Vk.ShaderStageFlagBits.Fragment;
 }
 

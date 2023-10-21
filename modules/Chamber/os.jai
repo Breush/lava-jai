@@ -69,6 +69,34 @@ os_open_file_explorer :: (path : string) -> (ok : bool) {
     return false;
 }
 
+os_get_environment_variable :: (name : string) -> (value : string) {
+    #if OS == .LINUX {
+        POSIX :: #import "POSIX";
+        return to_string(POSIX.getenv(name.data));
+    } else #if OS == .WINDOWS {
+        Windows :: #import "Windows";
+        return to_string(Windows.getenv(name.data));
+    } else {
+        #run Basic.assert(false);
+    }
+
+    return "";
+}
+
+os_set_environment_variable :: (name : string, value : string) {
+    #if OS == .LINUX {
+        POSIX :: #import "POSIX";
+        POSIX.setenv(name.data, value.data, 1);
+    } else #if OS == .WINDOWS {
+        // @note As of 2023/10, no setenv nor SetEnvironmentVariable in jai modules.
+        Crt :: #system_library "msvcrt";
+        setenv :: (name : *u8, value : *u8, overwrite : s32)  -> *u8 #foreign Crt;
+        setenv(name.data, value.data, 1);
+    } else {
+        #run Basic.assert(false);
+    }
+}
+
 #scope_file
 
 Process :: #import "Process";
