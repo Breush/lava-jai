@@ -165,7 +165,7 @@ destroy_window :: (window : *Window) {
     window_cleanup(window, false);
 
     if window.allocator.proc != null {
-        Basic.free(window, window.allocator);
+        Basic.free(window,, window.allocator);
     }
 }
 

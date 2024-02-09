@@ -23,7 +23,7 @@ destroy_texture :: (texture : *Texture, unregister := true) {
     if unregister then engine_unregister(texture.engine, texture);
 
     if texture.allocator.proc != null {
-        Basic.free(texture, texture.allocator);
+        Basic.free(texture,, texture.allocator);
     }
 }
 

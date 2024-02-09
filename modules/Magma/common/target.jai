@@ -44,7 +44,7 @@ destroy_target :: (target : *Target) {
     }
 
     if target.allocator.proc != null {
-        Basic.free(target, target.allocator);
+        Basic.free(target,, target.allocator);
     }
 }
 

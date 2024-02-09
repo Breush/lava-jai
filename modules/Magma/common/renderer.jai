@@ -34,7 +34,7 @@ destroy_renderer :: (renderer : *Renderer, destroyResources : bool) {
     renderer_cleanup(renderer, resetMemory = false);
 
     if renderer.allocator.proc != null {
-        Basic.free(renderer, renderer.allocator);
+        Basic.free(renderer,, renderer.allocator);
     }
 }
 

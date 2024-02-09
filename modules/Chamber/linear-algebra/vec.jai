@@ -132,7 +132,7 @@ rotate_around_target :: (origin : vec3, target : vec3,
         axis.x = relativePosition.y;
         axis.y = -relativePosition.x;
         axis.z = 0;
-        normalize(*axis);
+        normalize(*axis.std);
 
         latitudeDelta := rotate(relativePosition, latitudeAngle, axis) - relativePosition;
         delta.std += latitudeDelta;

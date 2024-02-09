@@ -50,7 +50,7 @@ destroy_material :: (material : *Material) {
     material_cleanup(material, resetMemory = false);
 
     if material.allocator.proc != null {
-        Basic.free(material, material.allocator);
+        Basic.free(material,, material.allocator);
     }
 }
 

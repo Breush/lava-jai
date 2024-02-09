@@ -68,7 +68,7 @@ destroy_mesh :: (mesh : *Mesh, unregister := true) {
     }
 
     if mesh.allocator.proc != null {
-        Basic.free(mesh, mesh.allocator);
+        Basic.free(mesh,, mesh.allocator);
     }
 }
 

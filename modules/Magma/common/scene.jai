@@ -39,7 +39,7 @@ destroy_scene :: (scene : *Scene, destroyResources : bool) {
     // that is optionally called.
 
     if scene.allocator.proc != null {
-        Basic.free(scene, scene.allocator);
+        Basic.free(scene,, scene.allocator);
     }
 }
 

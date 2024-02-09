@@ -66,7 +66,7 @@ destroy_engine :: (engine : *Engine) {
     Magma.destroy_engine(engine.renderEngine);
 
     if engine.allocator.proc != null {
-        Basic.free(engine, engine.allocator);
+        Basic.free(engine,, engine.allocator);
     }
 }
 
@@ -139,7 +139,7 @@ engine_cleanup :: (engine : *Engine, resetMemory := true) {
 }
 
 engine_run :: (engine : *Engine) {
-    previousTime := Basic.get_time();
+    previousTime := Basic.seconds_since_init();
     previousSleepTime : float64;
     updateTime : float64 : 1.0/90.0 * 0.7854; // A bit faster than 90 FPS
     updateTimeLag := updateTime; // Force an initial update.
@@ -155,7 +155,7 @@ engine_run :: (engine : *Engine) {
     };
 
     while !engine.closingMainWindow {
-        currentTime := Basic.get_time();
+        currentTime := Basic.seconds_since_init();
         elapsedTime := currentTime - previousTime;
         elapsedTimeWithoutSleep := elapsedTime - previousSleepTime;
         previousTime = currentTime;
@@ -214,7 +214,7 @@ engine_run :: (engine : *Engine) {
 #scope_file
 
 _update_fps_counter :: (time : *float64, count : *s64, sinceTime : *float64) {
-    newTime := Basic.get_time();
+    newTime := Basic.seconds_since_init();
     time.* += newTime - sinceTime.*;
     sinceTime.* = newTime;
     count.* += 1;
@@ -241,7 +241,7 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
 _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
     event := Crater.window_poll_event(engine.window, squash = true);
 
-    startTime := Basic.get_time();
+    startTime := Basic.seconds_since_init();
     while event.kind != .None {
         if event.kind == .WindowSizeChanged {
             engine.windowSizeChangedTimer = 0.150;
@@ -257,7 +257,7 @@ _engine_handle_events :: (engine : *EngineBase, updateTime : float64) {
         }
 
         // Just hop out if we're taking too long.
-        if Basic.get_time() - startTime > updateTime * 0.5 {
+        if Basic.seconds_since_init() - startTime > updateTime * 0.5 {
             break;
         }
 

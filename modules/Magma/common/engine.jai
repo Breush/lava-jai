@@ -71,7 +71,7 @@ destroy_engine :: (engine : *Engine, destroyResources := true) {
 
     // Cleanup ourselves
     if engine.allocator.proc != null {
-        Basic.free(engine, engine.allocator);
+        Basic.free(engine,, engine.allocator);
     }
 }
 

@@ -40,7 +40,7 @@ destroy_shader :: (shader : *Shader, destroyResources : bool) {
     shader_cleanup(shader, resetMemory = false);
 
     if shader.allocator.proc != null {
-        Basic.free(shader, shader.allocator);
+        Basic.free(shader,, shader.allocator);
     }
 }
 

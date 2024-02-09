@@ -251,15 +251,15 @@ orientation_matrix :: (origin : vec3, target : vec3, referenceUp := vec3.{0, 0, 
 
     forward : vec3;
     forward.std = target - origin;
-    normalize(*forward);
+    normalize(*forward.std);
 
     left : vec3;
     left.std = cross_product(referenceUp, forward);
-    normalize(*left);
+    normalize(*left.std);
 
     up : vec3;
     up.std = cross_product(forward.std, left);
-    normalize(*up);
+    normalize(*up.std);
 
     matrix = make_matrix_from_columns(forward, left, up);
 

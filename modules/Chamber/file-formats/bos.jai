@@ -236,7 +236,7 @@ bos_serialize :: (object : $T, version : u32, options := BosSerializationOptions
     typeTableLengthInBytes := Basic.builder_string_length(*sb) - size_of(BosHeader);
 
     // @todo One can probably do way better than this double copy...
-    Basic.append(*sb, Basic.builder_to_string(*contentSb, Basic.temp));
+    Basic.append(*sb, Basic.builder_to_string(*contentSb,, Basic.temp));
     s := Basic.builder_to_string(*sb);
 
     // Setting the type table length

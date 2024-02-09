@@ -85,7 +85,6 @@ impl_engine_init :: (engine : *Engine) {
     oldLayerPath := Chamber.os_get_environment_variable("VK_LAYER_PATH");
     newLayerPath := Basic.tprint("%0%:%\0", String.path_strip_filename(System.get_path_of_running_executable()), ifx OS == .WINDOWS then "" else "lib", oldLayerPath);
     Chamber.os_set_environment_variable("VK_LAYER_PATH", newLayerPath);
-    Chamber.debug(newLayerPath);
 
     _init_instance(engine);
     _init_physical_device(engine);
@@ -327,11 +326,19 @@ _init_instance :: (engine : *Engine) -> bool {
     // For debugging
     Basic.log("Vulkan available instance extensions:", flags=.VERY_VERBOSE_ONLY);
     for extension : availableExtensions {
-        Basic.log("  - %", Basic.to_string(extension.extensionName), flags=.VERY_VERBOSE_ONLY);
+        Basic.log("  - %", cast(string) extension.extensionName, flags=.VERY_VERBOSE_ONLY);
     }
     Basic.log("Vulkan enabled instance extensions:", flags=.VERBOSE_ONLY);
     for extension : enabledExtensions {
         Basic.log("  - %", to_string(extension), flags=.VERBOSE_ONLY);
+    }
+    Basic.log("Vulkan available layers:", flags=.VERY_VERBOSE_ONLY);
+    for layer : availableLayers {
+        Basic.log("  - %", cast(string) layer.layerName, flags=.VERY_VERBOSE_ONLY);
+    }
+    Basic.log("Vulkan enabled layers:", flags=.VERY_VERBOSE_ONLY);
+    for layer : enabledLayers {
+        Basic.log("  - %", to_string(layer), flags=.VERY_VERBOSE_ONLY);
     }
 
     // Instance
@@ -534,7 +541,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     Vk.array_fill(*availableExtensions, Vk.enumerate_device_extension_properties, engine.physicalDevice, null);
     Basic.log("Vulkan available device extensions:", flags=.VERY_VERBOSE_ONLY);
     for extension : availableExtensions {
-        Basic.log("  - %", Basic.to_string(extension.extensionName), flags=.VERY_VERBOSE_ONLY);
+        Basic.log("  - %", cast(string) extension.extensionName, flags=.VERY_VERBOSE_ONLY);
     }
     Basic.log("Vulkan enabled device extensions:", flags=.VERBOSE_ONLY);
     for extension : enabledExtensions {
