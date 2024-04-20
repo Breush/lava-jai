@@ -81,6 +81,16 @@ mesh_make_primitives :: (iMesh : *MeshComponent, count : u32) -> []*Magma.Mesh, 
     return node.primitives, node;
 }
 
+mesh_set_parent :: (iMesh : *MeshComponent, nodeIndex : s64, parent : s64) {
+    node := *iMesh.nodes[nodeIndex];
+    if node.parent == parent then return;
+
+    if node.parent != -1 then Basic.array_unordered_remove_by_value(*iMesh.nodes[node.parent].children, nodeIndex, stop_after_first = true);
+    if parent != -1 then Basic.array_add(*iMesh.nodes[parent].children, nodeIndex);
+    node.parent = parent;
+    iMesh._nodesTransformsDirty = true;
+}
+
 mesh_commit_nodes :: (iMesh : *MeshComponent, instantly := false) {
     iMesh._nodesTransformsDirty = !instantly;
 
