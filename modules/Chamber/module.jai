@@ -52,6 +52,10 @@ max :: (a : $T, b : T) -> T #expand {
     return ifx a >= b then a else b;
 }
 
+clamp :: (value : $T, min : T, max : T) -> T #expand {
+    return ifx value < min then min else ifx value > max then max else value;
+}
+
 to_radians :: (degrees : float32) -> float32 {
     return degrees * #run cast(float32) (PI / 180.);
 }

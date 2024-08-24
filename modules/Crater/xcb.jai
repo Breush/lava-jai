@@ -88,7 +88,7 @@ impl_window_init :: (window : *Window) -> bool {
     rmValue.data = Xcb.get_property_value(rmReply);
     rmValue.count = Xcb.get_property_value_length(rmReply);
 
-    for String.split(rmValue, cast(u8) #char "\n") {
+    for String.split(rmValue, cast(u8) #char "\n",, allocator = Basic.temp) {
         if String.starts_with(it, "Xcursor.size:") {
             Basic.advance(*it, "Xcursor.size:".count);
             window.systemCursorThemeSize = cast(u32) String.parse_int(*it);

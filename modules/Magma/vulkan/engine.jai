@@ -293,11 +293,11 @@ _init_instance :: (engine : *Engine) -> bool {
         }
     }
 
-    // Shader object layer.
-    if !_is_layer_available("VK_LAYER_KHRONOS_shader_object", availableLayers) {
-        Basic.log_error("Instance layer VK_LAYER_KHRONOS_shader_object is not available.");
-    }
-    Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_shader_object");
+    // // Shader object layer.
+    // if !_is_layer_available("VK_LAYER_KHRONOS_shader_object", availableLayers) {
+    //     Basic.log_error("Instance layer VK_LAYER_KHRONOS_shader_object is not available.");
+    // }
+    // Basic.array_add(*enabledLayers, "VK_LAYER_KHRONOS_shader_object");
 
     // Debug utils
     engine.debugUtilsEnabled = _is_extension_available(Vk.EXT_DEBUG_UTILS_EXTENSION_NAME, availableExtensions);
@@ -449,7 +449,7 @@ _init_device :: (engine : *Engine, surface : Vk.SurfaceKHR) -> bool {
     defer Basic.array_free(enabledExtensions);
     Basic.array_add(*enabledExtensions, Vk.KHR_SWAPCHAIN_EXTENSION_NAME);
     Basic.array_add(*enabledExtensions, Vk.EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
-    Basic.array_add(*enabledExtensions, Vk.EXT_SHADER_OBJECT_EXTENSION_NAME);
+    // Basic.array_add(*enabledExtensions, Vk.EXT_SHADER_OBJECT_EXTENSION_NAME);
 
     if engine.device != null {
         // If we already had a initialized device, check that it is compatible.
