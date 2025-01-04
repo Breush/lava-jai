@@ -327,7 +327,7 @@ ShadercUserData :: struct {
     includeResults : [16]Shaderc.IncludeResult;
     includeResultsCount : u32;
     dollarFiles : []DollarFile;
-    ctx : *Context;
+    ctx : *#Context;
 }
 
 // @todo @speed Looks like shaderc is re-asking for the same files
@@ -360,7 +360,7 @@ _include_resolver :: (_userData : *void, requestedSource : *u8, type : s64,
 }
 
 _include_result_releaser :: (_userData : *void, includeResult : *Shaderc.IncludeResult) #c_call {
-    ctx : Context;
+    ctx : #Context;
     push_context ctx {
         if includeResult.sourceName[0] != #char "$" {
             Basic.free(includeResult.content);

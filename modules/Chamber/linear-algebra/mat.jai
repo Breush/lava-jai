@@ -97,17 +97,17 @@ inverse :: (transform : trf) -> trf {
     result.rotation = conjugate(transform.rotation);
     if transform.factor == 0. {
         result.factor = 0.;
-        result.translation.std = -rotate(transform.translation, result.rotation);
+        result.translation.std = -rotate(transform.translation.std, result.rotation);
     } else {
         result.factor = 1. / transform.factor;
-        result.translation.std = -result.factor * rotate(transform.translation, result.rotation);
+        result.translation.std = -result.factor * rotate(transform.translation.std, result.rotation);
     }
     return result;
 }
 
 multiply :: (lhs : trf, rhs : trf) -> trf {
     result : trf;
-    result.translation.std = lhs.translation + rotate(lhs.factor * rhs.translation, lhs.rotation);
+    result.translation.std = lhs.translation + rotate(lhs.factor * rhs.translation.std, lhs.rotation);
     result.factor = lhs.factor * rhs.factor;
     result.rotation = lhs.rotation * rhs.rotation;
     return result;
@@ -116,7 +116,7 @@ multiply :: (lhs : trf, rhs : trf) -> trf {
 // Multiply, not considering the Z coordinates. Useful for 2D.
 multiply :: (transform : trf, v : $T/interface vec3Interface) -> vec3 {
     result : vec3;
-    result.std = transform.translation + rotate(transform.factor * v, transform.rotation);
+    result.std = transform.translation + rotate(transform.factor * v.std, transform.rotation);
     return result;
 }
 

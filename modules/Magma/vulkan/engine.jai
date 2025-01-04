@@ -12,7 +12,7 @@ for_expansion :: Hash.for_expansion;
     sb : Basic.String_Builder;
     Basic.init_string_builder(*sb);
 
-    files := FileUtilities.file_list(path, recursive = true, follow_symlinks = false);
+    files := FileUtilities.file_list(path, recursive = true, follow_directory_symlinks = false);
     Basic.append(*sb, "DOLLAR_SHADERS : [");
     Basic.print_item_to_builder(*sb, files.count);
     Basic.append(*sb, "]Chamber.DollarFile : .[");
@@ -696,7 +696,7 @@ _debug_message_callback :: (
     message : *u8,
     userData : *void
 ) -> Vk.Bool32 #c_call {
-    push_context << cast(*Context) userData {
+    push_context << cast(*#Context) userData {
         flags : Log_Flags;
         if reportFlags & xx Vk.DebugReportFlagBitsEXT.Information {
             flags |= .VERY_VERBOSE_ONLY;

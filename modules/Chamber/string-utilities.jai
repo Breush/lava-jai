@@ -193,7 +193,7 @@ word_length_before_byte :: (s : string, byteIndex : u32) -> u32 {
     if s[byteIndex - 1] == #char "\n" then return 1;
 
     foundWord := false;
-    for < i : byteIndex - 1 .. cast(u32) 0 {
+    for #v2 < i : cast(u32) 0 .. byteIndex - 1 {
         isSpace := Basic.is_space(s[i]);
         if !foundWord {
             foundWord = !isSpace;
