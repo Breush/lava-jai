@@ -209,7 +209,7 @@ _engine_get_shader_module :: (engine : *Engine, id : string, kind : Chamber.Shad
     }
 
     // Optimized SPIR-V, no symbols info inside.
-    spvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, true);
+    spvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, true, cacheFolder = engine.options.shaderCacheFolder);
     if spvCode.count == 0 {
         Basic.log("Unable to compile % to SPIR-V.", shaderModule.path, flags = .WARNING);
         return null;
@@ -219,7 +219,7 @@ _engine_get_shader_module :: (engine : *Engine, id : string, kind : Chamber.Shad
 
     if parseUniforms {
         // @todo Currently forced to compile once a non-optimized version to get symbols name and such.
-        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, false);
+        nonOptimizedSpvCode := Chamber.spirv_compile_from_glsl(shaderModule.path, kind, macroDefinition, DOLLAR_SHADERS, false, cacheFolder = engine.options.shaderCacheFolder);
         defer Basic.array_free(nonOptimizedSpvCode);
         nonOptimizedSpv := Chamber.spirv_parse(nonOptimizedSpvCode, true);
         shaderModule.spv.uniformsFrame = nonOptimizedSpv.uniformsFrame;

@@ -1,3 +1,5 @@
+Hasher :: #import "Hash";
+
 Spv :: struct {
     header : SpvHeader;
     uniformsFrame : UniformsFrame;
@@ -48,8 +50,24 @@ DollarFile :: struct {
 }
 
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
-spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarFiles : []DollarFile, optimized : bool) -> []u8 {
+spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDefinition : string, dollarFiles : []DollarFile, optimized : bool, cacheFolder := "") -> []u8 {
     spvCode : [..]u8;
+
+    cacheHash := Hasher.get_hash(glslFile);
+    cacheHash ^= Hasher.get_hash(shaderKind);
+    cacheHash ^= Hasher.get_hash(macroDefinition);
+    cacheHash ^= Hasher.get_hash(optimized);
+    cacheFile := Basic.tprint("%0%.spv", cacheFolder, cacheHash);
+
+    // Get from cache if already there and up-to-date.
+    if cacheFolder {
+        modTime := FileUtilities.file_modtime_and_size(glslFile);
+        cacheModTime := FileUtilities.file_modtime_and_size(cacheFile);
+        if modTime < cacheModTime {
+            Basic.log("Reading shader % from cache: %.", glslFile, cacheFile, flags=.VERY_VERBOSE_ONLY);
+            return cast([]u8) File.read_entire_file(cacheFile);
+        }
+    }
 
     _, glslFileContent := _get_entire_shader_file(glslFile, ".", dollarFiles);
     defer if glslFile[0] != #char "$" then Basic.free(glslFileContent);
@@ -99,6 +117,11 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     spvCodeView : []u8;
     spvCodeView.data = Shaderc.result_get_bytes(compilationResult);
     spvCodeView.count = xx Shaderc.result_get_length(compilationResult);
+
+    // Save to cache.
+    if cacheFolder {
+        File.write_entire_file(cacheFile, spvCodeView.data, spvCodeView.count);
+    }
 
     // Making a copy of the code, as it will be wiped out by Shaderc.result_release
     Basic.array_copy(*spvCode, spvCodeView);

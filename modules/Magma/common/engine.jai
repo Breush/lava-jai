@@ -24,6 +24,7 @@ Engine :: struct {
 
         features : FeatureFlag = .Window;
         watchShaderFiles := false;
+        shaderCacheFolder := ""; // Keep empty for no cache
     }
 
     options : Options;
