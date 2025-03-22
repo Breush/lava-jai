@@ -1,3 +1,4 @@
+Hasher :: #import "Hash";
 Hash :: #import "Hash_Table";
 for_expansion :: Hash.for_expansion;
 
@@ -25,7 +26,10 @@ for_expansion :: Hash.for_expansion;
         Basic.advance(*file, path.count - 1);
         file[0] = #char "$";
 
-        Basic.append(*sb, Basic.tprint(".{ \"%\", #string __HERE_STRING__\n%\n__HERE_STRING__ }, ", file, fileContent));
+        hash := Hasher.get_hash(file);
+        hash ^= Hasher.get_hash(fileContent);
+
+        Basic.append(*sb, Basic.tprint(".{ \"%\", #string __HERE_STRING__\n%\n__HERE_STRING__, % }, ", file, fileContent, hash));
     }
     Basic.append(*sb, "];");
 

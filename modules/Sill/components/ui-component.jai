@@ -115,9 +115,8 @@ ui_relative_mouse_pointer_position :: (iUi : *UiComponent) -> Chamber.vec2 {
     relativePosition.x = cast(float) iUi.entity.engine.window.mousePosition.x;
     relativePosition.y = cast(float) iUi.entity.engine.window.mousePosition.y;
 
-    // Transform the position into the screen space.
-    relativePosition.x -= iUi.entity.engine.options.windowExtent.width / 2.0; // @todo Should it depend on the renderer?
-    relativePosition.y -= iUi.entity.engine.options.windowExtent.height / 2.0;
+    // Note: We consider the screen to start on the top-left,
+    // thus reflecting that in-world.
 
     inverseTransform := iUi.transform.worldTransform;
     inverseTransform = Chamber.inverse(inverseTransform);

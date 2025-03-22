@@ -47,6 +47,7 @@ ShaderKind :: enum {
 DollarFile :: struct {
     id : string;
     data : string;
+    hash : u32;
 }
 
 // dollarPath is the path to use if any included shader files refer to "$/something.glsl"
@@ -56,6 +57,9 @@ spirv_compile_from_glsl :: (glslFile : string, shaderKind : ShaderKind, macroDef
     cacheHash := Hasher.get_hash(glslFile);
     cacheHash ^= Hasher.get_hash(shaderKind);
     cacheHash ^= Hasher.get_hash(macroDefinition);
+    for *dollarFile : dollarFiles {
+        cacheHash ^= dollarFile.hash;
+    }
     cacheHash ^= Hasher.get_hash(optimized);
     cacheFile := Basic.tprint("%0%.spv", cacheFolder, cacheHash);
 
