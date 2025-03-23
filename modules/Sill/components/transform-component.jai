@@ -4,6 +4,7 @@ TransformComponent :: struct {
     using transform : Chamber.trf;
     worldTransform : Chamber.trf;
 
+    worldTransformDirty : bool;
     worldTransformChangedCallbacks : [..]struct {
         function : WorldTransformChangedCallbackType;
         userData : *void;
@@ -27,11 +28,9 @@ component_cleanup :: (iTransform : *TransformComponent, resetMemory := true) {
 }
 
 component_update :: (iTransform : *TransformComponent, dt : float64) {
-    // @todo We're missing updates here, but for now it is not impactful,
-    // and does not worth the performance hit. (i.e. just commit the transform when you modify the parent)
-    // if iTransform.entity.parentChanged {
-    //     _update_world_transform(iTransform);
-    // }
+    if iTransform.worldTransformDirty {
+        _update_world_transform(iTransform, committed = true);
+    }
 }
 
 transform_set :: (iTransform : *TransformComponent, transform : Chamber.trf) {
@@ -82,6 +81,13 @@ transform_on_world_transform_changed :: (iTransform : *TransformComponent, funct
 #scope_file
 
 _update_world_transform :: (iTransform : *TransformComponent, committed := false) {
+    if iTransform.entity.flags & .Disabled {
+        iTransform.worldTransformDirty = true;
+        return;
+    }
+
+    iTransform.worldTransformDirty = false;
+
     if iTransform.entity.parent != null {
         // @note The world transform updates are done instantly, so it should be up-to-date.
         iParentTransform := entity_get_component(iTransform.entity.parent, TransformComponent);
