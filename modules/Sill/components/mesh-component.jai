@@ -61,6 +61,7 @@ mesh_debug_print_nodes :: (iMesh : *MeshComponent) {
 // arrays if you know the size in advance.
 mesh_make_primitive :: (iMesh : *MeshComponent, parent := -1) -> *Magma.Mesh, *MeshNode {
     mesh := Magma.create_mesh(iMesh.entity.engine.scene);
+    if iMesh.entity.flags & .Disabled then mesh.disabled |= .GameEngine;
     node := Basic.array_add(*iMesh.nodes);
     Basic.array_add(*node.primitives, mesh);
     iMesh._nodesTransformsDirty = true;
@@ -76,6 +77,7 @@ mesh_make_primitives :: (iMesh : *MeshComponent, count : u32) -> []*Magma.Mesh, 
     Basic.array_resize(*node.primitives, count);
     for *primitive : node.primitives {
         primitive.* = Magma.create_mesh(iMesh.entity.engine.scene);
+        if iMesh.entity.flags & .Disabled then primitive.*.disabled |= .GameEngine;
     }
     iMesh._nodesTransformsDirty = true;
     return node.primitives, node;

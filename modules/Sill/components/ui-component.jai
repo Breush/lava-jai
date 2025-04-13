@@ -92,6 +92,11 @@ ui_set_focused :: (iUi : *UiComponent, focused := true) {
 }
 
 ui_send_trigger :: (iUi : *UiComponent, flags : UiCallbackFlags, event : Crater.Event, stopPropagation : *bool) {
+    // When an entity is pending to be destroyed, be silent.
+    if iUi.entity.flags & .Destroyed {
+        return;
+    }
+
     // When an entity is disabled, just send the stop events.
     if iUi.entity.flags & .Disabled || iUi.disabled {
         flags &= UiCallbackFlags.Stop;

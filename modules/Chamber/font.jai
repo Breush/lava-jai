@@ -94,18 +94,14 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
         codepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
         Unicode.utf8_next_character(*s);
 
-        nextCodepoint : u32 = 0;
-        if s.count != 0 {
-            nextCodepoint = Unicode.character_utf8_to_utf32(s.data, s.count);
-        }
-
         pGlyphInfo, glyphInfoPixelsChanged := font_glyph_info(font, codepoint);
         pixelsChanged = pixelsChanged || glyphInfoPixelsChanged;
         glyphInfo := pGlyphInfo.*;
 
         glyphInfo.offset.x += advance;
 
-        if glyphInfo.fontInfo != null {
+        if glyphInfo.fontInfo != null && s.count != 0 {
+            nextCodepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
             kernAdvance := StbTrueType.get_codepoint_kern_advance(*glyphInfo.fontInfo.stb, cast,no_check(s32) codepoint, cast,no_check(s32) nextCodepoint);
             advance += (glyphInfo.advance + kernAdvance * glyphInfo.fontInfo.glyphScale);
         }
@@ -116,51 +112,77 @@ font_glyph_infos :: (font : *Font, str : string) -> [..]GlyphInfo, pixelsChanged
     return glyphInfos, pixelsChanged;
 }
 
-font_glyph_info :: (font : *Font, codepoint : Codepoint) -> *GlyphInfo, pixelsChanged : bool {
+font_text_width :: (font : *Font, str : string) -> float {
+    advance : float;
+
+    lastGlyphInfo : *GlyphInfo;
+
+    s := str;
+    while s.count != 0 {
+        codepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
+        Unicode.utf8_next_character(*s);
+
+        lastGlyphInfo = font_glyph_info(font, codepoint, draw = false);
+
+        if lastGlyphInfo.fontInfo != null && s.count != 0 {
+            nextCodepoint := Unicode.character_utf8_to_utf32(s.data, s.count);
+            kernAdvance := StbTrueType.get_codepoint_kern_advance(*lastGlyphInfo.fontInfo.stb, cast,no_check(s32) codepoint, cast,no_check(s32) nextCodepoint);
+            advance += (lastGlyphInfo.advance + kernAdvance * lastGlyphInfo.fontInfo.glyphScale);
+        }
+    }
+
+    return advance + lastGlyphInfo.offset.x + lastGlyphInfo.extent.x;
+}
+
+font_glyph_info :: (font : *Font, codepoint : Codepoint, draw := true) -> *GlyphInfo, pixelsChanged : bool {
     glyphInfo := Hash.table_find_pointer(*font.glyphInfos, codepoint);
-    if glyphInfo != null then return glyphInfo, false;
+    if glyphInfo == null {
+        glyphInfo = Hash.table_add(*font.glyphInfos, codepoint, .{});
+        glyphInfo.codepoint = codepoint;
+        glyphInfo.fontInfo, glyphInfo.index = _find_glyph_index(font, codepoint);
+        if glyphInfo.index == 0 then return glyphInfo, false; // Glyph does not exist in any font.
 
-    glyphInfo = Hash.table_add(*font.glyphInfos, codepoint, .{});
-    glyphInfo.codepoint = codepoint;
-    glyphInfo.fontInfo, glyphInfo.index = _find_glyph_index(font, codepoint);
-    if glyphInfo.index == 0 then return glyphInfo, false; // Glyph does not exist in any font.
+        // Basic glyph advance
+        advance, lsb : s32;
+        x0, y0, x1, y1 : s32;
+        StbTrueType.get_glyph_h_metrics(*glyphInfo.fontInfo.stb, glyphInfo.index, *advance, *lsb);
+        StbTrueType.get_glyph_bitmap_box(*glyphInfo.fontInfo.stb, glyphInfo.index, glyphInfo.fontInfo.glyphScale, glyphInfo.fontInfo.glyphScale, *x0, *y0, *x1, *y1);
 
-    // Basic glyph advance
-    advance, lsb : s32;
-    x0, y0, x1, y1 : s32;
-    StbTrueType.get_glyph_h_metrics(*glyphInfo.fontInfo.stb, glyphInfo.index, *advance, *lsb);
-    StbTrueType.get_glyph_bitmap_box(*glyphInfo.fontInfo.stb, glyphInfo.index, glyphInfo.fontInfo.glyphScale, glyphInfo.fontInfo.glyphScale, *x0, *y0, *x1, *y1);
+        glyphInfo.advance = advance * glyphInfo.fontInfo.glyphScale;
 
-    glyphInfo.advance = advance * glyphInfo.fontInfo.glyphScale;
+        // Glyph is blank
+        width := x1 - x0;
+        height := y1 - y0;
 
-    // Glyph is blank
-    width := x1 - x0;
-    height := y1 - y0;
-
-    glyphInfo.blank = (width == 0 || height == 0);
-    glyphInfo.extent.width = cast(float) width;
-    glyphInfo.extent.height = cast(float) height;
-    glyphInfo.offset.x = cast(float) x0;
-    glyphInfo.offset.y = cast(float) (glyphInfo.fontInfo.glyphAscent * glyphInfo.fontInfo.glyphScale + y0);
+        glyphInfo.blank = (width == 0 || height == 0);
+        glyphInfo.extent.width = cast(float) width;
+        glyphInfo.extent.height = cast(float) height;
+        glyphInfo.offset.x = cast(float) x0;
+        glyphInfo.offset.y = cast(float) (glyphInfo.fontInfo.glyphAscent * glyphInfo.fontInfo.glyphScale + y0);
+    }
 
     if glyphInfo.blank return glyphInfo, false;
 
     // @todo Investigate signed distance fields (stbtt_GetCodepointSDF).
 
     // Draw the bitmap to the pixels
-    glyphStartPosition := cast(s32) font.nextGlyphStartPosition;
-    StbTrueType.make_glyph_bitmap(*glyphInfo.fontInfo.stb, font.pixels.data + glyphStartPosition,
-                                  width, height, cast,no_check(s32) font.extent.width, glyphInfo.fontInfo.glyphScale, glyphInfo.fontInfo.glyphScale, glyphInfo.index);
-    font.nextGlyphStartPosition += cast,no_check(u32) width + 1;
-    Basic.assert(font.nextGlyphStartPosition < font.extent.width);
+    if draw && glyphInfo.minUv.x == 0 && glyphInfo.maxUv.x == 0 {
+        glyphStartPosition := cast(s32) font.nextGlyphStartPosition;
+        StbTrueType.make_glyph_bitmap(*glyphInfo.fontInfo.stb, font.pixels.data + glyphStartPosition,
+                                      cast,no_check(s32) glyphInfo.extent.width, cast,no_check(s32) glyphInfo.extent.height, cast,no_check(s32) font.extent.width, glyphInfo.fontInfo.glyphScale, glyphInfo.fontInfo.glyphScale, glyphInfo.index);
+        font.nextGlyphStartPosition += cast,no_check(u32) glyphInfo.extent.width + 1;
+        Basic.assert(font.nextGlyphStartPosition < font.extent.width);
 
-    // Stores the uv informations.
-    glyphInfo.minUv.x = cast(float) glyphStartPosition / cast(float) font.extent.width;
-    glyphInfo.minUv.y = 0;
-    glyphInfo.maxUv.x = cast(float) (glyphStartPosition + width) / cast(float) font.extent.width;
-    glyphInfo.maxUv.y = cast(float) height / cast(float) font.extent.height;
+        // Stores the uv informations.
+        glyphInfo.minUv.x = cast(float) glyphStartPosition / cast(float) font.extent.width;
+        glyphInfo.minUv.y = 0;
+        glyphInfo.maxUv.x = (glyphStartPosition + glyphInfo.extent.width) / cast(float) font.extent.width;
+        glyphInfo.maxUv.y = glyphInfo.extent.height / cast(float) font.extent.height;
 
-    return glyphInfo, true;
+        return glyphInfo, true;
+    }
+
+    return glyphInfo, false;
 }
 
 #scope_file

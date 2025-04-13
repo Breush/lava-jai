@@ -31,7 +31,7 @@ Component :: struct {
 
 destroy_entity :: (entity : *Entity, destroyChildren := false, warnParent := true) {
     Basic.array_add(*entity.engine.pendingDestroyedEntities, entity);
-    entity.flags |= .Destroyed;
+    entity.flags |= .Destroyed | .Disabled;
     for child : entity.children {
         if destroyChildren {
             destroy_entity(child, destroyChildren = true, warnParent = false);

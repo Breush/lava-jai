@@ -38,6 +38,11 @@ fonts_glyph_preload :: (iFont : *Fonts, fontId : string, text : string) {
     Basic.array_free(glyphInfos);
 }
 
+fonts_text_width :: (iFont : *Fonts, fontId : string, text : string) -> float #must {
+    fontInfo := table_find_pointer(*iFont.infos, fontId);
+    return Chamber.font_text_width(*fontInfo.font, text);
+}
+
 fonts_info :: (iFont : *Fonts, fontId : string) -> *Fonts.Info {
     return table_find_pointer(*iFont.infos, fontId);
 }

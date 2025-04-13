@@ -226,13 +226,19 @@ _engine_update_entities :: (engine : *Engine, updateTime : float64) {
     // Remove pending entities
     if (engine.pendingDestroyedEntities.count != 0) {
         // Some entities might remove others, so we store everything before-hand.
-        pendingDestroyedEntities := engine.pendingDestroyedEntities;
-        defer Basic.array_free(pendingDestroyedEntities);
-        engine.pendingDestroyedEntities.data = null;
-        engine.pendingDestroyedEntities.count = 0;
-        engine.pendingDestroyedEntities.allocated = 0;
+        // Note: to avoid too big lag spikes, we destroyed a limited number of entities per frame.
+        // This gives some control back to the user, but can still be felt if they destroy GPU resources.
+        entitiesToDestroy : [100]*Entity;
+        i := 0;
+        for < entityToDestroy : engine.pendingDestroyedEntities {
+            entitiesToDestroy[i] = entityToDestroy;
+            i += 1;
+            if i >= entitiesToDestroy.count then break;
+        }
+        engine.pendingDestroyedEntities.count -= i;
 
-        for entity : pendingDestroyedEntities {
+        for entity : entitiesToDestroy {
+            if entity == null then break;
             engine.Meta._destroy_entity(entity);
         }
     }
