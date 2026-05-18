@@ -99,10 +99,29 @@ impl_window_init :: (window : *Window) -> bool {
     }
     Xcb.c_free(rmReply);
 
+    // Under XWayland the resource manager is often empty; fall back to env vars then "default".
+    if window.systemCursorThemeName.count == 0 {
+        envTheme := to_string(Posix.getenv("XCURSOR_THEME"));
+        if envTheme.count > 0 then window.systemCursorThemeName = Basic.copy_string(envTheme);
+        else window.systemCursorThemeName = Basic.copy_string("default");
+    }
+    if window.systemCursorThemeSize == 0 {
+        envSize := to_string(Posix.getenv("XCURSOR_SIZE"));
+        if envSize.count > 0 then window.systemCursorThemeSize = cast(u32) Basic.string_to_int(envSize);
+        else window.systemCursorThemeSize = 24;
+    }
+
+    userPath := Chamber.os_user_path(Basic.temp);
+    xdgDataHome := to_string(Posix.getenv("XDG_DATA_HOME"));
+
     baseCursorThemePath : [..]string;
     defer Basic.array_free(baseCursorThemePath);
-    Basic.array_copy(*baseCursorThemePath, string.["/usr/share/icons", "/usr/share/pixmaps"]);
-    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.icons", Chamber.os_user_path(Basic.temp)));
+    if xdgDataHome.count > 0 then Basic.array_add(*baseCursorThemePath, Basic.tprint("%/icons", xdgDataHome));
+    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.local/share/icons", userPath));
+    Basic.array_add(*baseCursorThemePath, Basic.tprint("%/.icons", userPath));
+    Basic.array_add(*baseCursorThemePath, "/usr/local/share/icons");
+    Basic.array_add(*baseCursorThemePath, "/usr/share/icons");
+    Basic.array_add(*baseCursorThemePath, "/usr/share/pixmaps");
 
     for baseCursorThemePath : baseCursorThemePath {
         themeIndexPath := Basic.tprint("%/%/index.theme", baseCursorThemePath, window.systemCursorThemeName);
@@ -121,6 +140,8 @@ impl_window_init :: (window : *Window) -> bool {
             Basic.log("  - %", baseCursorThemePath, flags = .VERBOSE_ONLY);
         }
     }
+
+    impl_window_update_pointer_style(window);
 
     return true;
 }
@@ -181,7 +202,7 @@ impl_window_update_pointer_style :: (window : *Window) {
     if cursor == Xcb.NONE {
         if #complete window.pointerStyle == {
             case .Default;
-                // Nothing to do.
+                cursor = _read_system_cursor(window, "left_ptr");
             case .Hidden;
                 cursor = Xcb.generate_id(window.xcbConnection);
                 pixmap := _create_pixmap_from_bitmap(window, 1, 1, u32.[0]);
